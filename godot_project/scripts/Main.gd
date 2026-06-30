@@ -21,8 +21,9 @@ func _ready():
 	var bot_class    = get_tree().root.get_meta("bot_class",    "melee")
 
 	match player_class:
-		"ranged": player = RangedPlayerController.new()
-		_:        player = PlayerController.new()
+		"ranged":  player = RangedPlayerController.new()
+		"bruiser": player = BruiserPlayerController.new()
+		_:         player = PlayerController.new()
 	add_child(player)
 	player.global_position = Vector2(510, 540)
 	player.arena_rect = arena_rect
@@ -33,8 +34,9 @@ func _ready():
 	)
 
 	match bot_class:
-		"ranged": bot = RangedBotController.new()
-		_:        bot = BotController.new()
+		"ranged":  bot = RangedBotController.new()
+		"bruiser": bot = BruiserBotController.new()
+		_:         bot = BotController.new()
 	add_child(bot)
 	bot.global_position = Vector2(1350, 540)
 	bot.arena_rect = arena_rect
@@ -92,13 +94,13 @@ func build_ui():
 
 	# class name labels
 	var p_label = Label.new()
-	p_label.text = "DUELIST" if not (player is RangedEntity) else "MAGE"
+	p_label.text = "BRUISER" if player is BruiserEntity else ("MAGE" if player is RangedEntity else "DUELIST")
 	p_label.position = Vector2(20, 46)
 	p_label.add_theme_font_size_override("font_size", 13)
 	canvas.add_child(p_label)
 
 	var b_label = Label.new()
-	b_label.text = "BOT  " + ("DUELIST" if not (bot is RangedEntity) else "MAGE")
+	b_label.text = "BOT  " + ("BRUISER" if bot is BruiserEntity else ("MAGE" if bot is RangedEntity else "DUELIST"))
 	b_label.position = Vector2(1680, 46)
 	b_label.add_theme_font_size_override("font_size", 13)
 	canvas.add_child(b_label)
@@ -122,7 +124,16 @@ func build_ui():
 	canvas.add_child(cd_hud)
 
 func _get_ability_defs() -> Array:
-	if player is RangedEntity:
+	if player is BruiserEntity:
+		return [
+			{"key": "LMB", "name": "Smash",   "cd": player.cd_auto, "max": BruiserEntity.BRUISER_AUTO_CD, "col": Color(0.95, 0.55, 0.15)},
+			{"key": "E",   "name": "Shatter", "cd": player.cd_a1,   "max": BruiserEntity.SHATTER_CD,     "col": Color(1.0, 0.7, 0.2)},
+			{"key": "Q",   "name": "Tremor",  "cd": player.cd_a2,   "max": BruiserEntity.TREMOR_CD,      "col": Color(0.9, 0.4, 0.1)},
+			{"key": "F",   "name": "Jugger",  "cd": 0.0,            "max": 1.0, "charge": true,
+				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                         "col": Color(1.0, 0.25, 0.1)},
+			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,        "col": Color(0.3, 0.7, 1.0)},
+		]
+	elif player is RangedEntity:
 		return [
 			{"key": "LMB", "name": "Shot",    "cd": player.cd_auto, "max": RangedEntity.RPROJ_CD,   "col": Color(1.0, 0.85, 0.3)},
 			{"key": "E",   "name": "Bolt",    "cd": player.cd_a1,   "max": RangedEntity.BOLT_CD,    "col": Color(0.4, 0.85, 1.0)},
