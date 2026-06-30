@@ -17,13 +17,13 @@ const AUTO_RANGE = 130.0
 const A1_CAST = 0.09
 const A1_RECOVERY = 0.13
 const A1_CD = 1.8
-const A1_DMG = 14.0
+const A1_DMG = 12.0
 const A1_RANGE = 125.0
 
 const A2_CAST = 0.14
 const A2_RECOVERY = 0.22
-const A2_CD = 4.5
-const A2_DMG = 24.0
+const A2_CD = 6.5
+const A2_DMG = 20.4
 const A2_RANGE = 130.0
 const A2_LUNGE_DIST = 230.0
 const A2_LUNGE_DUR = 0.13
@@ -43,6 +43,9 @@ const PARRY_DUR = 0.22
 const PARRY_CD = 5.0
 const PARRY_STUN_DUR = 0.65
 const STUN_DUR = 0.5
+
+const DASH_CHARGES_MAX  = 2
+const DASH_CHARGE_REGEN = 2.5
 
 const RADIUS = 18.0
 
@@ -86,6 +89,7 @@ var parry_time_left := 0.0
 var parry_cd_left := 0.0
 
 var stunned_time_left := 0.0
+var slowed_time_left  := 0.0
 
 # sword swing: arc sweep from start_angle to start_angle+arc_span over swing_total seconds
 var swing_time_left := 0.0
@@ -95,6 +99,11 @@ var swing_arc_span := 0.0
 
 # hit flash on this entity when it receives damage
 var hit_flash_left := 0.0
+
+var dash_charges := DASH_CHARGES_MAX
+var dash_charge_timer := 0.0
+
+var walk_phase := 0.0
 
 var opponent: Entity = null
 var arena_rect := Rect2(Vector2.ZERO, Vector2(1000, 600))
@@ -111,7 +120,13 @@ func _physics_process(delta):
 	cd_a2 = max(0.0, cd_a2 - delta)
 	dash_cd_left = max(0.0, dash_cd_left - delta)
 	parry_cd_left = max(0.0, parry_cd_left - delta)
-	hit_flash_left = max(0.0, hit_flash_left - delta)
+	if dash_charges < DASH_CHARGES_MAX:
+		dash_charge_timer += delta
+		if dash_charge_timer >= DASH_CHARGE_REGEN:
+			dash_charge_timer -= DASH_CHARGE_REGEN
+			dash_charges += 1
+	hit_flash_left   = max(0.0, hit_flash_left - delta)
+	slowed_time_left = max(0.0, slowed_time_left - delta)
 	if swing_time_left > 0:
 		swing_time_left = max(0.0, swing_time_left - delta)
 	if ult_charge < ULT_CHARGE_MAX:
@@ -156,7 +171,7 @@ func _physics_process(delta):
 
 	var input_vec := get_movement_input()
 	var locked = casting != null
-	var slowed = recovering != null
+	var slowed = recovering != null or slowed_time_left > 0
 
 	if lunging:
 		lunge_time_left -= delta
@@ -200,6 +215,7 @@ func _physics_process(delta):
 
 	global_position += velocity * delta
 	clamp_to_arena()
+	walk_phase += velocity.length() * delta * 0.055
 	queue_redraw()
 
 func get_movement_input() -> Vector2:
@@ -328,12 +344,15 @@ func resolve_ult(opp: Entity):
 	recovering = {"type": "ult", "time_left": ULT_RECOVERY, "total": ULT_RECOVERY}
 
 func try_dash(dir: Vector2):
-	if not alive or dash_cd_left > 0 or dashing or dir.length() < 0.01:
+	if not alive or dashing or dir.length() < 0.01 or dash_charges <= 0:
 		return
+	dash_charges -= 1
+	if dash_charges == 0:
+		dash_charge_timer = 0.0
 	dash_dir = dir.normalized()
 	dashing = true
 	dash_time_left = DASH_DUR
-	dash_cd_left = DASH_CD
+	dash_cd_left = 0.0
 	if recovering != null:
 		recovering = null
 
@@ -344,124 +363,194 @@ func try_parry():
 	parry_time_left = PARRY_DUR
 	parry_cd_left = PARRY_CD
 
-# ---- Drawing ----
-func _draw():
-	var now = Time.get_ticks_msec()
-	for p in trail:
-		var age = (now - p["time"]) / 200.0
-		if age < 1.0:
-			draw_circle(to_local(p["pos"]), RADIUS * 0.85, Color(base_color.r, base_color.g, base_color.b, (1.0 - age) * 0.28))
-
-	if not alive:
-		draw_circle(Vector2.ZERO, RADIUS, Color(0.3, 0.3, 0.3, 0.4))
-		return
-
-	var color = base_color
-	if stunned_time_left > 0:
-		color = Color(0.9, 0.9, 0.3)
-	elif parrying:
-		color = Color(0.3, 0.7, 1.0)
-	elif lunging:
-		color = Color(1, 0.24, 0.24)
-	elif dashing:
-		color = Color(1, 0.36, 0.48)
-	elif casting != null:
-		color = Color(1, 0.82, 0.4)
-	elif recovering != null:
-		color = Color(0.78, 0.61, 1)
-
-	# sword swing — drawn behind the body
-	if swing_time_left > 0 and swing_total > 0:
-		var t = 1.0 - (swing_time_left / swing_total)
-		var cur_angle = swing_start_angle + swing_arc_span * t
-		var swing_dir = Vector2(cos(cur_angle), sin(cur_angle))
-		var perp = Vector2(-swing_dir.y, swing_dir.x)
-		var blade_root = swing_dir * RADIUS
-		var blade_tip = swing_dir * (RADIUS + SWORD_LEN)
-		var half_w = SWORD_WIDTH * 0.5
-		var alpha = 0.95 * (swing_time_left / swing_total)
-
-		# slash arc fill — wide fan from start to current angle
-		var arc_start = swing_start_angle
-		var arc_end = cur_angle
-		var arc_steps = 18
-		if abs(arc_end - arc_start) > 0.05:
-			# filled fan polygon for the slash zone
-			var fan_verts: PackedVector2Array = []
-			fan_verts.append(Vector2.ZERO)
-			for i in (arc_steps + 1):
-				var a = arc_start + (arc_end - arc_start) * float(i) / arc_steps
-				fan_verts.append(Vector2(cos(a), sin(a)) * (RADIUS + SWORD_LEN))
-			draw_colored_polygon(fan_verts, Color(1.0, 1.0, 1.0, alpha * 0.18))
-			# bright edge line along the arc tip
-			for i in arc_steps:
-				var a0 = arc_start + (arc_end - arc_start) * float(i) / arc_steps
-				var a1 = arc_start + (arc_end - arc_start) * float(i + 1) / arc_steps
-				var p0 = Vector2(cos(a0), sin(a0)) * (RADIUS + SWORD_LEN)
-				var p1 = Vector2(cos(a1), sin(a1)) * (RADIUS + SWORD_LEN)
-				var edge_alpha = alpha * (1.0 - float(i) / arc_steps) * 0.7
-				draw_line(p0, p1, Color(1.0, 1.0, 1.0, edge_alpha), 3.0)
-
-		# blade polygon — wide at guard, sharp at tip
-		var verts = PackedVector2Array([
-			blade_root + perp * half_w,
-			blade_root - perp * half_w,
-			blade_tip
-		])
-		draw_colored_polygon(verts, Color(0.95, 0.97, 1.0, alpha))
-		# bright blade edge highlight
-		draw_line(blade_root + perp * half_w, blade_tip, Color(1, 1, 1, alpha), 1.5)
-
-		# crossguard
-		var guard = swing_dir * (RADIUS + 7)
-		draw_line(guard + perp * 11, guard - perp * 11, Color(0.75, 0.78, 1.0, alpha), 4.0)
-
-	# shadow
-	draw_circle(Vector2(2, 3), RADIUS, Color(0, 0, 0, 0.22))
-
-	# body
-	draw_circle(Vector2.ZERO, RADIUS, color)
-
-	# inner core
-	draw_circle(Vector2.ZERO, RADIUS * 0.52, Color(color.r * 0.6, color.g * 0.6, color.b * 0.6, 0.7))
-
-	# facing nub (small dot instead of triangle, sword is the directional indicator now)
-	draw_circle(facing * (RADIUS - 4), 4.5, Color(1, 1, 1, 0.7))
-
-	# hit flash — bright white overlay that fades
+# ---- Drawing helpers ----
+func _draw_hud(now: int, accent: Color):
+	# hit flash
 	if hit_flash_left > 0:
-		var flash_alpha = (hit_flash_left / 0.25) * 0.85
-		draw_circle(Vector2.ZERO, RADIUS + 4, Color(1, 1, 1, flash_alpha))
+		draw_circle(Vector2.ZERO, RADIUS + 5, Color(1, 1, 1, (hit_flash_left / 0.25) * 0.75))
 
-	# HP ring
+	# HP bar above head
 	var hp_pct = hp / max_hp
-	var ring_r = RADIUS + 5.0
-	draw_arc(Vector2.ZERO, ring_r, -PI / 2, -PI / 2 + TAU * hp_pct, 40,
-		Color(color.r, color.g, color.b, 0.9), 2.5)
-	draw_arc(Vector2.ZERO, ring_r, -PI / 2 + TAU * hp_pct, -PI / 2 + TAU, 20,
-		Color(0.15, 0.15, 0.18, 0.5), 2.5)
+	var bw = 54.0
+	var bh = 7.0
+	var bx = -bw * 0.5
+	var by = -(RADIUS + 36.0)
+	draw_rect(Rect2(bx - 1, by - 1, bw + 2, bh + 2), Color(0.04, 0.04, 0.07))
+	draw_rect(Rect2(bx, by, bw, bh), Color(0.15, 0.15, 0.2))
+	var fill_col = accent if hp_pct > 0.35 else Color(0.9, 0.2, 0.15)
+	draw_rect(Rect2(bx, by, bw * hp_pct, bh), fill_col)
+
+	# slow ring
+	if slowed_time_left > 0:
+		var pulse = 0.5 + 0.3 * sin(now * 0.015)
+		draw_arc(Vector2.ZERO, RADIUS + 11, 0, TAU, 40, Color(0.3, 0.6, 1.0, pulse), 2.5)
 
 	# parry ring
 	if parrying:
-		var pulse = 0.7 + 0.3 * sin(now * 0.03)
-		draw_arc(Vector2.ZERO, RADIUS + 8, 0, TAU, 40, Color(0.3, 0.7, 1.0, pulse), 3.5)
+		var pulse = 0.65 + 0.35 * sin(now * 0.03)
+		draw_arc(Vector2.ZERO, RADIUS + 12, 0, TAU, 48,
+			Color(0.3, 0.7, 1.0, pulse), 3.5)
 
-	# stun orbiting dots
+	# stun stars
 	if stunned_time_left > 0:
 		var t = now * 0.006
 		for i in 3:
-			var angle = t + i * TAU / 3.0
-			var sp = Vector2(cos(angle), sin(angle)) * (RADIUS + 11)
-			draw_circle(sp, 4.0, Color(1.0, 0.9, 0.2))
+			var a = t + i * TAU / 3.0
+			draw_circle(Vector2(cos(a), sin(a)) * (RADIUS + 14), 4.5, Color(1.0, 0.9, 0.2))
 
 	# cast bar
 	if casting != null:
 		var pct = 1.0 - (casting["time_left"] / casting["total"])
-		draw_rect(Rect2(Vector2(-22, -42), Vector2(44, 5)), Color(0.08, 0.08, 0.12))
-		draw_rect(Rect2(Vector2(-22, -42), Vector2(44 * pct, 5)), Color(1, 0.82, 0.4))
+		var bar_y = -RADIUS - 18.0
+		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48, 5)), Color(0.06, 0.06, 0.10))
+		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48 * pct, 5)), Color(1, 0.82, 0.4))
 
-	# combo stack pips
+	# combo pips
 	if combo_stacks > 0:
 		for i in combo_stacks:
-			var px = (i - (combo_stacks - 1) * 0.5) * 10.0
-			draw_circle(Vector2(px, -RADIUS - 12), 3.5, Color(1, 0.85, 0.3))
+			var px = (i - (combo_stacks - 1) * 0.5) * 11.0
+			draw_circle(Vector2(px, -RADIUS - 26), 4.0, Color(1, 0.85, 0.3))
+
+func _col_dark(c: Color, f: float) -> Color:
+	return Color(c.r * f, c.g * f, c.b * f)
+
+func _draw_duelist(now: int, accent: Color):
+	var perp    = Vector2(-facing.y, facing.x)
+	var armor   = _col_dark(accent, 0.55)
+	var dark    = Color(0.10, 0.11, 0.14)
+	var skin    = Color(0.88, 0.72, 0.56)
+	var boot    = Color(0.20, 0.16, 0.12)
+
+	var spd_pct = clamp(velocity.length() / MAX_SPEED, 0.0, 1.0)
+	var stride  = spd_pct * 9.0
+	var bob_y   = sin(walk_phase * 2.0) * spd_pct * 1.5
+
+	# ground shadow
+	draw_circle(Vector2(2, RADIUS - 4), 14, Color(0, 0, 0, 0.18))
+
+	# --- LEGS ---
+	var lleg_end = Vector2(perp * -6 + facing * sin(walk_phase)  * stride + Vector2(0, RADIUS - 2 + bob_y))
+	var rleg_end = Vector2(perp *  6 - facing * sin(walk_phase)  * stride + Vector2(0, RADIUS - 2 + bob_y))
+	draw_line(Vector2(perp * -4 + facing * 2), lleg_end, armor, 6.0, true)
+	draw_line(Vector2(perp *  4 + facing * 2), rleg_end, armor, 6.0, true)
+	draw_circle(lleg_end, 5.0, boot)
+	draw_circle(rleg_end, 5.0, boot)
+
+	# --- SWORD at rest (behind body) ---
+	if swing_time_left <= 0 and not lunging:
+		var rest = (facing * 0.3 + perp * 0.7).normalized()
+		var sb   = rest * (RADIUS - 4)
+		var st   = rest * (RADIUS + SWORD_LEN * 0.65)
+		draw_line(sb, st, Color(0.75, 0.78, 0.9, 0.6), SWORD_WIDTH * 0.55, true)
+		draw_line(sb + perp * 6, sb - perp * 6, Color(0.6, 0.62, 0.75, 0.7), 3.5)
+
+	# --- BODY ---
+	var body = PackedVector2Array([
+		facing * -13 + perp * -9,
+		facing * -13 + perp *  9,
+		facing *   8 + perp *  8,
+		facing *   8 + perp * -8,
+	])
+	draw_colored_polygon(body, armor)
+	# chest plate
+	var chest = PackedVector2Array([
+		facing * -10 + perp * -5,
+		facing * -10 + perp *  5,
+		facing *   2 + perp *  4,
+		facing *   2 + perp * -4,
+	])
+	draw_colored_polygon(chest, Color(accent.r, accent.g, accent.b, 0.55))
+
+	# pauldrons
+	draw_circle(facing * -10 + perp * -11, 7.0, armor)
+	draw_circle(facing * -10 + perp *  11, 7.0, armor)
+	draw_circle(facing * -10 + perp * -11, 4.0, _col_dark(accent, 0.4))
+	draw_circle(facing * -10 + perp *  11, 4.0, _col_dark(accent, 0.4))
+
+	# --- HEAD ---
+	var head = facing * -20 + Vector2(0, bob_y)
+	draw_circle(head, 10.0, skin)
+	# helmet shell
+	var helm = PackedVector2Array([
+		head + facing * -11 + perp * -9,
+		head + facing * -11 + perp *  9,
+		head + facing *   5 + perp *  8,
+		head + facing *   5 + perp * -8,
+	])
+	draw_colored_polygon(helm, armor)
+	# visor slit
+	draw_line(head + perp * -5 + facing * -2,
+			  head + perp *  5 + facing * -2,
+			  Color(accent.r, accent.g, accent.b, 0.95), 3.5)
+
+	# --- DASH CHARGE PIPS ---
+	for i in DASH_CHARGES_MAX:
+		var px = (i - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+		var pip_col = Color(accent.r, accent.g, accent.b, 0.85) if i < dash_charges else Color(0.2, 0.2, 0.25, 0.5)
+		draw_circle(Vector2(px, RADIUS + 14), 4.0, pip_col)
+	if dash_charges < DASH_CHARGES_MAX:
+		var px = (dash_charges - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+		draw_arc(Vector2(px, RADIUS + 14), 4.5, -PI/2,
+			-PI/2 + TAU * (dash_charge_timer / DASH_CHARGE_REGEN), 16,
+			Color(accent.r, accent.g, accent.b, 0.8), 2.0)
+
+	# --- SWORD SWING (on top of everything) ---
+	if swing_time_left > 0 and swing_total > 0:
+		var t         = 1.0 - (swing_time_left / swing_total)
+		var cur_angle = swing_start_angle + swing_arc_span * t
+		var sdir      = Vector2(cos(cur_angle), sin(cur_angle))
+		var sperp     = Vector2(-sdir.y, sdir.x)
+		var sroot     = sdir * RADIUS
+		var stip      = sdir * (RADIUS + SWORD_LEN)
+		var alpha     = 0.95 * (swing_time_left / swing_total)
+
+		# arc fill
+		var arc_start = swing_start_angle
+		var arc_end   = cur_angle
+		if abs(arc_end - arc_start) > 0.05:
+			var fan: PackedVector2Array = []
+			fan.append(Vector2.ZERO)
+			for i in 19:
+				var a = arc_start + (arc_end - arc_start) * float(i) / 18.0
+				fan.append(Vector2(cos(a), sin(a)) * (RADIUS + SWORD_LEN))
+			draw_colored_polygon(fan, Color(1, 1, 1, alpha * 0.15))
+			for i in 18:
+				var a0 = arc_start + (arc_end - arc_start) * float(i)     / 18.0
+				var a1 = arc_start + (arc_end - arc_start) * float(i + 1) / 18.0
+				draw_line(Vector2(cos(a0), sin(a0)) * (RADIUS + SWORD_LEN),
+						  Vector2(cos(a1), sin(a1)) * (RADIUS + SWORD_LEN),
+						  Color(1, 1, 1, alpha * (1.0 - float(i) / 18.0) * 0.65), 3.0)
+		# blade
+		var hw = SWORD_WIDTH * 0.5
+		draw_colored_polygon(PackedVector2Array([sroot + sperp * hw, sroot - sperp * hw, stip]),
+			Color(0.95, 0.97, 1.0, alpha))
+		draw_line(sroot + sperp * hw, stip, Color(1, 1, 1, alpha), 1.5)
+		# crossguard
+		var guard = sdir * (RADIUS + 7)
+		draw_line(guard + sperp * 11, guard - sperp * 11, Color(0.75, 0.78, 1.0, alpha), 4.0)
+
+# ---- Drawing ----
+func _draw():
+	var now = Time.get_ticks_msec()
+
+	# trail
+	for p in trail:
+		var age = (now - p["time"]) / 200.0
+		if age < 1.0:
+			draw_circle(to_local(p["pos"]), RADIUS * 0.85,
+				Color(base_color.r, base_color.g, base_color.b, (1.0 - age) * 0.28))
+
+	if not alive:
+		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
+		return
+
+	var accent = base_color
+	if stunned_time_left > 0:  accent = Color(0.9, 0.9, 0.3)
+	elif parrying:             accent = Color(0.3, 0.7, 1.0)
+	elif lunging:              accent = Color(1, 0.24, 0.24)
+	elif dashing:              accent = Color(1, 0.36, 0.48)
+	elif casting != null:      accent = Color(1, 0.82, 0.4)
+	elif recovering != null:   accent = Color(0.78, 0.61, 1)
+
+	_draw_duelist(now, accent)
+	_draw_hud(now, accent)

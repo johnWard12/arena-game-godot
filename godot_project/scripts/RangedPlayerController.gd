@@ -24,6 +24,8 @@ func get_aim_dir(_opp: Entity) -> Vector2:
 func _physics_process(delta):
 	super._physics_process(delta)
 	poll_dash()
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		try_auto(opponent)
 
 func poll_dash():
 	var held = Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_physical_key_pressed(KEY_SPACE)
@@ -43,7 +45,5 @@ func _unhandled_input(event):
 			KEY_F: try_ult(opponent)
 			KEY_G: try_parry()
 	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			try_auto(opponent)
-		elif event.button_index == MOUSE_BUTTON_RIGHT:
+		if event.button_index == MOUSE_BUTTON_RIGHT:
 			try_parry()

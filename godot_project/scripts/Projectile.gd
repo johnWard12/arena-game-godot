@@ -9,6 +9,7 @@ var target: Entity = null
 var lifetime := 3.0
 var proj_color := Color(1.0, 0.85, 0.3)
 var proj_radius_visual := 8.0
+var apply_slow := 0.0
 
 func _physics_process(delta):
 	lifetime -= delta
@@ -25,6 +26,8 @@ func _on_hit():
 	if owner_entity != null and is_instance_valid(owner_entity) and owner_entity.alive:
 		owner_entity.deal_damage(target, damage)
 		owner_entity.add_combo_stack()
+	if apply_slow > 0 and target != null and is_instance_valid(target) and target.alive:
+		target.slowed_time_left = apply_slow
 	queue_free()
 
 func _draw():

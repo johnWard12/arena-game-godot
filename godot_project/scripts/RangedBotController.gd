@@ -34,8 +34,8 @@ func ai_decide():
 		ai_target = Vector2.ZERO
 		return
 
-	# blink away if player gets too close
-	if d < FLEE_RANGE and cd_a2 <= 0 and randf() < 0.75:
+	# arcane burst when opponent is in close/melee range
+	if d < FLEE_RANGE and cd_a2 <= 0 and casting == null and randf() < 0.85:
 		try_a2(opponent)
 		return
 
@@ -62,12 +62,20 @@ func ai_decide():
 	# movement: maintain preferred range, strafe laterally
 	var to_opp = (opponent.global_position - global_position).normalized()
 	if d < PREFERRED_RANGE - 40:
-		# back off
 		ai_target = -to_opp
 	elif d > PREFERRED_RANGE + 60:
-		# close in slowly
 		ai_target = to_opp * 0.6
 	else:
-		# strafe perpendicular
 		var perp = Vector2(-to_opp.y, to_opp.x) * (1 if randf() < 0.5 else -1)
 		ai_target = perp
+
+	# wall repulsion — push away from arena edges so bot doesn't get cornered
+	var wall_margin = 120.0
+	var repulse := Vector2.ZERO
+	var ar = arena_rect
+	repulse.x += max(0.0, wall_margin - (global_position.x - ar.position.x)) / wall_margin
+	repulse.x -= max(0.0, wall_margin - (ar.position.x + ar.size.x - global_position.x)) / wall_margin
+	repulse.y += max(0.0, wall_margin - (global_position.y - ar.position.y)) / wall_margin
+	repulse.y -= max(0.0, wall_margin - (ar.position.y + ar.size.y - global_position.y)) / wall_margin
+	if repulse.length() > 0.01:
+		ai_target = (ai_target + repulse * 2.0).normalized()

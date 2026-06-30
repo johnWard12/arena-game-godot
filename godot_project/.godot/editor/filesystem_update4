@@ -5,3 +5,6 @@ res://scripts/PlayerController.gd
 res://scripts/RangedEntity.gd
 res://scripts/GameState.gd
 res://scripts/CharSelect.gd
+res://scripts/RangedBotController.gd
+res://scripts/RangedPlayerController.gd
+res://scripts/Projectile.gd

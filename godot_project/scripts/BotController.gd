@@ -16,12 +16,13 @@ func get_movement_input() -> Vector2:
 
 func _physics_process(delta):
 	if alive and opponent != null and opponent.alive:
+		var is_kiter = opponent is RangedEntity
 		ai_timer -= delta
 		if strafe_timer > 0:
 			strafe_timer -= delta
 		if ai_timer <= 0:
 			ai_decide()
-			ai_timer = 0.35 + randf() * 0.2
+			ai_timer = (0.22 + randf() * 0.12) if is_kiter else (0.35 + randf() * 0.2)
 		ai_move = ai_move.lerp(ai_target, min(1.0, delta * 6.0))
 	super._physics_process(delta)
 
@@ -29,6 +30,7 @@ func ai_decide():
 	if not alive or opponent == null or not opponent.alive:
 		return
 	var d = global_position.distance_to(opponent.global_position)
+	var is_kiter = opponent is RangedEntity
 
 	if casting != null or recovering != null or lunging:
 		ai_target = Vector2.ZERO
@@ -41,7 +43,7 @@ func ai_decide():
 		return
 
 	# dodge: if the opponent just started a long cast and we're close, dash away
-	if opponent.casting != null and opponent.casting["time_left"] > opponent.casting["total"] * 0.5 \
+	if not is_kiter and opponent.casting != null and opponent.casting["time_left"] > opponent.casting["total"] * 0.5 \
 		and d < 180 and dash_cd_left <= 0 and randf() < 0.3:
 		var away = (global_position - opponent.global_position).normalized()
 		try_dash(away)
@@ -55,12 +57,24 @@ func ai_decide():
 		try_a1(opponent)
 		return
 
-	if d > 100 and d < 420 and cd_a2 <= 0 and randf() < 0.3:
-		try_a2(opponent)
-		return
+	# lunge as a gap-closer — much more eager to use it on a kiting ranged opponent
+	if is_kiter:
+		if d > 90 and d < 460 and cd_a2 <= 0 and randf() < 0.75:
+			try_a2(opponent)
+			return
+	else:
+		if d > 100 and d < 420 and cd_a2 <= 0 and randf() < 0.3:
+			try_a2(opponent)
+			return
 
 	if d <= AUTO_RANGE and cd_auto <= 0:
 		try_auto(opponent)
+		return
+
+	# dash to close distance fast when kiting opponent is out of lunge range
+	if is_kiter and d > 460 and dash_charges > 0:
+		var toward = (opponent.global_position - global_position).normalized()
+		try_dash(toward)
 		return
 
 	if d > 90:

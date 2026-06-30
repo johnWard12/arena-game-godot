@@ -1,7 +1,7 @@
 extends Node2D
 
-const W = 1280
-const H = 720
+const W = 1920
+const H = 1080
 
 const CARD_W = 230.0
 const CARD_H = 340.0
@@ -32,7 +32,7 @@ const CLASSES = [
 		"label": "MAGE",
 		"color": RANGED_COLOR,
 		"hp":    "HP  95",
-		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Blink      Q", "Ult Shot   F"]
+		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "Ult Shot   F"]
 	}
 ]
 
