@@ -6,7 +6,7 @@ const RANGED_MAX_HP = 95.0
 
 const RPROJ_SPEED  = 1360.0
 const RPROJ_RADIUS = 28.0
-const RPROJ_DMG    = 5.0
+const RPROJ_DMG    = 5.75
 const RPROJ_CD     = 0.75
 
 const BOLT_CAST     = 0.25
@@ -51,14 +51,14 @@ func add_combo_stack():
 # ---- Ability overrides ----
 
 func try_auto(opp: Entity):
-	if not alive or cd_auto > 0 or casting != null or opp == null:
+	if not can_start_ability() or cd_auto > 0 or opp == null:
 		return
 	cd_auto = RPROJ_CD
 	facing = get_aim_dir(opp)
 	_fire(facing, RPROJ_SPEED, RPROJ_RADIUS, RPROJ_DMG, opp, Color(1.0, 0.85, 0.3), 8.0)
 
 func try_a1(opp: Entity):
-	if not alive or cd_a1 > 0 or casting != null or recovering != null or opp == null:
+	if not can_start_ability() or cd_a1 > 0 or opp == null:
 		return
 	casting = {"type": "a1", "time_left": BOLT_CAST, "total": BOLT_CAST, "opp": opp}
 
@@ -71,7 +71,7 @@ func resolve_a1(opp: Entity):
 	recovering = {"type": "a1", "time_left": BOLT_RECOVERY, "total": BOLT_RECOVERY}
 
 func try_a2(opp: Entity):
-	if not alive or cd_a2 > 0 or casting != null or recovering != null or opp == null:
+	if not can_start_ability() or cd_a2 > 0 or opp == null:
 		return
 	casting = {"type": "a2", "time_left": NOVA_CAST, "total": NOVA_CAST, "opp": opp}
 
@@ -81,13 +81,13 @@ func resolve_a2(opp: Entity):
 	nova_fx_left = 0.35
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= NOVA_RADIUS:
 		var dmg = round(NOVA_DMG * combo_mult())
-		deal_damage(opp, dmg)
-		add_combo_stack()
+		if deal_damage(opp, dmg):
+			add_combo_stack()
 	cd_a2 = NOVA_CD
 	recovering = {"type": "a2", "time_left": NOVA_RECOVERY, "total": NOVA_RECOVERY}
 
 func try_ult(opp: Entity):
-	if not alive or ult_charge < ULT_CHARGE_MAX or casting != null or recovering != null or opp == null:
+	if not can_start_ability() or ult_charge < ULT_CHARGE_MAX or opp == null:
 		return
 	casting = {"type": "ult", "time_left": RULT_CAST, "total": RULT_CAST, "opp": opp}
 
@@ -110,6 +110,7 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	proj.proj_color = col
 	proj.proj_radius_visual = vis_r
 	proj.apply_slow = slow
+	proj.obstacle_rects = obstacle_rects
 	projectile_spawned.emit(proj)
 
 # ---- Drawing override ----
@@ -126,12 +127,7 @@ func _draw():
 		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
 		return
 
-	var accent = base_color
-	if stunned_time_left > 0: accent = Color(0.9, 0.9, 0.3)
-	elif parrying:            accent = Color(0.3, 0.7, 1.0)
-	elif dashing:             accent = Color(1, 0.36, 0.48)
-	elif casting != null:     accent = Color(1, 0.82, 0.4)
-	elif recovering != null:  accent = Color(0.78, 0.61, 1)
+	var accent = get_status_accent(base_color)
 
 	var perp     = Vector2(-facing.y, facing.x)
 	var robe_col = _col_dark(accent, 0.6)

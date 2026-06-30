@@ -7,7 +7,6 @@ const ACCEL = 3450.0
 const FRICTION = 1650.0
 const DASH_SPEED = 1275.0
 const DASH_DUR = 0.13
-const DASH_CD = 0.45
 const CARRY = 0.7
 
 const AUTO_CD = 0.55
@@ -48,6 +47,7 @@ const DASH_CHARGES_MAX  = 2
 const DASH_CHARGE_REGEN = 2.5
 
 const RADIUS = 18.0
+const TRAIL_LIFETIME_MS = 220
 
 # sword swing tunables
 const SWORD_LEN = 56.0
@@ -61,7 +61,6 @@ var facing := Vector2.RIGHT
 
 var dashing := false
 var dash_time_left := 0.0
-var dash_cd_left := 0.0
 var dash_dir := Vector2.ZERO
 
 var lunging := false
@@ -107,18 +106,20 @@ var walk_phase := 0.0
 
 var opponent: Entity = null
 var arena_rect := Rect2(Vector2.ZERO, Vector2(1000, 600))
+var obstacle_rects: Array[Rect2] = []
 var trail := []
 
 signal died
 signal projectile_spawned(proj)
 
 func _physics_process(delta):
+	var now = Time.get_ticks_msec()
+	prune_trail(now)
 	if not alive:
 		return
 	cd_auto = max(0.0, cd_auto - delta)
 	cd_a1 = max(0.0, cd_a1 - delta)
 	cd_a2 = max(0.0, cd_a2 - delta)
-	dash_cd_left = max(0.0, dash_cd_left - delta)
 	parry_cd_left = max(0.0, parry_cd_left - delta)
 	if dash_charges < DASH_CHARGES_MAX:
 		dash_charge_timer += delta
@@ -241,9 +242,75 @@ func clamp_to_arena():
 	if y != global_position.y:
 		velocity.y = 0
 	global_position = Vector2(x, y)
+	resolve_obstacle_collisions()
+
+func resolve_obstacle_collisions():
+	for obstacle in obstacle_rects:
+		var closest = Vector2(
+			clamp(global_position.x, obstacle.position.x, obstacle.position.x + obstacle.size.x),
+			clamp(global_position.y, obstacle.position.y, obstacle.position.y + obstacle.size.y)
+		)
+		var offset = global_position - closest
+		var dist = offset.length()
+		if dist > 0.001 and dist < RADIUS:
+			var normal = offset / dist
+			global_position = closest + normal * RADIUS
+			var into_wall = velocity.dot(normal)
+			if into_wall < 0:
+				velocity -= normal * into_wall
+		elif obstacle.has_point(global_position):
+			var left = abs(global_position.x - obstacle.position.x)
+			var right = abs(obstacle.position.x + obstacle.size.x - global_position.x)
+			var top = abs(global_position.y - obstacle.position.y)
+			var bottom = abs(obstacle.position.y + obstacle.size.y - global_position.y)
+			var min_push = min(min(left, right), min(top, bottom))
+			if min_push == left:
+				global_position.x = obstacle.position.x - RADIUS
+				velocity.x = min(0.0, velocity.x)
+			elif min_push == right:
+				global_position.x = obstacle.position.x + obstacle.size.x + RADIUS
+				velocity.x = max(0.0, velocity.x)
+			elif min_push == top:
+				global_position.y = obstacle.position.y - RADIUS
+				velocity.y = min(0.0, velocity.y)
+			else:
+				global_position.y = obstacle.position.y + obstacle.size.y + RADIUS
+				velocity.y = max(0.0, velocity.y)
 
 func push_trail():
-	trail.append({"pos": global_position, "time": Time.get_ticks_msec()})
+	var now = Time.get_ticks_msec()
+	trail.append({"pos": global_position, "time": now})
+	prune_trail(now)
+
+func prune_trail(now: int):
+	var cutoff = now - TRAIL_LIFETIME_MS
+	while trail.size() > 0 and trail[0]["time"] < cutoff:
+		trail.pop_front()
+
+func can_start_ability() -> bool:
+	return alive and casting == null and recovering == null and not dashing and not lunging and not parrying and stunned_time_left <= 0
+
+func can_dash(dir: Vector2) -> bool:
+	return alive and casting == null and not dashing and not lunging and not parrying and stunned_time_left <= 0 \
+		and dir.length() >= 0.01 and dash_charges > 0
+
+func can_parry() -> bool:
+	return alive and parry_cd_left <= 0 and casting == null and not dashing and not lunging and stunned_time_left <= 0
+
+func get_status_accent(default_color: Color) -> Color:
+	if stunned_time_left > 0:
+		return Color(0.9, 0.9, 0.3)
+	if parrying:
+		return Color(0.3, 0.7, 1.0)
+	if lunging:
+		return Color(1, 0.24, 0.24)
+	if dashing:
+		return Color(1, 0.36, 0.48)
+	if casting != null:
+		return Color(1, 0.82, 0.4)
+	if recovering != null:
+		return Color(0.78, 0.61, 1)
+	return default_color
 
 # ---- Sword swing ----
 func start_swing(arc_span_deg: float, duration: float):
@@ -261,15 +328,15 @@ func add_combo_stack():
 	combo_stacks = min(COMBO_MAX, combo_stacks + 1)
 	combo_time_left = COMBO_DECAY
 
-func deal_damage(target: Entity, amount: float):
+func deal_damage(target: Entity, amount: float) -> bool:
 	if target == null or not target.alive:
-		return
+		return false
 	if target.parrying:
 		target.parrying = false
 		stunned_time_left = PARRY_STUN_DUR
 		casting = null
 		lunging = false
-		return
+		return false
 	if target.casting != null:
 		target.casting = null
 		target.stunned_time_left = STUN_DUR
@@ -278,19 +345,20 @@ func deal_damage(target: Entity, amount: float):
 	if target.hp <= 0 and target.alive:
 		target.alive = false
 		target.died.emit()
+	return true
 
 func try_auto(opp: Entity):
-	if not alive or cd_auto > 0 or casting != null or opp == null:
+	if not can_start_ability() or cd_auto > 0 or opp == null:
 		return
 	cd_auto = AUTO_CD
 	facing = get_aim_dir(opp)
 	start_swing(70.0, 0.12)
 	if global_position.distance_to(opp.global_position) <= AUTO_RANGE:
-		deal_damage(opp, AUTO_DMG)
-		add_combo_stack()
+		if deal_damage(opp, AUTO_DMG):
+			add_combo_stack()
 
 func try_a1(opp: Entity):
-	if not alive or cd_a1 > 0 or casting != null or recovering != null or opp == null:
+	if not can_start_ability() or cd_a1 > 0 or opp == null:
 		return
 	casting = {"type": "a1", "time_left": A1_CAST, "total": A1_CAST, "opp": opp}
 
@@ -299,13 +367,13 @@ func resolve_a1(opp: Entity):
 	start_swing(110.0, 0.2)
 	if global_position.distance_to(opp.global_position) <= A1_RANGE:
 		var dmg = round(A1_DMG * combo_mult())
-		deal_damage(opp, dmg)
-		add_combo_stack()
+		if deal_damage(opp, dmg):
+			add_combo_stack()
 	cd_a1 = A1_CD
 	recovering = {"type": "a1", "time_left": A1_RECOVERY, "total": A1_RECOVERY}
 
 func try_a2(opp: Entity):
-	if not alive or cd_a2 > 0 or casting != null or recovering != null or opp == null:
+	if not can_start_ability() or cd_a2 > 0 or opp == null:
 		return
 	casting = {"type": "a2", "time_left": A2_CAST, "total": A2_CAST, "opp": opp}
 
@@ -322,14 +390,14 @@ func resolve_lunge_strike(opp: Entity):
 	start_swing(80.0, 0.16)
 	if opp != null and is_instance_valid(opp) and opp.alive and global_position.distance_to(opp.global_position) <= A2_RANGE:
 		var dmg = round(A2_DMG * combo_mult())
-		deal_damage(opp, dmg)
-		if opp.alive:
-			opp.stunned_time_left = 0.5
-		add_combo_stack()
+		if deal_damage(opp, dmg):
+			if opp.alive:
+				opp.stunned_time_left = 0.5
+			add_combo_stack()
 	recovering = {"type": "a2", "time_left": A2_RECOVERY, "total": A2_RECOVERY}
 
 func try_ult(opp: Entity):
-	if not alive or ult_charge < ULT_CHARGE_MAX or casting != null or recovering != null or opp == null:
+	if not can_start_ability() or ult_charge < ULT_CHARGE_MAX or opp == null:
 		return
 	casting = {"type": "ult", "time_left": ULT_CAST, "total": ULT_CAST, "opp": opp}
 
@@ -338,13 +406,13 @@ func resolve_ult(opp: Entity):
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= ULT_RANGE:
 		var missing_ratio = 1.0 - (opp.hp / opp.max_hp)
 		var dmg = round(ULT_DMG_BASE + missing_ratio * ULT_DMG_MISSING_BONUS)
-		deal_damage(opp, dmg)
-		add_combo_stack()
+		if deal_damage(opp, dmg):
+			add_combo_stack()
 	ult_charge = 0.0
 	recovering = {"type": "ult", "time_left": ULT_RECOVERY, "total": ULT_RECOVERY}
 
 func try_dash(dir: Vector2):
-	if not alive or dashing or dir.length() < 0.01 or dash_charges <= 0:
+	if not can_dash(dir):
 		return
 	dash_charges -= 1
 	if dash_charges == 0:
@@ -352,12 +420,11 @@ func try_dash(dir: Vector2):
 	dash_dir = dir.normalized()
 	dashing = true
 	dash_time_left = DASH_DUR
-	dash_cd_left = 0.0
 	if recovering != null:
 		recovering = null
 
 func try_parry():
-	if not alive or parry_cd_left > 0 or casting != null or dashing or lunging or stunned_time_left > 0:
+	if not can_parry():
 		return
 	parrying = true
 	parry_time_left = PARRY_DUR
@@ -544,13 +611,7 @@ func _draw():
 		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
 		return
 
-	var accent = base_color
-	if stunned_time_left > 0:  accent = Color(0.9, 0.9, 0.3)
-	elif parrying:             accent = Color(0.3, 0.7, 1.0)
-	elif lunging:              accent = Color(1, 0.24, 0.24)
-	elif dashing:              accent = Color(1, 0.36, 0.48)
-	elif casting != null:      accent = Color(1, 0.82, 0.4)
-	elif recovering != null:   accent = Color(0.78, 0.61, 1)
+	var accent = get_status_accent(base_color)
 
 	_draw_duelist(now, accent)
 	_draw_hud(now, accent)

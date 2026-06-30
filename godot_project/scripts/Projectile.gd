@@ -10,6 +10,7 @@ var lifetime := 3.0
 var proj_color := Color(1.0, 0.85, 0.3)
 var proj_radius_visual := 8.0
 var apply_slow := 0.0
+var obstacle_rects: Array[Rect2] = []
 
 func _physics_process(delta):
 	lifetime -= delta
@@ -18,15 +19,21 @@ func _physics_process(delta):
 		return
 	global_position += velocity * delta
 	queue_redraw()
+	for obstacle in obstacle_rects:
+		if obstacle.grow(proj_radius_visual).has_point(global_position):
+			queue_free()
+			return
 	if target != null and is_instance_valid(target) and target.alive:
 		if global_position.distance_to(target.global_position) <= hit_radius + target.RADIUS:
 			_on_hit()
 
 func _on_hit():
+	var landed := false
 	if owner_entity != null and is_instance_valid(owner_entity) and owner_entity.alive:
-		owner_entity.deal_damage(target, damage)
-		owner_entity.add_combo_stack()
-	if apply_slow > 0 and target != null and is_instance_valid(target) and target.alive:
+		landed = owner_entity.deal_damage(target, damage)
+		if landed:
+			owner_entity.add_combo_stack()
+	if landed and apply_slow > 0 and target != null and is_instance_valid(target) and target.alive:
 		target.slowed_time_left = apply_slow
 	queue_free()
 

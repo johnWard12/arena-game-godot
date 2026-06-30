@@ -1,0 +1,6 @@
+godot_project/.godot/
+godot_project/.import/
+godot_project/export.cfg
+godot_project/export_credentials.cfg
+*.tmp
+*.translation

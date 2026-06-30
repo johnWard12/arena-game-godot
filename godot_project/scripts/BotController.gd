@@ -44,7 +44,7 @@ func ai_decide():
 
 	# dodge: if the opponent just started a long cast and we're close, dash away
 	if not is_kiter and opponent.casting != null and opponent.casting["time_left"] > opponent.casting["total"] * 0.5 \
-		and d < 180 and dash_cd_left <= 0 and randf() < 0.3:
+		and d < 180 and dash_charges > 0 and randf() < 0.3:
 		var away = (global_position - opponent.global_position).normalized()
 		try_dash(away)
 		return

@@ -1,9 +1,0 @@
-78098b89c88a74ebe8c20117b8754620
-::res://::1782837449
-::res://scenes/::1782836571
-Main.tscn::PackedScene::-1::1782850466::0::1::::<><><>0<>0<><>::res://scripts/Main.gd
-::res://scripts/::1782836571
-BotController.gd::GDScript::6336005338399330288::1782850512::0::1::::BotController<>Node2D<><>0<>0<><>::
-Entity.gd::GDScript::3390964820071183279::1782850496::0::1::::Entity<>Node2D<><>0<>0<><>::
-Main.gd::GDScript::4336572732248660059::1782850524::0::1::::<>Node2D<><>0<>0<><>::
-PlayerController.gd::GDScript::1757847030105947127::1782850502::0::1::::PlayerController<>Node2D<><>0<>0<><>::
