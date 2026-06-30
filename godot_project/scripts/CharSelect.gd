@@ -3,17 +3,27 @@ extends Node2D
 const W = 1920
 const H = 1080
 
-const CARD_W = 230.0
+const CARD_W = 210.0
 const CARD_H = 340.0
 const CARD_Y = 180.0
-const GAP    = 20.0
+const GAP    = 18.0
 
-# left section (player): two cards centered in left half
-# right section (bot): two cards centered in right half
-var player_cards_x := [W * 0.25 - CARD_W - GAP * 0.5, W * 0.25 + GAP * 0.5]
-var bot_cards_x    := [W * 0.75 - CARD_W - GAP * 0.5, W * 0.75 + GAP * 0.5]
+# left section (player): three cards centered in left half (0..960)
+# right section (bot): three cards centered in right half (960..1920)
+const _TOTAL_W = CARD_W * 3 + GAP * 2   # 210*3 + 18*2 = 666
 
-# 0=Duelist 1=Mage; default: player=Duelist, bot=Mage
+var player_cards_x := [
+	W * 0.25 - _TOTAL_W * 0.5,
+	W * 0.25 - _TOTAL_W * 0.5 + CARD_W + GAP,
+	W * 0.25 - _TOTAL_W * 0.5 + (CARD_W + GAP) * 2,
+]
+var bot_cards_x := [
+	W * 0.75 - _TOTAL_W * 0.5,
+	W * 0.75 - _TOTAL_W * 0.5 + CARD_W + GAP,
+	W * 0.75 - _TOTAL_W * 0.5 + (CARD_W + GAP) * 2,
+]
+
+# 0=Duelist 1=Mage 2=Bruiser; default: player=Duelist, bot=Mage
 var player_sel := 0
 var bot_sel    := 1
 var hovered    := Vector2i(-1, -1)  # x=side (0=player,1=bot), y=card idx
@@ -21,19 +31,30 @@ var hovered    := Vector2i(-1, -1)  # x=side (0=player,1=bot), y=card idx
 const MELEE_COLOR  = Color(0.37, 0.88, 0.75)
 const RANGED_COLOR = Color(0.72, 0.4,  1.0)
 
+const BRUISER_COLOR = Color(0.95, 0.55, 0.15)
+
 const CLASSES = [
 	{
 		"label": "DUELIST",
 		"color": MELEE_COLOR,
-		"hp":    "HP  120",
-		"lines": ["Melee glass cannon.", "Combos + execute ult.", "", "Auto       LMB", "Quick Strike   E", "Lunge      Q", "Execute    F"]
+		"key":   "melee",
+		"hp":    "HP  150",
+		"lines": ["Melee glass cannon.", "Combos + execute ult.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Blind Spot F", "Execute    R"]
 	},
 	{
 		"label": "MAGE",
 		"color": RANGED_COLOR,
-		"hp":    "HP  95",
-		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "Ult Shot   F"]
-	}
+		"key":   "ranged",
+		"hp":    "HP  119",
+		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "Barrier    F", "Ult Shot   R"]
+	},
+	{
+		"label": "BRUISER",
+		"color": BRUISER_COLOR,
+		"key":   "bruiser",
+		"hp":    "HP  200",
+		"lines": ["Tanky melee brawler.", "Lifesteal + sustain.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Shield Bash F", "Jugger     R"]
+	},
 ]
 
 func _ready():
@@ -58,11 +79,11 @@ func _input(event):
 			_start()
 
 func _card_under(pos: Vector2) -> Vector2i:
-	for i in 2:
+	for i in 3:
 		var r = Rect2(player_cards_x[i], CARD_Y, CARD_W, CARD_H)
 		if r.has_point(pos):
 			return Vector2i(0, i)
-	for i in 2:
+	for i in 3:
 		var r = Rect2(bot_cards_x[i], CARD_Y, CARD_W, CARD_H)
 		if r.has_point(pos):
 			return Vector2i(1, i)
@@ -72,8 +93,8 @@ func _fight_btn_rect() -> Rect2:
 	return Rect2(W * 0.5 - 100, CARD_Y + CARD_H + 40, 200, 52)
 
 func _start():
-	get_tree().root.set_meta("player_class", "melee" if player_sel == 0 else "ranged")
-	get_tree().root.set_meta("bot_class",    "melee" if bot_sel == 0 else "ranged")
+	get_tree().root.set_meta("player_class", CLASSES[player_sel]["key"])
+	get_tree().root.set_meta("bot_class",    CLASSES[bot_sel]["key"])
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
 func _draw():
@@ -92,10 +113,10 @@ func _draw():
 		Color(1, 1, 1, 0.08), 1.0)
 	_draw_text("VS", Vector2(mid, CARD_Y + CARD_H * 0.5), 26, Color(0.5, 0.5, 0.6, 0.4), true)
 
-	# draw all four cards
-	for i in 2:
+	# draw all six cards
+	for i in 3:
 		_draw_card(player_cards_x[i], i, player_sel == i, hovered == Vector2i(0, i))
-	for i in 2:
+	for i in 3:
 		_draw_card(bot_cards_x[i], i, bot_sel == i, hovered == Vector2i(1, i))
 
 	# fight button

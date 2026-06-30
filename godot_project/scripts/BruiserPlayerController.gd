@@ -1,11 +1,12 @@
-extends "res://scripts/RangedEntity.gd"
-class_name RangedPlayerController
+extends "res://scripts/BruiserEntity.gd"
+class_name BruiserPlayerController
 
 var dash_key_was_down := false
 
 func _ready():
 	super._ready()
 	is_player = true
+	base_color = Color(0.95, 0.55, 0.15)
 
 func get_movement_input() -> Vector2:
 	var v := Vector2.ZERO
@@ -39,12 +40,16 @@ func _unhandled_input(event):
 	if not alive:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		match event.keycode:
-			KEY_E: try_a1(opponent)
-			KEY_Q: try_a2(opponent)
-			KEY_F: try_a3(opponent)
-			KEY_R: try_ult(opponent)
-			KEY_G: try_parry()
+		if event.keycode == KEY_E:
+			try_a1(opponent)
+		elif event.keycode == KEY_Q:
+			try_a2(opponent)
+		elif event.keycode == KEY_F:
+			try_a3(opponent)
+		elif event.keycode == KEY_R:
+			try_ult(opponent)
+		elif event.keycode == KEY_G:
+			try_parry()
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_RIGHT:
 			try_parry()

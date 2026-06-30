@@ -43,6 +43,9 @@ const PARRY_CD = 5.0
 const PARRY_STUN_DUR = 0.65
 const STUN_DUR = 0.5
 
+const A3_CD    = 5.0
+const A3_RANGE = 280.0
+
 const DASH_CHARGES_MAX  = 2
 const DASH_CHARGE_REGEN = 2.5
 
@@ -90,6 +93,11 @@ var parry_cd_left := 0.0
 var stunned_time_left := 0.0
 var slowed_time_left  := 0.0
 
+var cd_a3             := 0.0
+var barrier_hp_left   := 0.0
+var barrier_time_left := 0.0
+var speed_override    := -1.0
+
 # sword swing: arc sweep from start_angle to start_angle+arc_span over swing_total seconds
 var swing_time_left := 0.0
 var swing_total := 0.0
@@ -120,6 +128,7 @@ func _physics_process(delta):
 	cd_auto = max(0.0, cd_auto - delta)
 	cd_a1 = max(0.0, cd_a1 - delta)
 	cd_a2 = max(0.0, cd_a2 - delta)
+	cd_a3 = max(0.0, cd_a3 - delta)
 	parry_cd_left = max(0.0, parry_cd_left - delta)
 	if dash_charges < DASH_CHARGES_MAX:
 		dash_charge_timer += delta
@@ -128,6 +137,10 @@ func _physics_process(delta):
 			dash_charges += 1
 	hit_flash_left   = max(0.0, hit_flash_left - delta)
 	slowed_time_left = max(0.0, slowed_time_left - delta)
+	if barrier_time_left > 0:
+		barrier_time_left = max(0.0, barrier_time_left - delta)
+		if barrier_time_left <= 0:
+			barrier_hp_left = 0.0
 	if swing_time_left > 0:
 		swing_time_left = max(0.0, swing_time_left - delta)
 	if ult_charge < ULT_CHARGE_MAX:
@@ -164,6 +177,8 @@ func _physics_process(delta):
 				resolve_a2(opp)
 			elif t == "ult":
 				resolve_ult(opp)
+			elif t == "a3":
+				resolve_a3(opp)
 
 	if recovering != null:
 		recovering["time_left"] -= delta
@@ -203,7 +218,8 @@ func _physics_process(delta):
 		var has_input = input_vec.length() > 0.01
 		if has_input:
 			facing = input_vec.normalized()
-			var target_v = facing * MAX_SPEED * speed_mult
+			var eff_speed = speed_override if speed_override > 0.0 else MAX_SPEED
+			var target_v = facing * eff_speed * speed_mult
 			velocity = velocity.move_toward(target_v, ACCEL * delta)
 		else:
 			var spd = velocity.length()
@@ -337,6 +353,13 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		casting = null
 		lunging = false
 		return false
+	if target.barrier_hp_left > 0:
+		var absorbed = min(amount, target.barrier_hp_left)
+		target.barrier_hp_left -= absorbed
+		amount -= absorbed
+		target.hit_flash_left = 0.15
+		if amount <= 0:
+			return true
 	if target.casting != null:
 		target.casting = null
 		target.stunned_time_left = STUN_DUR
@@ -429,6 +452,21 @@ func try_parry():
 	parrying = true
 	parry_time_left = PARRY_DUR
 	parry_cd_left = PARRY_CD
+
+func try_a3(opp: Entity):
+	if not can_start_ability() or cd_a3 > 0 or opp == null:
+		return
+	var d = global_position.distance_to(opp.global_position)
+	if d > A3_RANGE:
+		return
+	var behind = opp.global_position + (opp.global_position - global_position).normalized() * (RADIUS * 2.0 + 40.0)
+	global_position = behind
+	facing = get_aim_dir(opp)
+	cd_a3 = A3_CD
+	push_trail()
+
+func resolve_a3(_opp: Entity):
+	pass
 
 # ---- Drawing helpers ----
 func _draw_hud(now: int, accent: Color):
@@ -549,6 +587,12 @@ func _draw_duelist(now: int, accent: Color):
 	draw_line(head + perp * -5 + facing * -2,
 			  head + perp *  5 + facing * -2,
 			  Color(accent.r, accent.g, accent.b, 0.95), 3.5)
+
+	# gladiator crest (red plume along helm ridge)
+	draw_line(head + facing * -10, head + facing * 4,
+		Color(0.70, 0.08, 0.06, 0.90), 5.5)
+	draw_line(head + facing * -10, head + facing * 4,
+		Color(1.00, 0.28, 0.16, 0.80), 2.5)
 
 	# --- DASH CHARGE PIPS ---
 	for i in DASH_CHARGES_MAX:
