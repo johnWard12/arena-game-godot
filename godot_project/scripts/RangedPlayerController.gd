@@ -42,7 +42,8 @@ func _unhandled_input(event):
 		match event.keycode:
 			KEY_E: try_a1(opponent)
 			KEY_Q: try_a2(opponent)
-			KEY_F: try_ult(opponent)
+			KEY_F: try_a3(opponent)
+			KEY_R: try_ult(opponent)
 			KEY_G: try_parry()
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_RIGHT:

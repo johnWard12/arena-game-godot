@@ -21,6 +21,11 @@ const NOVA_RECOVERY = 0.25
 const NOVA_CD       = 4.5
 const NOVA_RADIUS   = 155.0
 const NOVA_DMG      = 18.0
+const NOVA_SLOW     = 1.2
+
+const BARRIER_CD  = 7.0
+const BARRIER_HP  = 35.0
+const BARRIER_DUR = 1.5
 
 
 const RULT_CAST     = 0.55
@@ -82,6 +87,7 @@ func resolve_a2(opp: Entity):
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= NOVA_RADIUS:
 		var dmg = round(NOVA_DMG * combo_mult())
 		if deal_damage(opp, dmg):
+			opp.slowed_time_left = NOVA_SLOW
 			add_combo_stack()
 	cd_a2 = NOVA_CD
 	recovering = {"type": "a2", "time_left": NOVA_RECOVERY, "total": NOVA_RECOVERY}
@@ -98,6 +104,16 @@ func resolve_ult(opp: Entity):
 	_fire(facing, RULT_SPEED, RULT_RADIUS, dmg, opp, Color(1.0, 0.3, 0.85), 16.0)
 	ult_charge = 0.0
 	recovering = {"type": "ult", "time_left": RULT_RECOVERY, "total": RULT_RECOVERY}
+
+func try_a3(_opp: Entity):
+	if not can_start_ability() or cd_a3 > 0:
+		return
+	barrier_hp_left   = BARRIER_HP
+	barrier_time_left = BARRIER_DUR
+	cd_a3 = BARRIER_CD
+
+func resolve_a3(_opp: Entity):
+	pass
 
 func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0):
 	var proj = load("res://scripts/Projectile.gd").new()
@@ -216,6 +232,12 @@ func _draw():
 	var eye_r = head_pos + perp *  3 + facing * -1
 	draw_circle(eye_l, 2.5, Color(accent.r, accent.g, accent.b, 0.9))
 	draw_circle(eye_r, 2.5, Color(accent.r, accent.g, accent.b, 0.9))
+
+	# barrier shield visual
+	if barrier_hp_left > 0:
+		var bpct = barrier_hp_left / BARRIER_HP
+		draw_arc(Vector2.ZERO, RADIUS + 14, 0, TAU, 48, Color(0.3, 0.7, 1.0, 0.35 + bpct * 0.5), 4.0)
+		draw_arc(Vector2.ZERO, RADIUS + 19, 0, TAU, 32, Color(0.6, 0.9, 1.0, bpct * 0.3), 2.0)
 
 	# arcane burst visual
 	if nova_fx_left > 0:

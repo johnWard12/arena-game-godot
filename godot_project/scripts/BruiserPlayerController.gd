@@ -45,6 +45,8 @@ func _unhandled_input(event):
 		elif event.keycode == KEY_Q:
 			try_a2(opponent)
 		elif event.keycode == KEY_F:
+			try_a3(opponent)
+		elif event.keycode == KEY_R:
 			try_ult(opponent)
 		elif event.keycode == KEY_G:
 			try_parry()

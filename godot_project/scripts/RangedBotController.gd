@@ -34,6 +34,11 @@ func ai_decide():
 		ai_target = Vector2.ZERO
 		return
 
+	# barrier when low HP
+	if hp < max_hp * 0.45 and cd_a3 <= 0 and randf() < 0.5:
+		try_a3(opponent)
+		return
+
 	# arcane burst when opponent is in close/melee range
 	if d < FLEE_RANGE and cd_a2 <= 0 and casting == null and randf() < 0.85:
 		try_a2(opponent)

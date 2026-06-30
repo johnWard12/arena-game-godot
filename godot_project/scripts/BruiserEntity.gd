@@ -34,21 +34,33 @@ const BRUISER_ULT_DMG_BASE = 40.0
 const BRUISER_ULT_DMG_BONUS = 35.0
 const BRUISER_ULT_RANGE    = 150.0
 
-var tremor_fx_left := 0.0
+# F — Shield Bash: quick shield strike + knockback
+const SHIELD_BASH_CAST      = 0.12
+const SHIELD_BASH_RECOVERY  = 0.18
+const SHIELD_BASH_CD        = 5.5
+const SHIELD_BASH_DMG       = 10.0
+const SHIELD_BASH_RANGE     = 150.0
+const SHIELD_BASH_STUN      = 0.25
+const SHIELD_BASH_KNOCKBACK = 580.0
+
+var tremor_fx_left    := 0.0
+var shield_bash_fx    := 0.0
 
 func _ready():
-	hp        = BRUISER_MAX_HP
-	max_hp    = BRUISER_MAX_HP
-	base_color = Color(0.95, 0.55, 0.15)
+	hp             = BRUISER_MAX_HP
+	max_hp         = BRUISER_MAX_HP
+	base_color     = Color(0.95, 0.55, 0.15)
+	speed_override = BRUISER_MAX_SPEED
 
 func _physics_process(delta):
-	tremor_fx_left = max(0.0, tremor_fx_left - delta)
+	tremor_fx_left  = max(0.0, tremor_fx_left - delta)
+	shield_bash_fx  = max(0.0, shield_bash_fx - delta)
 	super._physics_process(delta)
 
 # ---- Ability overrides ----
 
 func try_auto(opp: Entity):
-	if not alive or cd_auto > 0 or casting != null or opp == null:
+	if not can_start_ability() or cd_auto > 0 or opp == null:
 		return
 	cd_auto = BRUISER_AUTO_CD
 	facing = get_aim_dir(opp)
@@ -110,6 +122,23 @@ func resolve_ult(opp: Entity):
 	ult_charge = 0.0
 	recovering = {"type": "ult", "time_left": BRUISER_ULT_RECOVERY, "total": BRUISER_ULT_RECOVERY}
 
+func try_a3(opp: Entity):
+	if not can_start_ability() or cd_a3 > 0 or opp == null:
+		return
+	casting = {"type": "a3", "time_left": SHIELD_BASH_CAST, "total": SHIELD_BASH_CAST, "opp": opp}
+
+func resolve_a3(opp: Entity):
+	shield_bash_fx = 0.3
+	facing = get_aim_dir(opp)
+	start_swing(90.0, 0.18)
+	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= SHIELD_BASH_RANGE:
+		if deal_damage(opp, SHIELD_BASH_DMG):
+			if opp.alive:
+				opp.stunned_time_left = SHIELD_BASH_STUN
+				opp.velocity = (opp.global_position - global_position).normalized() * SHIELD_BASH_KNOCKBACK
+	cd_a3 = SHIELD_BASH_CD
+	recovering = {"type": "a3", "time_left": SHIELD_BASH_RECOVERY, "total": SHIELD_BASH_RECOVERY}
+
 # ---- Drawing ----
 func _draw():
 	var now = Time.get_ticks_msec()
@@ -144,6 +173,13 @@ func _draw_bruiser(now: int, accent: Color):
 	var spd_pct = clamp(velocity.length() / BRUISER_MAX_SPEED, 0.0, 1.0)
 	var stride  = spd_pct * 8.0
 	var bob_y   = sin(walk_phase * 2.0) * spd_pct * 1.2
+
+	# shield bash flash
+	if shield_bash_fx > 0:
+		var spct = shield_bash_fx / 0.3
+		var sc = facing * -2 + perp * -14
+		draw_circle(sc, 18.0, Color(accent.r, accent.g, accent.b, spct * 0.45))
+		draw_arc(Vector2.ZERO, RADIUS + 17, 0, TAU, 32, Color(1, 1, 1, spct * 0.55), 3.0)
 
 	# tremor shockwave ring
 	if tremor_fx_left > 0:
@@ -229,9 +265,11 @@ func _draw_bruiser(now: int, accent: Color):
 	draw_line(head + perp * -4 + facing * -1,
 			  head + perp *  4 + facing * -1,
 			  Color(accent.r, accent.g, accent.b, 0.95), 3.0)
-	# helm crest/ridge on top
-	draw_line(head + facing * -12, head + facing * 4,
-			  Color(accent.r, accent.g, accent.b, 0.5), 3.0)
+	# helm war crest (prominent)
+	draw_line(head + facing * -13, head + facing * 5,
+			  Color(accent.r * 0.45, accent.g * 0.45, accent.b * 0.45, 0.95), 6.0)
+	draw_line(head + facing * -13, head + facing * 5,
+			  Color(accent.r, accent.g, accent.b, 0.65), 2.5)
 
 	# --- DASH CHARGE PIPS ---
 	for i in DASH_CHARGES_MAX:
