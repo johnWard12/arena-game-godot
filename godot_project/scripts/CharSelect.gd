@@ -45,14 +45,14 @@ const CLASSES = [
 		"label": "MAGE",
 		"color": RANGED_COLOR,
 		"key":   "ranged",
-		"hp":    "HP  119",
+		"hp":    "HP  120",
 		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "Barrier    F", "Ult Shot   R"]
 	},
 	{
 		"label": "BRUISER",
 		"color": BRUISER_COLOR,
 		"key":   "bruiser",
-		"hp":    "HP  200",
+		"hp":    "HP  180",
 		"lines": ["Tanky melee brawler.", "Lifesteal + sustain.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Shield Bash F", "Jugger     R"]
 	},
 ]

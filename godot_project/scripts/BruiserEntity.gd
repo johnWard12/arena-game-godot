@@ -1,7 +1,7 @@
 extends "res://scripts/Entity.gd"
 class_name BruiserEntity
 
-const BRUISER_MAX_HP     = 200.0
+const BRUISER_MAX_HP     = 180.0
 const BRUISER_MAX_SPEED  = 370.0
 const BRUISER_ACCEL      = 2800.0
 const BRUISER_FRICTION   = 1400.0
