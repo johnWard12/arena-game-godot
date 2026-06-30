@@ -418,45 +418,39 @@ func draw_health_pack(pack: Dictionary):
 	var pos: Vector2 = pack["pos"]
 	draw_health_station(pos)
 	if pack["active"]:
-		var t  = Time.get_ticks_msec() * 0.004
-		var ff = sin(t * 3.4 + pos.x * 0.01)
-		# Warm glow
-		draw_circle(pos, 30.0 + ff * 2.0, Color(1.0, 0.52, 0.08, 0.11 + ff * 0.03))
-		# Fire
-		var fy = pos.y - 10
-		var flame = PackedVector2Array([
-			Vector2(pos.x - 8, fy),
-			Vector2(pos.x + 8, fy),
-			Vector2(pos.x + 4.0 + ff * 3, fy - 19),
-			Vector2(pos.x + ff * 1.5,     fy - 27),
-			Vector2(pos.x - 4.0 + ff * 3, fy - 19),
-		])
-		draw_colored_polygon(flame, Color(1.0, 0.50, 0.08, 0.82))
-		var inner = PackedVector2Array([
-			Vector2(pos.x - 4, fy),
-			Vector2(pos.x + 4, fy),
-			Vector2(pos.x + ff * 0.8, fy - 15),
-		])
-		draw_colored_polygon(inner, Color(1.0, 0.92, 0.45, 0.92))
+		var t       = Time.get_ticks_msec() * 0.005
+		var pulse   = sin(t * 2.2) * 0.5 + 0.5
+		var orb_r   = 16.0 + pulse * 3.0
+		# Outer glow ring (bright green, hard to miss)
+		draw_circle(pos, orb_r + 18.0, Color(0.15, 1.0, 0.45, 0.10 + pulse * 0.08))
+		draw_circle(pos, orb_r + 8.0,  Color(0.15, 1.0, 0.45, 0.20 + pulse * 0.10))
+		# Orb body
+		draw_circle(pos, orb_r, Color(0.08, 0.72, 0.30, 0.95))
+		draw_circle(pos, orb_r * 0.55, Color(0.35, 1.0, 0.60, 0.90))
+		draw_circle(pos, orb_r * 0.22, Color(0.85, 1.0, 0.90, 0.95))
+		# Bright green cross / plus symbol
+		var cs = orb_r * 0.55
+		var cw = orb_r * 0.22
+		draw_rect(Rect2(pos + Vector2(-cw, -cs), Vector2(cw * 2, cs * 2)), Color(0.9, 1.0, 0.92, 0.95), true)
+		draw_rect(Rect2(pos + Vector2(-cs, -cw), Vector2(cs * 2, cw * 2)), Color(0.9, 1.0, 0.92, 0.95), true)
+		# Pulsing arc outline
+		draw_arc(pos, orb_r + 2, 0, TAU, 48, Color(0.25, 1.0, 0.55, 0.55 + pulse * 0.35), 2.5)
 	else:
 		var pct = 1.0 - (pack["respawn_left"] / HEALTH_PACK_RESPAWN)
-		draw_circle(pos, 13, Color(0.18, 0.14, 0.09, 0.85))
-		draw_arc(pos, 22, -PI / 2, -PI / 2 + TAU * pct, 36, Color(1.0, 0.52, 0.08, 0.50), 2.5)
+		draw_circle(pos, 14, Color(0.10, 0.16, 0.12, 0.85))
+		draw_arc(pos, 22, -PI * 0.5, -PI * 0.5 + TAU * pct, 40, Color(0.25, 1.0, 0.55, 0.55), 3.0)
 
 func draw_health_station(pos: Vector2):
-	# Brazier: tripod + bowl
-	draw_filled_ellipse(pos + Vector2(4, 9), Vector2(46, 28), Color(0, 0, 0, 0.22), 36)
-	# Tripod legs
-	for i in 3:
-		var a   = -PI * 0.5 + i * TAU / 3.0
-		var tip = pos + Vector2(cos(a) * 28, sin(a) * 18 + 6)
-		draw_line(pos + Vector2(cos(a) * 10, sin(a) * 6), tip,
-			Color(0.30, 0.22, 0.14, 0.90), 4.0)
-	# Bowl body
-	draw_filled_ellipse(pos, Vector2(36, 22), Color(0.26, 0.20, 0.13, 0.92), 40)
-	# Bowl rim
-	draw_arc(pos, 26, PI * 0.05, PI * 0.95, 36, Color(0.46, 0.36, 0.22, 0.75), 3.5)
-	draw_arc(pos, 22, 0, TAU, 40, Color(0.22, 0.16, 0.10, 0.80), 2.0)
+	# Stone pedestal base
+	draw_filled_ellipse(pos + Vector2(4, 10), Vector2(44, 26), Color(0, 0, 0, 0.25), 36)
+	draw_filled_ellipse(pos + Vector2(0, 6), Vector2(36, 20), Color(0.32, 0.25, 0.16, 0.90), 36)
+	draw_arc(pos + Vector2(0, 6), 24, PI * 0.08, PI * 0.92, 32, Color(0.48, 0.38, 0.24, 0.70), 3.0)
+	# Pedestal column
+	draw_rect(Rect2(pos + Vector2(-7, -12), Vector2(14, 18)), Color(0.36, 0.28, 0.18, 0.92), true)
+	draw_rect(Rect2(pos + Vector2(-7, -12), Vector2(14, 18)), Color(0.22, 0.16, 0.10, 0.70), false, 1.5)
+	# Cap stone
+	draw_rect(Rect2(pos + Vector2(-10, -14), Vector2(20, 5)), Color(0.42, 0.34, 0.22, 0.95), true)
+	draw_rect(Rect2(pos + Vector2(-10, -14), Vector2(20, 5)), Color(0.22, 0.16, 0.10, 0.70), false, 1.5)
 
 func draw_arena_border():
 	var WALL  = Color(0.40, 0.32, 0.21)

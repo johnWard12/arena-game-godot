@@ -9,7 +9,6 @@ const BRUISER_FRICTION   = 1400.0
 const BRUISER_AUTO_CD    = 0.70
 const BRUISER_AUTO_DMG   = 7.0
 const BRUISER_AUTO_RANGE = 145.0
-const LIFESTEAL_PCT      = 0.18
 
 # E — Shatter: shield slam + stun
 const SHATTER_CAST     = 0.18
@@ -67,8 +66,6 @@ func try_auto(opp: Entity):
 	start_swing(80.0, 0.15)
 	if global_position.distance_to(opp.global_position) <= BRUISER_AUTO_RANGE:
 		deal_damage(opp, BRUISER_AUTO_DMG * combo_mult())
-		# lifesteal
-		hp = min(max_hp, hp + BRUISER_AUTO_DMG * combo_mult() * LIFESTEAL_PCT)
 		add_combo_stack()
 
 func try_a1(opp: Entity):
