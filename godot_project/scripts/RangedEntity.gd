@@ -2,7 +2,7 @@ extends "res://scripts/Entity.gd"
 class_name RangedEntity
 
 # Ranged-specific constants
-const RANGED_MAX_HP = 95.0
+const RANGED_MAX_HP = 119.0
 
 const RPROJ_SPEED  = 1360.0
 const RPROJ_RADIUS = 28.0

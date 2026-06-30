@@ -46,12 +46,12 @@ const STUN_DUR = 0.5
 const DASH_CHARGES_MAX  = 2
 const DASH_CHARGE_REGEN = 2.5
 
-const RADIUS = 18.0
+const RADIUS = 24.0
 const TRAIL_LIFETIME_MS = 220
 
 # sword swing tunables
-const SWORD_LEN = 56.0
-const SWORD_WIDTH = 9.0
+const SWORD_LEN = 72.0
+const SWORD_WIDTH = 11.0
 
 # ---- State ----
 var is_player := false
@@ -68,8 +68,8 @@ var lunge_time_left := 0.0
 var lunge_dir := Vector2.ZERO
 var lunge_opponent: Entity = null
 
-var hp := 120.0
-var max_hp := 120.0
+var hp := 150.0
+var max_hp := 150.0
 var alive := true
 
 var casting = null
