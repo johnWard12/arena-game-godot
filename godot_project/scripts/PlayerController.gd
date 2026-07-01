@@ -32,7 +32,7 @@ func _physics_process(delta):
 		try_auto(opponent)
 
 func poll_dash():
-	var held = Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_physical_key_pressed(KEY_SPACE)
+	var held = Input.is_physical_key_pressed(KEY_SPACE)
 	if held and not dash_key_was_down:
 		var input_vec = get_movement_input()
 		var dir = input_vec if input_vec.length() > 0.01 else facing
@@ -49,6 +49,8 @@ func _unhandled_input(event):
 			try_a2(opponent)
 		elif event.keycode == KEY_F:
 			try_a3(opponent)
+		elif event.keycode == KEY_SHIFT:
+			try_shift(opponent)
 		elif event.keycode == KEY_R:
 			try_ult(opponent)
 		elif event.keycode == KEY_G:

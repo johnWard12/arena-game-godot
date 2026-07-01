@@ -25,9 +25,18 @@ const NOVA_RADIUS   = 190.0
 const NOVA_DMG      = 20.0
 const NOVA_FREEZE   = 1.0
 
+# Shift — Barrier: brief absorb shield
 const BARRIER_CD  = 7.0
 const BARRIER_HP  = 35.0
 const BARRIER_DUR = 1.5
+
+# F — Arcane Fan: 3-bolt cone spread, rewards close-range risk
+const ARCANE_FAN_CD        = 5.0
+const ARCANE_FAN_RECOVERY  = 0.15
+const ARCANE_FAN_DMG       = 12.0
+const ARCANE_FAN_SPEED     = 1500.0
+const ARCANE_FAN_RADIUS    = 16.0
+const ARCANE_FAN_SPREAD_DEG = 26.0
 
 
 # Ult — Void Collapse: gravitational rift, pulls opponent in, then implodes
@@ -159,12 +168,25 @@ func _resolve_void_explosion():
 	screen_shake.emit(10.0, 0.35)
 	recovering = {"type": "ult", "time_left": VOIDCOLLAPSE_RECOVERY, "total": VOIDCOLLAPSE_RECOVERY}
 
-func try_a3(_opp: Entity):
-	if not can_start_ability() or cd_a3 > 0:
+func try_shift(_opp: Entity):
+	if not can_start_ability() or cd_shift > 0:
 		return
 	barrier_hp_left   = BARRIER_HP
 	barrier_time_left = BARRIER_DUR
-	cd_a3 = BARRIER_CD
+	cd_shift = BARRIER_CD
+
+func try_a3(opp: Entity):
+	if not can_start_ability() or cd_a3 > 0 or opp == null:
+		return
+	facing = get_aim_dir(opp)
+	var half = deg_to_rad(ARCANE_FAN_SPREAD_DEG) * 0.5
+	for i in 3:
+		var offset = (i - 1) * half
+		var dir = facing.rotated(offset)
+		_fire(dir, ARCANE_FAN_SPEED, ARCANE_FAN_RADIUS, ARCANE_FAN_DMG, opp, Color(0.6, 0.3, 1.0), 9.0, 0.0, 0.5, true)
+	FX.impact_burst(get_parent(), global_position + facing * (RADIUS + 20), Color(0.6, 0.3, 1.0), 10, 160.0)
+	cd_a3 = ARCANE_FAN_CD
+	recovering = {"type": "a3", "time_left": ARCANE_FAN_RECOVERY, "total": ARCANE_FAN_RECOVERY}
 
 func resolve_a3(_opp: Entity):
 	pass

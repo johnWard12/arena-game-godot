@@ -82,6 +82,12 @@ const BLADESTORM_HIT_INTERVAL = 0.30
 const BLADESTORM_DMG          = 14.0
 const BLADESTORM_RANGE        = 170.0
 
+# Iron Resolve (Duelist Shift) — converts current combo stacks into a
+# temporary flat damage-reduction buff, consuming the stacks.
+const IRON_RESOLVE_CD        = 7.0
+const IRON_RESOLVE_DUR       = 2.0
+const IRON_RESOLVE_PER_STACK = 0.10
+
 # ---- State ----
 var is_player := false
 var base_color := Color(0.37, 0.88, 0.75)
@@ -109,6 +115,7 @@ var recovering = null
 var cd_auto := 0.0
 var cd_a1 := 0.0
 var cd_a2 := 0.0
+var cd_shift := 0.0
 var ult_charge := 0.0
 
 var combo_stacks := 0
@@ -132,6 +139,14 @@ var cc_immune := false
 
 # Flat damage reduction (0.0 = none, 0.25 = 25% less damage taken)
 var dmg_reduction := 0.0
+
+# Outgoing damage multiplier on THIS entity's own attacks (1.0 = normal,
+# 0.9 = deals 10% less). Set on an entity by a debuff like Bruiser's Warcry.
+var outgoing_dmg_mult := 1.0
+var outgoing_dmg_debuff_time_left := 0.0
+
+# Iron Resolve (Duelist Shift) active-buff timer
+var iron_resolve_time_left := 0.0
 
 # Blood-lust: granted on a successful parry (see on_landed_parry())
 var bloodlust_time_left := 0.0
@@ -182,7 +197,16 @@ func _physics_process(delta):
 	cd_a1 = max(0.0, cd_a1 - delta * atkspd_mult)
 	cd_a2 = max(0.0, cd_a2 - delta * atkspd_mult)
 	cd_a3 = max(0.0, cd_a3 - delta * atkspd_mult)
+	cd_shift = max(0.0, cd_shift - delta)
 	parry_cd_left = max(0.0, parry_cd_left - delta)
+	if outgoing_dmg_debuff_time_left > 0:
+		outgoing_dmg_debuff_time_left = max(0.0, outgoing_dmg_debuff_time_left - delta)
+		if outgoing_dmg_debuff_time_left <= 0:
+			outgoing_dmg_mult = 1.0
+	if iron_resolve_time_left > 0:
+		iron_resolve_time_left = max(0.0, iron_resolve_time_left - delta)
+		if iron_resolve_time_left <= 0:
+			dmg_reduction = 0.0
 	if dash_charges < dash_charges_max:
 		dash_charge_timer += delta
 		if dash_charge_timer >= DASH_CHARGE_REGEN:
@@ -485,6 +509,12 @@ func apply_slow(duration: float, pct: float = 0.5):
 	slowed_time_left = max(slowed_time_left, duration)
 	slow_pct = max(slow_pct, pct)
 
+# Weakens THIS entity's own outgoing damage for a duration — e.g. Bruiser's
+# Warcry debuffing the opponent. Not blocked by cc_immune since it isn't CC.
+func apply_outgoing_dmg_debuff(duration: float, mult: float):
+	outgoing_dmg_debuff_time_left = max(outgoing_dmg_debuff_time_left, duration)
+	outgoing_dmg_mult = min(outgoing_dmg_mult, mult)
+
 func deal_damage(target: Entity, amount: float) -> bool:
 	if target == null or not target.alive:
 		return false
@@ -509,7 +539,7 @@ func deal_damage(target: Entity, amount: float) -> bool:
 	if target.casting != null:
 		target.casting = null
 		target.apply_stun(STUN_DUR)
-	amount *= (1.0 - target.dmg_reduction)
+	amount *= outgoing_dmg_mult * (1.0 - target.dmg_reduction)
 	target.hp = max(0.0, target.hp - amount)
 	target.hit_flash_left = 0.25
 	FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0) if barrier_hit else target.base_color)
@@ -584,6 +614,18 @@ func try_ult(opp: Entity):
 func resolve_ult(_opp: Entity):
 	pass
 
+# Iron Resolve (Shift) — cashes in current combo stacks for a brief flat
+# damage-reduction buff. Consumes the stacks, so it's a spend, not a bonus.
+func try_shift(_opp: Entity):
+	if not can_start_ability() or cd_shift > 0 or combo_stacks <= 0:
+		return
+	dmg_reduction = combo_stacks * IRON_RESOLVE_PER_STACK
+	iron_resolve_time_left = IRON_RESOLVE_DUR
+	combo_stacks = 0
+	combo_time_left = 0.0
+	cd_shift = IRON_RESOLVE_CD
+	FX.impact_burst(get_parent(), global_position, Color(0.55, 0.75, 1.0), 14, 150.0)
+
 func try_dash(dir: Vector2):
 	if not can_dash(dir):
 		return
@@ -643,6 +685,11 @@ func _draw_hud(now: int, accent: Color):
 	if bloodlust_time_left > 0:
 		var pulse = 0.5 + 0.4 * sin(now * 0.025)
 		draw_arc(Vector2.ZERO, RADIUS + 10, 0, TAU, 40, Color(0.9, 0.1, 0.15, pulse), 3.0)
+
+	# Iron Resolve — icy blue guard shimmer
+	if iron_resolve_time_left > 0:
+		var pulse = 0.5 + 0.4 * sin(now * 0.02)
+		draw_arc(Vector2.ZERO, RADIUS + 9, 0, TAU, 40, Color(0.55, 0.75, 1.0, pulse), 3.0)
 
 	# HP bar above head
 	var hp_pct = hp / max_hp

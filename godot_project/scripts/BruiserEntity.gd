@@ -32,16 +32,24 @@ const SEISMIC_DMG        = 55.0
 const SEISMIC_KNOCKUP    = 1.0
 const SEISMIC_RECOVERY   = 0.65
 
-# F — Unbreakable: CC cleanse + immunity + damage reduction
+# Shift — Unbreakable: CC cleanse + immunity + damage reduction
 const UNBREAKABLE_CD           = 8.5
 const UNBREAKABLE_DUR          = 3.0
 const UNBREAKABLE_DMG_REDUCE   = 0.25
 const UNBREAKABLE_MOVE_MULT    = 1.40
 
+# F — Warcry: self damage-reduction buff + opponent damage-dealt debuff
+const WARCRY_CD              = 8.0
+const WARCRY_DUR             = 4.0
+const WARCRY_RADIUS          = 180.0
+const WARCRY_SELF_DMG_REDUCE = 0.15
+const WARCRY_ENEMY_DMG_MULT  = 0.90
+
 var tremor_fx_left        := 0.0
 var unbreakable_time_left := 0.0
 var seismic_slam_fx_left  := 0.0
 var seismic_lunge_pending := false
+var warcry_time_left      := 0.0
 
 func _ready():
 	hp             = BRUISER_MAX_HP
@@ -56,12 +64,17 @@ func _ready():
 func _physics_process(delta):
 	tremor_fx_left     = max(0.0, tremor_fx_left - delta)
 	seismic_slam_fx_left = max(0.0, seismic_slam_fx_left - delta)
+	warcry_time_left   = max(0.0, warcry_time_left - delta)
 	if unbreakable_time_left > 0:
 		unbreakable_time_left = max(0.0, unbreakable_time_left - delta)
 		if unbreakable_time_left <= 0:
 			cc_immune      = false
-			dmg_reduction  = 0.0
 			speed_override = BRUISER_MAX_SPEED
+	# Damage reduction is recomputed each tick from whichever buffs are
+	# active, rather than imperatively set/cleared, so Unbreakable and
+	# Warcry can overlap without one clobbering the other's contribution.
+	dmg_reduction = (UNBREAKABLE_DMG_REDUCE if unbreakable_time_left > 0 else 0.0) \
+		+ (WARCRY_SELF_DMG_REDUCE if warcry_time_left > 0 else 0.0)
 	super._physics_process(delta)
 
 # Blood-lust is a Duelist-only passive.
@@ -153,17 +166,25 @@ func _do_seismic_slam(opp: Entity):
 	screen_shake.emit(14.0, 0.45)
 	recovering = {"type": "ult", "time_left": SEISMIC_RECOVERY, "total": SEISMIC_RECOVERY}
 
-func try_a3(_opp: Entity):
+func try_shift(_opp: Entity):
 	# Usable even while stunned — that's the point
-	if not alive or cd_a3 > 0 or unbreakable_time_left > 0:
+	if not alive or cd_shift > 0 or unbreakable_time_left > 0:
 		return
 	stunned_time_left = 0.0
 	slowed_time_left  = 0.0
 	cc_immune         = true
-	dmg_reduction     = UNBREAKABLE_DMG_REDUCE
 	speed_override    = BRUISER_MAX_SPEED * UNBREAKABLE_MOVE_MULT
 	unbreakable_time_left = UNBREAKABLE_DUR
-	cd_a3 = UNBREAKABLE_CD
+	cd_shift = UNBREAKABLE_CD
+
+func try_a3(opp: Entity):
+	if not alive or cd_a3 > 0:
+		return
+	warcry_time_left = WARCRY_DUR
+	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= WARCRY_RADIUS:
+		opp.apply_outgoing_dmg_debuff(WARCRY_DUR, WARCRY_ENEMY_DMG_MULT)
+	FX.impact_burst(get_parent(), global_position, Color(0.9, 0.25, 0.1), 20, 220.0)
+	cd_a3 = WARCRY_CD
 
 func resolve_a3(_opp: Entity):
 	pass
@@ -214,6 +235,12 @@ func _draw_bruiser(now: int, accent: Color):
 		draw_circle(Vector2.ZERO, RADIUS + 3, Color(1, 1, 1, pulse * 0.30))
 		draw_arc(Vector2.ZERO, RADIUS + 5,  0, TAU, 48, Color(1, 1, 1, pulse * 0.90), 4.0)
 		draw_arc(Vector2.ZERO, RADIUS + 13, 0, TAU, 36, Color(1, 1, 1, pulse * 0.45), 2.0)
+
+	# Warcry — deep red battle-aura pulse
+	if warcry_time_left > 0:
+		var wt     = Time.get_ticks_msec() * 0.005
+		var wpulse = 0.5 + 0.4 * sin(wt * 4.0)
+		draw_arc(Vector2.ZERO, RADIUS + 8, 0, TAU, 40, Color(0.9, 0.25, 0.1, wpulse), 3.0)
 
 	# Seismic Slam — expanding crack ring + radiating lines
 	if seismic_slam_fx_left > 0:
