@@ -8,26 +8,23 @@ const BRUISER_FRICTION   = 1400.0
 
 const BRUISER_AUTO_CD    = 0.70
 const BRUISER_AUTO_DMG   = 3.0
-const BRUISER_AUTO_RANGE = 145.0
+const BRUISER_AUTO_RANGE = 160.0
 
-# E — Shatter: shield slam + stun
-const SHATTER_CAST     = 0.18
+# E — Shatter: shield slam + stun (instant)
 const SHATTER_RECOVERY = 0.25
 const SHATTER_CD       = 4.5
 const SHATTER_DMG      = 22.0
 const SHATTER_RANGE    = 145.0
 const SHATTER_STUN     = 0.70
 
-# Q — Tremor: ground stomp AoE + slow
-const TREMOR_CAST     = 0.30
+# Q — Tremor: ground stomp AoE + slow (instant)
 const TREMOR_RECOVERY = 0.25
 const TREMOR_CD       = 7.0
 const TREMOR_DMG      = 18.0
 const TREMOR_RADIUS   = 160.0
 const TREMOR_SLOW     = 2.0
 
-# Ult — Juggernaut: heavy blow, scales with target missing HP
-const BRUISER_ULT_CAST     = 0.35
+# Ult — Juggernaut: heavy blow, scales with target missing HP (instant)
 const BRUISER_ULT_RECOVERY = 0.35
 const BRUISER_ULT_DMG_BASE = 40.0
 const BRUISER_ULT_DMG_BONUS = 35.0
@@ -76,14 +73,11 @@ func try_auto(opp: Entity):
 		add_combo_stack()
 
 func try_a1(opp: Entity):
-	if not alive or cd_a1 > 0 or casting != null or recovering != null or opp == null:
+	if not alive or cd_a1 > 0 or recovering != null or opp == null:
 		return
-	casting = {"type": "a1", "time_left": SHATTER_CAST, "total": SHATTER_CAST, "opp": opp}
-
-func resolve_a1(opp: Entity):
 	facing = get_aim_dir(opp)
 	start_swing(100.0, 0.22)
-	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= SHATTER_RANGE:
+	if opp.alive and global_position.distance_to(opp.global_position) <= SHATTER_RANGE:
 		var dmg = round(SHATTER_DMG * combo_mult())
 		deal_damage(opp, dmg)
 		if opp.alive:
@@ -92,14 +86,14 @@ func resolve_a1(opp: Entity):
 	cd_a1 = SHATTER_CD
 	recovering = {"type": "a1", "time_left": SHATTER_RECOVERY, "total": SHATTER_RECOVERY}
 
-func try_a2(opp: Entity):
-	if not alive or cd_a2 > 0 or casting != null or recovering != null or opp == null:
-		return
-	casting = {"type": "a2", "time_left": TREMOR_CAST, "total": TREMOR_CAST, "opp": opp}
+func resolve_a1(_opp: Entity):
+	pass
 
-func resolve_a2(opp: Entity):
+func try_a2(opp: Entity):
+	if not alive or cd_a2 > 0 or recovering != null or opp == null:
+		return
 	tremor_fx_left = 0.4
-	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= TREMOR_RADIUS:
+	if opp.alive and global_position.distance_to(opp.global_position) <= TREMOR_RADIUS:
 		var dmg = round(TREMOR_DMG * combo_mult())
 		deal_damage(opp, dmg)
 		if opp.alive:
@@ -108,15 +102,15 @@ func resolve_a2(opp: Entity):
 	cd_a2 = TREMOR_CD
 	recovering = {"type": "a2", "time_left": TREMOR_RECOVERY, "total": TREMOR_RECOVERY}
 
-func try_ult(opp: Entity):
-	if not alive or ult_charge < ULT_CHARGE_MAX or casting != null or recovering != null or opp == null:
-		return
-	casting = {"type": "ult", "time_left": BRUISER_ULT_CAST, "total": BRUISER_ULT_CAST, "opp": opp}
+func resolve_a2(_opp: Entity):
+	pass
 
-func resolve_ult(opp: Entity):
+func try_ult(opp: Entity):
+	if not alive or ult_charge < ULT_CHARGE_MAX or recovering != null or opp == null:
+		return
 	facing = get_aim_dir(opp)
 	start_swing(180.0, 0.4)
-	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= BRUISER_ULT_RANGE:
+	if opp.alive and global_position.distance_to(opp.global_position) <= BRUISER_ULT_RANGE:
 		var missing_ratio = 1.0 - (opp.hp / opp.max_hp)
 		var dmg = round(BRUISER_ULT_DMG_BASE + missing_ratio * BRUISER_ULT_DMG_BONUS)
 		deal_damage(opp, dmg)
@@ -125,6 +119,9 @@ func resolve_ult(opp: Entity):
 		add_combo_stack()
 	ult_charge = 0.0
 	recovering = {"type": "ult", "time_left": BRUISER_ULT_RECOVERY, "total": BRUISER_ULT_RECOVERY}
+
+func resolve_ult(_opp: Entity):
+	pass
 
 func try_a3(_opp: Entity):
 	# Usable even while stunned — that's the point
