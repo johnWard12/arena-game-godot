@@ -41,7 +41,7 @@ const UNBREAKABLE_MOVE_MULT    = 1.40
 # F — Warcry: self damage-reduction buff + opponent damage-dealt debuff
 const WARCRY_CD              = 8.0
 const WARCRY_DUR             = 4.0
-const WARCRY_RADIUS          = 180.0
+const WARCRY_RADIUS          = 210.0
 const WARCRY_SELF_DMG_REDUCE = 0.15
 const WARCRY_ENEMY_DMG_MULT  = 0.90
 
@@ -236,11 +236,13 @@ func _draw_bruiser(now: int, accent: Color):
 		draw_arc(Vector2.ZERO, RADIUS + 5,  0, TAU, 48, Color(1, 1, 1, pulse * 0.90), 4.0)
 		draw_arc(Vector2.ZERO, RADIUS + 13, 0, TAU, 36, Color(1, 1, 1, pulse * 0.45), 2.0)
 
-	# Warcry — deep red battle-aura pulse
+	# Warcry — deep red battle-aura pulse (self buff ring, tight) + a
+	# larger, softer ring that actually shows the debuff's true reach
 	if warcry_time_left > 0:
 		var wt     = Time.get_ticks_msec() * 0.005
 		var wpulse = 0.5 + 0.4 * sin(wt * 4.0)
 		draw_arc(Vector2.ZERO, RADIUS + 8, 0, TAU, 40, Color(0.9, 0.25, 0.1, wpulse), 3.0)
+		draw_arc(Vector2.ZERO, WARCRY_RADIUS, 0, TAU, 56, Color(0.9, 0.25, 0.1, wpulse * 0.35), 2.0)
 
 	# Seismic Slam — expanding crack ring + radiating lines
 	if seismic_slam_fx_left > 0:
