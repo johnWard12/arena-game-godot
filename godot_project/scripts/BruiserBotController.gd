@@ -49,10 +49,11 @@ func ai_decide():
 		try_ult(opponent)
 		return
 
-	# Shield Bash — use when shatter is on CD, extends CC chain
-	if d <= SHIELD_BASH_RANGE and cd_a3 <= 0 and cd_a1 > 2.0 and randf() < 0.5:
-		try_a3(opponent)
-		return
+	# Unbreakable — pop when stunned or low HP to survive burst
+	if cd_a3 <= 0 and unbreakable_time_left <= 0:
+		if stunned_time_left > 0 or (hp < max_hp * 0.40 and randf() < 0.7):
+			try_a3(opponent)
+			return
 
 	# Shatter (stun) — high priority at melee range
 	if d <= SHATTER_RANGE and cd_a1 <= 0 and randf() < 0.65:

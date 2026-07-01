@@ -129,7 +129,7 @@ func _get_ability_defs() -> Array:
 			{"key": "LMB", "name": "Smash",   "cd": player.cd_auto, "max": BruiserEntity.BRUISER_AUTO_CD,  "col": Color(0.95, 0.55, 0.15)},
 			{"key": "E",   "name": "Shatter", "cd": player.cd_a1,   "max": BruiserEntity.SHATTER_CD,       "col": Color(1.0, 0.7, 0.2)},
 			{"key": "Q",   "name": "Tremor",  "cd": player.cd_a2,   "max": BruiserEntity.TREMOR_CD,        "col": Color(0.9, 0.4, 0.1)},
-			{"key": "F",   "name": "SBash",   "cd": player.cd_a3,   "max": BruiserEntity.SHIELD_BASH_CD,   "col": Color(0.5, 0.8, 1.0)},
+			{"key": "F",   "name": "Unbrkbl", "cd": player.cd_a3,   "max": BruiserEntity.UNBREAKABLE_CD,  "col": Color(1.0, 1.0, 1.0)},
 			{"key": "R",   "name": "Jugger",  "cd": 0.0,            "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.25, 0.1)},
 			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},

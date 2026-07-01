@@ -111,6 +111,12 @@ var slow_pct          := 0.5
 # Subclasses override this in _ready() to grant CC resistance.
 var stun_resist_mult  := 1.0
 
+# CC immunity — blocks apply_stun and apply_slow when true
+var cc_immune := false
+
+# Flat damage reduction (0.0 = none, 0.25 = 25% less damage taken)
+var dmg_reduction := 0.0
+
 # Blood-lust: granted on a successful parry (see on_landed_parry())
 var bloodlust_time_left := 0.0
 
@@ -407,7 +413,15 @@ func on_landed_parry():
 # Single choke point for applying a stun/freeze so per-class CC resistance
 # (e.g. Bruiser's Steady Footing) only has to live in one place.
 func apply_stun(duration: float):
+	if cc_immune:
+		return
 	stunned_time_left = max(stunned_time_left, duration * stun_resist_mult)
+
+func apply_slow(duration: float, pct: float = 0.5):
+	if cc_immune:
+		return
+	slowed_time_left = max(slowed_time_left, duration)
+	slow_pct = max(slow_pct, pct)
 
 func deal_damage(target: Entity, amount: float) -> bool:
 	if target == null or not target.alive:
@@ -429,6 +443,7 @@ func deal_damage(target: Entity, amount: float) -> bool:
 	if target.casting != null:
 		target.casting = null
 		target.apply_stun(STUN_DUR)
+	amount *= (1.0 - target.dmg_reduction)
 	target.hp = max(0.0, target.hp - amount)
 	target.hit_flash_left = 0.25
 	if target.hp <= 0 and target.alive:

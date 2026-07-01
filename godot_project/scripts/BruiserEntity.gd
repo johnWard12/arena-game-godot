@@ -33,17 +33,14 @@ const BRUISER_ULT_DMG_BASE = 40.0
 const BRUISER_ULT_DMG_BONUS = 35.0
 const BRUISER_ULT_RANGE    = 150.0
 
-# F — Shield Bash: quick shield strike + knockback
-const SHIELD_BASH_CAST      = 0.12
-const SHIELD_BASH_RECOVERY  = 0.18
-const SHIELD_BASH_CD        = 5.5
-const SHIELD_BASH_DMG       = 10.0
-const SHIELD_BASH_RANGE     = 150.0
-const SHIELD_BASH_STUN      = 0.25
-const SHIELD_BASH_KNOCKBACK = 580.0
+# F — Unbreakable: CC cleanse + immunity + damage reduction
+const UNBREAKABLE_CD           = 7.0
+const UNBREAKABLE_DUR          = 3.0
+const UNBREAKABLE_DMG_REDUCE   = 0.25
+const UNBREAKABLE_MOVE_MULT    = 1.40
 
-var tremor_fx_left    := 0.0
-var shield_bash_fx    := 0.0
+var tremor_fx_left        := 0.0
+var unbreakable_time_left := 0.0
 
 func _ready():
 	hp             = BRUISER_MAX_HP
@@ -53,8 +50,13 @@ func _ready():
 	stun_resist_mult = 0.85  # Steady Footing: 15% less duration on incoming stuns/freezes
 
 func _physics_process(delta):
-	tremor_fx_left  = max(0.0, tremor_fx_left - delta)
-	shield_bash_fx  = max(0.0, shield_bash_fx - delta)
+	tremor_fx_left = max(0.0, tremor_fx_left - delta)
+	if unbreakable_time_left > 0:
+		unbreakable_time_left = max(0.0, unbreakable_time_left - delta)
+		if unbreakable_time_left <= 0:
+			cc_immune      = false
+			dmg_reduction  = 0.0
+			speed_override = BRUISER_MAX_SPEED
 	super._physics_process(delta)
 
 # Blood-lust is a Duelist-only passive.
@@ -101,8 +103,7 @@ func resolve_a2(opp: Entity):
 		var dmg = round(TREMOR_DMG * combo_mult())
 		deal_damage(opp, dmg)
 		if opp.alive:
-			opp.slowed_time_left = TREMOR_SLOW
-			opp.slow_pct = 0.5
+			opp.apply_slow(TREMOR_SLOW, 0.5)
 		add_combo_stack()
 	cd_a2 = TREMOR_CD
 	recovering = {"type": "a2", "time_left": TREMOR_RECOVERY, "total": TREMOR_RECOVERY}
@@ -125,22 +126,20 @@ func resolve_ult(opp: Entity):
 	ult_charge = 0.0
 	recovering = {"type": "ult", "time_left": BRUISER_ULT_RECOVERY, "total": BRUISER_ULT_RECOVERY}
 
-func try_a3(opp: Entity):
-	if not can_start_ability() or cd_a3 > 0 or opp == null:
+func try_a3(_opp: Entity):
+	# Usable even while stunned — that's the point
+	if not alive or cd_a3 > 0 or unbreakable_time_left > 0:
 		return
-	casting = {"type": "a3", "time_left": SHIELD_BASH_CAST, "total": SHIELD_BASH_CAST, "opp": opp}
+	stunned_time_left = 0.0
+	slowed_time_left  = 0.0
+	cc_immune         = true
+	dmg_reduction     = UNBREAKABLE_DMG_REDUCE
+	speed_override    = BRUISER_MAX_SPEED * UNBREAKABLE_MOVE_MULT
+	unbreakable_time_left = UNBREAKABLE_DUR
+	cd_a3 = UNBREAKABLE_CD
 
-func resolve_a3(opp: Entity):
-	shield_bash_fx = 0.3
-	facing = get_aim_dir(opp)
-	start_swing(90.0, 0.18)
-	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= SHIELD_BASH_RANGE:
-		if deal_damage(opp, SHIELD_BASH_DMG):
-			if opp.alive:
-				opp.apply_stun(SHIELD_BASH_STUN)
-				opp.velocity = (opp.global_position - global_position).normalized() * SHIELD_BASH_KNOCKBACK
-	cd_a3 = SHIELD_BASH_CD
-	recovering = {"type": "a3", "time_left": SHIELD_BASH_RECOVERY, "total": SHIELD_BASH_RECOVERY}
+func resolve_a3(_opp: Entity):
+	pass
 
 # ---- Drawing ----
 func _draw():
@@ -177,12 +176,13 @@ func _draw_bruiser(now: int, accent: Color):
 	var stride  = spd_pct * 8.0
 	var bob_y   = sin(walk_phase * 2.0) * spd_pct * 1.2
 
-	# shield bash flash
-	if shield_bash_fx > 0:
-		var spct = shield_bash_fx / 0.3
-		var sc = facing * -2 + perp * -14
-		draw_circle(sc, 18.0, Color(accent.r, accent.g, accent.b, spct * 0.45))
-		draw_arc(Vector2.ZERO, RADIUS + 17, 0, TAU, 32, Color(1, 1, 1, spct * 0.55), 3.0)
+	# Unbreakable — white flash rings
+	if unbreakable_time_left > 0:
+		var t     = Time.get_ticks_msec() * 0.006
+		var pulse = 0.55 + 0.45 * sin(t * 5.0)
+		draw_circle(Vector2.ZERO, RADIUS + 3, Color(1, 1, 1, pulse * 0.30))
+		draw_arc(Vector2.ZERO, RADIUS + 5,  0, TAU, 48, Color(1, 1, 1, pulse * 0.90), 4.0)
+		draw_arc(Vector2.ZERO, RADIUS + 13, 0, TAU, 36, Color(1, 1, 1, pulse * 0.45), 2.0)
 
 	# tremor shockwave ring
 	if tremor_fx_left > 0:
