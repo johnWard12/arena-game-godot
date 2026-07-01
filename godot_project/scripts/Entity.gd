@@ -21,6 +21,7 @@ const A1_RANGE = 125.0
 
 const A2_CAST = 0.14
 const A2_RECOVERY = 0.22
+const A2_MISS_RECOVERY = 0.45
 const A2_CD = 6.5
 const A2_DMG = 20.4
 const A2_RANGE = 130.0
@@ -44,7 +45,7 @@ const PARRY_STUN_DUR = 0.65
 const STUN_DUR = 0.5
 
 const A3_CD    = 5.0
-const A3_RANGE = 280.0
+const A3_RANGE = 260.0
 
 const DASH_CHARGES_MAX  = 2
 const DASH_CHARGE_REGEN = 2.5
@@ -445,13 +446,16 @@ func resolve_a2(opp: Entity):
 
 func resolve_lunge_strike(opp: Entity):
 	start_swing(80.0, 0.16)
+	var landed := false
 	if opp != null and is_instance_valid(opp) and opp.alive and global_position.distance_to(opp.global_position) <= A2_RANGE:
 		var dmg = round(A2_DMG * combo_mult())
 		if deal_damage(opp, dmg):
+			landed = true
 			if opp.alive:
 				opp.stunned_time_left = 0.5
 			add_combo_stack()
-	recovering = {"type": "a2", "time_left": A2_RECOVERY, "total": A2_RECOVERY}
+	var recovery_time = A2_RECOVERY if landed else A2_MISS_RECOVERY
+	recovering = {"type": "a2", "time_left": recovery_time, "total": recovery_time}
 
 func try_ult(opp: Entity):
 	if not can_start_ability() or ult_charge < ULT_CHARGE_MAX or opp == null:
@@ -488,12 +492,15 @@ func try_parry():
 	parry_cd_left = PARRY_CD
 
 func try_a3(opp: Entity):
-	if not can_start_ability() or cd_a3 > 0 or opp == null:
+	if not can_start_ability() or cd_a3 > 0 or opp == null or dash_charges <= 0:
 		return
 	var d = global_position.distance_to(opp.global_position)
 	if d > A3_RANGE:
 		return
-	var behind = opp.global_position + (opp.global_position - global_position).normalized() * (RADIUS * 2.0 + 40.0)
+	dash_charges -= 1
+	if dash_charges == 0:
+		dash_charge_timer = 0.0
+	var behind = opp.global_position + (opp.global_position - global_position).normalized() * (RADIUS * 2.0)
 	global_position = behind
 	facing = get_aim_dir(opp)
 	cd_a3 = A3_CD

@@ -53,7 +53,7 @@ func ai_decide():
 		try_ult(opponent)
 		return
 
-	if d > 100 and d <= A3_RANGE and cd_a3 <= 0 and randf() < 0.35:
+	if d > 100 and d <= A3_RANGE and cd_a3 <= 0 and dash_charges > 0 and randf() < 0.35:
 		try_a3(opponent)
 		return
 
