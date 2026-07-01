@@ -436,7 +436,7 @@ func get_knockup_draw_offset() -> float:
 	if knockup_time_left <= 0.0:
 		return 0.0
 	var t = (1.0 - knockup_time_left / KNOCKUP_DUR) * PI
-	return -sin(t) * 65.0
+	return -sin(t) * 130.0
 
 # ---- Sword swing ----
 func start_swing(arc_span_deg: float, duration: float):
@@ -818,6 +818,7 @@ func _draw():
 	var accent = get_status_accent(base_color)
 	var ku_y = get_knockup_draw_offset()
 	if ku_y != 0.0:
+		draw_circle(Vector2(0, RADIUS - 4), 16.0 - abs(ku_y) * 0.06, Color(0, 0, 0, 0.35))
 		draw_set_transform(Vector2(0, ku_y))
 
 	_draw_duelist(now, accent)
