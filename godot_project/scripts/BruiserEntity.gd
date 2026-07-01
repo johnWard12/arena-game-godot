@@ -44,7 +44,8 @@ func _ready():
 	max_hp         = BRUISER_MAX_HP
 	base_color     = Color(0.95, 0.55, 0.15)
 	speed_override = BRUISER_MAX_SPEED
-	stun_resist_mult = 0.85  # Steady Footing: 15% less duration on incoming stuns/freezes
+	stun_resist_mult = 0.85
+	recovery_slows_movement = false  # Steady Footing: 15% less duration on incoming stuns/freezes
 
 func _physics_process(delta):
 	tremor_fx_left = max(0.0, tremor_fx_left - delta)

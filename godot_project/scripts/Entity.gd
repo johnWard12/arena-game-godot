@@ -110,6 +110,7 @@ var slow_pct          := 0.5
 # Multiplier applied to any incoming stun/freeze duration (1.0 = no resistance).
 # Subclasses override this in _ready() to grant CC resistance.
 var stun_resist_mult  := 1.0
+var recovery_slows_movement := true
 
 # CC immunity — blocks apply_stun and apply_slow when true
 var cc_immune := false
@@ -216,7 +217,7 @@ func _physics_process(delta):
 
 	var input_vec := get_movement_input()
 	var locked = casting != null
-	var recovering_slow = recovering != null
+	var recovering_slow = recovering != null and recovery_slows_movement
 	var debuffed_slow = slowed_time_left > 0
 	var slowed = recovering_slow or debuffed_slow
 

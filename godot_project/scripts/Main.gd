@@ -192,7 +192,7 @@ func _on_died(who):
 		Color(1, 0.36, 0.48) if who == player else Color(0.37, 0.88, 0.75))
 
 func _unhandled_input(event):
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_BACKSPACE:
 		get_tree().change_scene_to_file("res://scenes/CharSelect.tscn")
 
 func _draw():
