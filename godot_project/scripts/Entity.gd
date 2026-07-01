@@ -18,6 +18,8 @@ const A1_RECOVERY = 0.13
 const A1_CD = 1.8
 const A1_DMG = 12.0
 const A1_RANGE = 125.0
+const A1_SLOW_DUR = 2.0
+const A1_SLOW_PCT = 0.30
 
 const A2_CAST = 0.14
 const A2_RECOVERY = 0.22
@@ -473,6 +475,7 @@ func resolve_a1(opp: Entity):
 	if global_position.distance_to(opp.global_position) <= A1_RANGE:
 		var dmg = round(A1_DMG * combo_mult())
 		if deal_damage(opp, dmg):
+			opp.apply_slow(A1_SLOW_DUR, A1_SLOW_PCT)
 			add_combo_stack()
 	cd_a1 = A1_CD
 	recovering = {"type": "a1", "time_left": A1_RECOVERY, "total": A1_RECOVERY}
