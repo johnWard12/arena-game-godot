@@ -121,6 +121,7 @@ func resolve_a2(opp: Entity):
 	if opp != null:
 		facing = get_aim_dir(opp)
 	nova_fx_left = 0.35
+	FX.impact_burst(get_parent(), global_position, Color(0.72, 0.4, 1.0), 18, 260.0)
 	var landed := false
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= NOVA_RADIUS:
 		var dmg = round(NOVA_DMG * combo_mult())
@@ -146,6 +147,7 @@ func resolve_ult(opp: Entity):
 
 func _resolve_void_explosion():
 	rift_fx_left = 0.50
+	FX.impact_burst(get_parent(), rift_pos, Color(0.75, 0.15, 1.0), 34, 380.0)
 	if opponent != null and opponent.alive:
 		var dist = opponent.global_position.distance_to(rift_pos)
 		var closeness = 1.0 - clamp(dist / 320.0, 0.0, 1.0)
@@ -195,28 +197,34 @@ func _draw():
 	# hover bob
 	var hover_y = sin(Time.get_ticks_msec() * 0.0025) * 2.0
 
+	# soft magical glow puddle under feet
+	draw_circle(Vector2(0, RADIUS - 2), 20, Color(accent.r, accent.g, accent.b, 0.08))
 	# ground shadow (ellipse via circle + scale trick using polygon)
 	draw_circle(Vector2(0, RADIUS - 2), 13, Color(0, 0, 0, 0.15))
 
-	# --- ROBE (main body — wide trapezoid) ---
+	# --- ROBE (main body — wide trapezoid with a rippling hem) ---
+	var hem_ripple = sin(Time.get_ticks_msec() * 0.004) * 2.0
 	var robe = PackedVector2Array([
 		facing * -14 + perp * -8  + Vector2(0, hover_y),
 		facing * -14 + perp *  8  + Vector2(0, hover_y),
-		facing *  10 + perp *  13 + Vector2(0, hover_y),
-		facing *  10 + perp * -13 + Vector2(0, hover_y),
+		facing *  10 + perp *  13 + Vector2(0, hover_y + hem_ripple),
+		facing *  10 + perp * -13 + Vector2(0, hover_y - hem_ripple),
 	])
 	draw_colored_polygon(robe, robe_col)
 	# robe trim / hem highlight
 	var hem = PackedVector2Array([
 		facing * 6  + perp * -13 + Vector2(0, hover_y),
 		facing * 6  + perp *  13 + Vector2(0, hover_y),
-		facing * 10 + perp *  13 + Vector2(0, hover_y),
-		facing * 10 + perp * -13 + Vector2(0, hover_y),
+		facing * 10 + perp *  13 + Vector2(0, hover_y + hem_ripple),
+		facing * 10 + perp * -13 + Vector2(0, hover_y - hem_ripple),
 	])
 	draw_colored_polygon(hem, Color(accent.r, accent.g, accent.b, 0.35))
 	# robe center line detail
 	draw_line(facing * -10 + Vector2(0, hover_y), facing * 8 + Vector2(0, hover_y),
 		Color(accent.r, accent.g, accent.b, 0.25), 2.0)
+	# rim light along one edge
+	draw_line(facing * -14 + perp * -8 + Vector2(0, hover_y), facing * 10 + perp * -13 + Vector2(0, hover_y),
+		Color(1, 1, 1, 0.22), 1.8)
 
 	# --- STAFF ARM ---
 	var arm_base = facing * -4 + perp * 9 + Vector2(0, hover_y)
@@ -233,7 +241,9 @@ func _draw():
 		var pct = 1.0 - (casting["time_left"] / casting["total"])
 		orb_r  += pct * 10.0
 		orb_col = Color(1, 0.92, 0.4, 0.9)
-	# glow ring
+	# glow ring — layered pulsing halo
+	var orb_pulse = 0.85 + 0.15 * sin(Time.get_ticks_msec() * 0.006)
+	draw_circle(staff_tip, orb_r * 2.4 * orb_pulse, Color(orb_col.r, orb_col.g, orb_col.b, 0.08))
 	draw_circle(staff_tip, orb_r * 1.8, Color(orb_col.r, orb_col.g, orb_col.b, 0.18))
 	# orb
 	draw_circle(staff_tip, orb_r, orb_col)
@@ -244,6 +254,12 @@ func _draw():
 		var p0 = staff_tip + Vector2(cos(a), sin(a)) * (orb_r + 1)
 		var p1 = staff_tip + Vector2(cos(a), sin(a)) * (orb_r + 7)
 		draw_line(p0, p1, Color(accent.r, accent.g, accent.b, 0.7), 2.0)
+	# orbiting energy motes
+	var mt = Time.get_ticks_msec() * 0.004
+	for i in 3:
+		var ma = mt * (1 if i % 2 == 0 else -1) + i * TAU / 3.0
+		var mp = staff_tip + Vector2(cos(ma), sin(ma)) * (orb_r + 5.0)
+		draw_circle(mp, 1.5, Color(1, 1, 0.9, 0.7))
 
 	# floating sparkles (idle particles)
 	if stunned_time_left <= 0 and not dashing:

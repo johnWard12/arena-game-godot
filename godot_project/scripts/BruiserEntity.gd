@@ -88,6 +88,7 @@ func try_a1(opp: Entity):
 		deal_damage(opp, dmg)
 		if opp.alive:
 			opp.apply_stun(SHATTER_STUN)
+			FX.impact_burst(get_parent(), opp.global_position, Color(1.0, 0.85, 0.3), 16, 260.0)
 		add_combo_stack()
 	cd_a1 = SHATTER_CD
 	recovering = {"type": "a1", "time_left": SHATTER_RECOVERY, "total": SHATTER_RECOVERY}
@@ -99,6 +100,7 @@ func try_a2(opp: Entity):
 	if not alive or cd_a2 > 0 or recovering != null or lunging or opp == null:
 		return
 	tremor_fx_left = 0.4
+	FX.impact_burst(get_parent(), global_position, Color(0.85, 0.6, 0.3), 22, 220.0)
 	if opp.alive and global_position.distance_to(opp.global_position) <= TREMOR_RADIUS:
 		var dmg = round(TREMOR_DMG * combo_mult())
 		deal_damage(opp, dmg)
@@ -140,6 +142,7 @@ func resolve_lunge_strike(opp: Entity):
 func _do_seismic_slam(opp: Entity):
 	start_swing(360.0, 0.45)
 	seismic_slam_fx_left = 0.70
+	FX.impact_burst(get_parent(), global_position, Color(1.0, 0.7, 0.2), 30, 420.0)
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= SEISMIC_RANGE:
 		if deal_damage(opp, SEISMIC_DMG):
 			add_combo_stack()
@@ -249,6 +252,9 @@ func _draw_bruiser(now: int, accent: Color):
 		# hammer head
 		draw_circle(ht, 10.0, Color(0.55, 0.55, 0.65, 0.6))
 		draw_line(ht + perp * 10, ht - perp * 10, Color(0.65, 0.65, 0.75, 0.65), 7.0)
+		# metal glint
+		var glint_t = fmod(now * 0.0006, 1.0)
+		draw_circle((ht + perp * 10).lerp(ht - perp * 10, glint_t), 1.8, Color(1, 1, 1, 0.7))
 
 	# --- BODY (wide, stocky) ---
 	var body = PackedVector2Array([
@@ -258,6 +264,8 @@ func _draw_bruiser(now: int, accent: Color):
 		facing *  10 + perp * -11,
 	])
 	draw_colored_polygon(body, armor)
+	# fur trim collar
+	draw_arc(facing * -13, 13.0, 0, PI, 12, Color(0.42, 0.32, 0.22, 0.85), 5.0)
 	# chest plate — heavy reinforced look
 	var chest = PackedVector2Array([
 		facing * -12 + perp * -7,
@@ -268,6 +276,8 @@ func _draw_bruiser(now: int, accent: Color):
 	draw_colored_polygon(chest, Color(accent.r, accent.g, accent.b, 0.6))
 	# center ridge on chest
 	draw_line(facing * -10, facing * 2, Color(accent.r * 1.2, accent.g * 1.2, accent.b * 1.2, 0.4), 2.5)
+	# rim light along torso edge
+	draw_line(facing * -14 + perp * -12, facing * 10 + perp * -11, Color(1, 1, 1, 0.28), 2.2)
 
 	# --- SHIELD (left arm, front-facing) ---
 	var shield_center = facing * -2 + perp * -14
@@ -350,5 +360,8 @@ func _draw_bruiser(now: int, accent: Color):
 		draw_circle(stip, 11.0, Color(0.7, 0.7, 0.8, alpha))
 		draw_line(stip + sperp * 11, stip - sperp * 11,
 			Color(0.8, 0.8, 0.9, alpha), 8.0)
+		draw_line(stip + sperp * 11, stip - sperp * 11,
+			Color(1, 1, 1, alpha * 0.6), 2.0)
 		# impact glow at tip
 		draw_circle(stip, 14.0, Color(accent.r, accent.g, accent.b, alpha * 0.35))
+		draw_circle(stip, 20.0, Color(1, 1, 1, alpha * 0.12))

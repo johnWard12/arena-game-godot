@@ -1,5 +1,7 @@
 extends Node2D
 
+const FX = preload("res://scripts/FX.gd")
+
 var player: Entity
 var bot: Entity
 var arena_rect := Rect2(Vector2(30, 30), Vector2(1860, 1020))
@@ -198,6 +200,7 @@ func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 		return false
 	entity.hp = min(entity.max_hp, entity.hp + HEALTH_PACK_HEAL)
 	entity.hit_flash_left = 0.18
+	FX.heal_sparkle(self, entity.global_position)
 	pack["active"] = false
 	pack["respawn_left"] = HEALTH_PACK_RESPAWN
 	return true
