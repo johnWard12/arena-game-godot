@@ -41,12 +41,12 @@ const CLASSES = [
 		"hp":    "HP  150",
 		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "IronResolve Shift", "Bladestorm R"],
 		"ability_descs": [
-			"Basic sword swing. Low cooldown, low damage.",
-			"Quick stab that slows the target 30% for 2s.",
-			"Dash forward and strike, stunning the target on hit.",
-			"Ranged blade throw — extra damage vs low-HP foes, slows on hit.",
-			"Converts your current combo stacks into damage reduction (10% per stack) for 2s, consuming them.",
-			"Spin for 1.5s, striking nearby foes every 0.3s. Immune to slows while active.",
+			"4 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
+			"12 dmg stab. Slows 30% for 2s. 1.8s cooldown, 145 range, 0.09s wind-up.",
+			"Dash up to 270, strike for 20.4 dmg and stun 0.5s. 6.5s cooldown, 150 range.",
+			"6 dmg (up to 14 vs a low-HP target). Slows 30% for 2s. 4s cooldown.",
+			"Converts current combo stacks into damage reduction (10% per stack, up to 30%) for 2s, consuming them. 7s cooldown.",
+			"Spin 1.5s, hitting foes within 170 range for 14 dmg every 0.3s (up to 5 hits, 70 total). Slow-immune while active. Builds on a 14s charge meter.",
 		]
 	},
 	{
@@ -56,12 +56,12 @@ const CLASSES = [
 		"hp":    "HP  120",
 		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "ArcaneFan  F", "Barrier    Shift", "VoidColl   R"],
 		"ability_descs": [
-			"Basic ranged bolt. Fast, low damage.",
-			"Piercing bolt that slows the target on hit.",
-			"AoE nova that stuns/freezes nearby foes.",
-			"3-bolt spread shot — rewards pushing into close range.",
-			"Temporary shield that absorbs incoming damage.",
-			"Opens a rift that pulls the target in, then implodes for damage that scales with closeness, plus a stun if they're close.",
+			"6.75 dmg bolt. 0.75s cooldown. Basic shot, hold to auto-repeat.",
+			"22 dmg piercing bolt. Slows 25% for 1.5s. 3.5s cooldown, 0.25s wind-up.",
+			"AoE nova: 20 dmg + 1s stun to foes within 190 range. 4.5s cooldown, 0.2s wind-up.",
+			"3-bolt spread, 12 dmg each (36 total if all land). 5s cooldown. Best up close.",
+			"35 HP shield that absorbs incoming damage for 1.5s. 7s cooldown.",
+			"Pulls the target in over 1.5s, then deals 45-92 dmg (more the closer they were) + 1s stun if within 90 range. 0.35s wind-up.",
 		]
 	},
 	{
@@ -71,12 +71,12 @@ const CLASSES = [
 		"hp":    "HP  180",
 		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Warcry     F", "Unbreakable Shift", "Seismic    R"],
 		"ability_descs": [
-			"Heavy melee swing.",
-			"Shield slam that stuns the target on hit.",
-			"Ground stomp AoE that slows nearby foes.",
-			"Reduces your damage taken and weakens the opponent's damage dealt.",
-			"Cleanses all CC, grants CC immunity, damage reduction, and a movement speed boost.",
-			"Lunge in and slam the ground — launches the target into the air (still damageable while airborne).",
+			"3 dmg. 0.7s cooldown, 167 range. Basic swing, hold to auto-repeat.",
+			"22 dmg shield slam, stuns 0.7s. 5.5s cooldown, 151 range. Instant, no wind-up.",
+			"Ground stomp: 18 dmg + 50% slow for 2s to foes within 180 range. 8s cooldown. Instant.",
+			"You take 15% less damage; the opponent deals 10% less damage. Both for 4s, enemy debuff needs them within 210 range. 8s cooldown.",
+			"Cleanses all CC, grants CC immunity, 25% damage reduction, and +40% move speed for 3s. 8.5s cooldown. Usable even while stunned.",
+			"Lunge in (up to 280) and slam for 55 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
 		]
 	},
 ]
@@ -172,7 +172,7 @@ func _draw_tooltip():
 	var font    = ThemeDB.fallback_font
 	var size    = 13
 	var padding = 10.0
-	var max_w   = 260.0
+	var max_w   = 320.0
 
 	# wrap the description into lines that fit max_w
 	var words = tooltip_text.split(" ")
