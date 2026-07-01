@@ -1,5 +1,7 @@
 extends Node2D
 
+const FX = preload("res://scripts/FX.gd")
+
 var player: Entity
 var bot: Entity
 var arena_rect := Rect2(Vector2(30, 30), Vector2(1860, 1020))
@@ -119,7 +121,7 @@ func build_ui():
 
 	# hint
 	var hint = Label.new()
-	hint.text = "WASD move  |  Shift/Space dash  |  LMB auto (hold)  |  E  Q  F  R abilities  |  RMB/G parry  |  Backspace = char select"
+	hint.text = "WASD move  |  Space dash  |  LMB auto (hold)  |  E  Q  F  Shift  R abilities  |  RMB/G parry  |  Backspace = char select"
 	hint.position = Vector2(20, 1050)
 	hint.add_theme_font_size_override("font_size", 12)
 	canvas.add_child(hint)
@@ -131,33 +133,36 @@ func build_ui():
 func _get_ability_defs() -> Array:
 	if player is BruiserEntity:
 		return [
-			{"key": "LMB", "name": "Smash",   "cd": player.cd_auto, "max": BruiserEntity.BRUISER_AUTO_CD,  "col": Color(0.95, 0.55, 0.15)},
-			{"key": "E",   "name": "Shatter", "cd": player.cd_a1,   "max": BruiserEntity.SHATTER_CD,       "col": Color(1.0, 0.7, 0.2)},
-			{"key": "Q",   "name": "Tremor",  "cd": player.cd_a2,   "max": BruiserEntity.TREMOR_CD,        "col": Color(0.9, 0.4, 0.1)},
-			{"key": "F",   "name": "Unbrkbl", "cd": player.cd_a3,   "max": BruiserEntity.UNBREAKABLE_CD,  "col": Color(1.0, 1.0, 1.0)},
-			{"key": "R",   "name": "Seismic", "cd": 0.0,            "max": 1.0, "charge": true,
-				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.25, 0.1)},
-			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},
+			{"key": "LMB",   "name": "Smash",   "cd": player.cd_auto,  "max": BruiserEntity.BRUISER_AUTO_CD, "col": Color(0.95, 0.55, 0.15)},
+			{"key": "E",     "name": "Shatter", "cd": player.cd_a1,    "max": BruiserEntity.SHATTER_CD,      "col": Color(1.0, 0.7, 0.2)},
+			{"key": "Q",     "name": "Tremor",  "cd": player.cd_a2,    "max": BruiserEntity.TREMOR_CD,       "col": Color(0.9, 0.4, 0.1)},
+			{"key": "F",     "name": "Warcry",  "cd": player.cd_a3,    "max": BruiserEntity.WARCRY_CD,       "col": Color(0.9, 0.25, 0.1)},
+			{"key": "Shift", "name": "Unbrkbl", "cd": player.cd_shift, "max": BruiserEntity.UNBREAKABLE_CD,  "col": Color(1.0, 1.0, 1.0)},
+			{"key": "R",     "name": "Seismic", "cd": 0.0,             "max": 1.0, "charge": true,
+				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(1.0, 0.25, 0.1)},
+			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
 		]
 	elif player is RangedEntity:
 		return [
-			{"key": "LMB", "name": "Shot",    "cd": player.cd_auto, "max": RangedEntity.RPROJ_CD,          "col": Color(1.0, 0.85, 0.3)},
-			{"key": "E",   "name": "Bolt",    "cd": player.cd_a1,   "max": RangedEntity.BOLT_CD,           "col": Color(0.4, 0.85, 1.0)},
-			{"key": "Q",   "name": "Burst",   "cd": player.cd_a2,   "max": RangedEntity.NOVA_CD,           "col": Color(0.72, 0.4, 1.0)},
-			{"key": "F",   "name": "Barrier", "cd": player.cd_a3,   "max": RangedEntity.BARRIER_CD,        "col": Color(0.3, 0.7, 1.0)},
-			{"key": "R",   "name": "VoidColl","cd": 0.0,            "max": 1.0, "charge": true,
-				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.3, 0.85)},
-			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},
+			{"key": "LMB",   "name": "Shot",    "cd": player.cd_auto,  "max": RangedEntity.RPROJ_CD,        "col": Color(1.0, 0.85, 0.3)},
+			{"key": "E",     "name": "Bolt",    "cd": player.cd_a1,    "max": RangedEntity.BOLT_CD,         "col": Color(0.4, 0.85, 1.0)},
+			{"key": "Q",     "name": "Burst",   "cd": player.cd_a2,    "max": RangedEntity.NOVA_CD,         "col": Color(0.72, 0.4, 1.0)},
+			{"key": "F",     "name": "ArcFan",  "cd": player.cd_a3,    "max": RangedEntity.ARCANE_FAN_CD,   "col": Color(0.6, 0.3, 1.0)},
+			{"key": "Shift", "name": "Barrier", "cd": player.cd_shift, "max": RangedEntity.BARRIER_CD,      "col": Color(0.3, 0.7, 1.0)},
+			{"key": "R",     "name": "VoidColl","cd": 0.0,             "max": 1.0, "charge": true,
+				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(1.0, 0.3, 0.85)},
+			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
 		]
 	else:
 		return [
-			{"key": "LMB", "name": "Auto",    "cd": player.cd_auto, "max": Entity.AUTO_CD,                 "col": Color(0.37, 0.88, 0.75)},
-			{"key": "E",   "name": "Strike",  "cd": player.cd_a1,   "max": Entity.A1_CD,                   "col": Color(0.37, 0.88, 0.75)},
-			{"key": "Q",   "name": "Lunge",   "cd": player.cd_a2,   "max": Entity.A2_CD,                   "col": Color(1.0, 0.5, 0.2)},
-			{"key": "F",   "name": "Throw",   "cd": player.cd_a3,   "max": Entity.SWORD_THROW_CD,          "col": Color(0.8, 0.85, 0.95)},
-			{"key": "R",   "name": "Storm",   "cd": 0.0,            "max": 1.0, "charge": true,
-				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.3, 0.48)},
-			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},
+			{"key": "LMB",   "name": "Auto",    "cd": player.cd_auto,  "max": Entity.AUTO_CD,               "col": Color(0.37, 0.88, 0.75)},
+			{"key": "E",     "name": "Strike",  "cd": player.cd_a1,    "max": Entity.A1_CD,                 "col": Color(0.37, 0.88, 0.75)},
+			{"key": "Q",     "name": "Lunge",   "cd": player.cd_a2,    "max": Entity.A2_CD,                 "col": Color(1.0, 0.5, 0.2)},
+			{"key": "F",     "name": "Throw",   "cd": player.cd_a3,    "max": Entity.SWORD_THROW_CD,        "col": Color(0.8, 0.85, 0.95)},
+			{"key": "Shift", "name": "IronRes", "cd": player.cd_shift, "max": Entity.IRON_RESOLVE_CD,       "col": Color(0.55, 0.75, 1.0)},
+			{"key": "R",     "name": "Storm",   "cd": 0.0,             "max": 1.0, "charge": true,
+				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(1.0, 0.3, 0.48)},
+			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
 		]
 
 func start_shake(intensity: float, duration: float):
@@ -198,6 +203,7 @@ func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 		return false
 	entity.hp = min(entity.max_hp, entity.hp + HEALTH_PACK_HEAL)
 	entity.hit_flash_left = 0.18
+	FX.heal_sparkle(self, entity.global_position)
 	pack["active"] = false
 	pack["respawn_left"] = HEALTH_PACK_RESPAWN
 	return true

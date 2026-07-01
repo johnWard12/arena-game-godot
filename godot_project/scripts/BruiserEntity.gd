@@ -12,14 +12,14 @@ const BRUISER_AUTO_RANGE = 167.0
 
 # E — Shatter: shield slam + stun (instant)
 const SHATTER_RECOVERY = 0.25
-const SHATTER_CD       = 4.5
+const SHATTER_CD       = 5.5
 const SHATTER_DMG      = 22.0
 const SHATTER_RANGE    = 151.0
 const SHATTER_STUN     = 0.70
 
 # Q — Tremor: ground stomp AoE + slow (instant)
 const TREMOR_RECOVERY = 0.25
-const TREMOR_CD       = 7.0
+const TREMOR_CD       = 8.0
 const TREMOR_DMG      = 18.0
 const TREMOR_RADIUS   = 180.0
 const TREMOR_SLOW     = 2.0
@@ -32,16 +32,24 @@ const SEISMIC_DMG        = 55.0
 const SEISMIC_KNOCKUP    = 1.0
 const SEISMIC_RECOVERY   = 0.65
 
-# F — Unbreakable: CC cleanse + immunity + damage reduction
-const UNBREAKABLE_CD           = 7.0
+# Shift — Unbreakable: CC cleanse + immunity + damage reduction
+const UNBREAKABLE_CD           = 8.5
 const UNBREAKABLE_DUR          = 3.0
 const UNBREAKABLE_DMG_REDUCE   = 0.25
 const UNBREAKABLE_MOVE_MULT    = 1.40
+
+# F — Warcry: self damage-reduction buff + opponent damage-dealt debuff
+const WARCRY_CD              = 8.0
+const WARCRY_DUR             = 4.0
+const WARCRY_RADIUS          = 180.0
+const WARCRY_SELF_DMG_REDUCE = 0.15
+const WARCRY_ENEMY_DMG_MULT  = 0.90
 
 var tremor_fx_left        := 0.0
 var unbreakable_time_left := 0.0
 var seismic_slam_fx_left  := 0.0
 var seismic_lunge_pending := false
+var warcry_time_left      := 0.0
 
 func _ready():
 	hp             = BRUISER_MAX_HP
@@ -50,16 +58,23 @@ func _ready():
 	speed_override = BRUISER_MAX_SPEED
 	stun_resist_mult = 0.85
 	recovery_slows_movement = false  # Steady Footing: 15% less duration on incoming stuns/freezes
+	dash_charges_max = 1
+	dash_charges = 1
 
 func _physics_process(delta):
 	tremor_fx_left     = max(0.0, tremor_fx_left - delta)
 	seismic_slam_fx_left = max(0.0, seismic_slam_fx_left - delta)
+	warcry_time_left   = max(0.0, warcry_time_left - delta)
 	if unbreakable_time_left > 0:
 		unbreakable_time_left = max(0.0, unbreakable_time_left - delta)
 		if unbreakable_time_left <= 0:
 			cc_immune      = false
-			dmg_reduction  = 0.0
 			speed_override = BRUISER_MAX_SPEED
+	# Damage reduction is recomputed each tick from whichever buffs are
+	# active, rather than imperatively set/cleared, so Unbreakable and
+	# Warcry can overlap without one clobbering the other's contribution.
+	dmg_reduction = (UNBREAKABLE_DMG_REDUCE if unbreakable_time_left > 0 else 0.0) \
+		+ (WARCRY_SELF_DMG_REDUCE if warcry_time_left > 0 else 0.0)
 	super._physics_process(delta)
 
 # Blood-lust is a Duelist-only passive.
@@ -88,6 +103,7 @@ func try_a1(opp: Entity):
 		deal_damage(opp, dmg)
 		if opp.alive:
 			opp.apply_stun(SHATTER_STUN)
+			FX.impact_burst(get_parent(), opp.global_position, Color(1.0, 0.85, 0.3), 16, 260.0)
 		add_combo_stack()
 	cd_a1 = SHATTER_CD
 	recovering = {"type": "a1", "time_left": SHATTER_RECOVERY, "total": SHATTER_RECOVERY}
@@ -99,6 +115,7 @@ func try_a2(opp: Entity):
 	if not alive or cd_a2 > 0 or recovering != null or lunging or opp == null:
 		return
 	tremor_fx_left = 0.4
+	FX.impact_burst(get_parent(), global_position, Color(0.85, 0.6, 0.3), 22, 220.0)
 	if opp.alive and global_position.distance_to(opp.global_position) <= TREMOR_RADIUS:
 		var dmg = round(TREMOR_DMG * combo_mult())
 		deal_damage(opp, dmg)
@@ -140,6 +157,7 @@ func resolve_lunge_strike(opp: Entity):
 func _do_seismic_slam(opp: Entity):
 	start_swing(360.0, 0.45)
 	seismic_slam_fx_left = 0.70
+	FX.impact_burst(get_parent(), global_position, Color(1.0, 0.7, 0.2), 30, 420.0)
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= SEISMIC_RANGE:
 		if deal_damage(opp, SEISMIC_DMG):
 			add_combo_stack()
@@ -148,17 +166,25 @@ func _do_seismic_slam(opp: Entity):
 	screen_shake.emit(14.0, 0.45)
 	recovering = {"type": "ult", "time_left": SEISMIC_RECOVERY, "total": SEISMIC_RECOVERY}
 
-func try_a3(_opp: Entity):
+func try_shift(_opp: Entity):
 	# Usable even while stunned — that's the point
-	if not alive or cd_a3 > 0 or unbreakable_time_left > 0:
+	if not alive or cd_shift > 0 or unbreakable_time_left > 0:
 		return
 	stunned_time_left = 0.0
 	slowed_time_left  = 0.0
 	cc_immune         = true
-	dmg_reduction     = UNBREAKABLE_DMG_REDUCE
 	speed_override    = BRUISER_MAX_SPEED * UNBREAKABLE_MOVE_MULT
 	unbreakable_time_left = UNBREAKABLE_DUR
-	cd_a3 = UNBREAKABLE_CD
+	cd_shift = UNBREAKABLE_CD
+
+func try_a3(opp: Entity):
+	if not alive or cd_a3 > 0:
+		return
+	warcry_time_left = WARCRY_DUR
+	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= WARCRY_RADIUS:
+		opp.apply_outgoing_dmg_debuff(WARCRY_DUR, WARCRY_ENEMY_DMG_MULT)
+	FX.impact_burst(get_parent(), global_position, Color(0.9, 0.25, 0.1), 20, 220.0)
+	cd_a3 = WARCRY_CD
 
 func resolve_a3(_opp: Entity):
 	pass
@@ -210,6 +236,12 @@ func _draw_bruiser(now: int, accent: Color):
 		draw_arc(Vector2.ZERO, RADIUS + 5,  0, TAU, 48, Color(1, 1, 1, pulse * 0.90), 4.0)
 		draw_arc(Vector2.ZERO, RADIUS + 13, 0, TAU, 36, Color(1, 1, 1, pulse * 0.45), 2.0)
 
+	# Warcry — deep red battle-aura pulse
+	if warcry_time_left > 0:
+		var wt     = Time.get_ticks_msec() * 0.005
+		var wpulse = 0.5 + 0.4 * sin(wt * 4.0)
+		draw_arc(Vector2.ZERO, RADIUS + 8, 0, TAU, 40, Color(0.9, 0.25, 0.1, wpulse), 3.0)
+
 	# Seismic Slam — expanding crack ring + radiating lines
 	if seismic_slam_fx_left > 0:
 		var sp = seismic_slam_fx_left / 0.70
@@ -249,6 +281,9 @@ func _draw_bruiser(now: int, accent: Color):
 		# hammer head
 		draw_circle(ht, 10.0, Color(0.55, 0.55, 0.65, 0.6))
 		draw_line(ht + perp * 10, ht - perp * 10, Color(0.65, 0.65, 0.75, 0.65), 7.0)
+		# metal glint
+		var glint_t = fmod(now * 0.0006, 1.0)
+		draw_circle((ht + perp * 10).lerp(ht - perp * 10, glint_t), 1.8, Color(1, 1, 1, 0.7))
 
 	# --- BODY (wide, stocky) ---
 	var body = PackedVector2Array([
@@ -258,6 +293,8 @@ func _draw_bruiser(now: int, accent: Color):
 		facing *  10 + perp * -11,
 	])
 	draw_colored_polygon(body, armor)
+	# fur trim collar
+	draw_arc(facing * -13, 13.0, 0, PI, 12, Color(0.42, 0.32, 0.22, 0.85), 5.0)
 	# chest plate — heavy reinforced look
 	var chest = PackedVector2Array([
 		facing * -12 + perp * -7,
@@ -268,6 +305,8 @@ func _draw_bruiser(now: int, accent: Color):
 	draw_colored_polygon(chest, Color(accent.r, accent.g, accent.b, 0.6))
 	# center ridge on chest
 	draw_line(facing * -10, facing * 2, Color(accent.r * 1.2, accent.g * 1.2, accent.b * 1.2, 0.4), 2.5)
+	# rim light along torso edge
+	draw_line(facing * -14 + perp * -12, facing * 10 + perp * -11, Color(1, 1, 1, 0.28), 2.2)
 
 	# --- SHIELD (left arm, front-facing) ---
 	var shield_center = facing * -2 + perp * -14
@@ -313,12 +352,12 @@ func _draw_bruiser(now: int, accent: Color):
 			  Color(accent.r, accent.g, accent.b, 0.65), 2.5)
 
 	# --- DASH CHARGE PIPS ---
-	for i in DASH_CHARGES_MAX:
-		var px = (i - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	for i in dash_charges_max:
+		var px = (i - (dash_charges_max - 1) * 0.5) * 14.0
 		var pip_col = Color(accent.r, accent.g, accent.b, 0.85) if i < dash_charges else Color(0.2, 0.2, 0.25, 0.5)
 		draw_circle(Vector2(px, RADIUS + 14), 4.0, pip_col)
-	if dash_charges < DASH_CHARGES_MAX:
-		var px = (dash_charges - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	if dash_charges < dash_charges_max:
+		var px = (dash_charges - (dash_charges_max - 1) * 0.5) * 14.0
 		draw_arc(Vector2(px, RADIUS + 14), 4.5, -PI/2,
 			-PI/2 + TAU * (dash_charge_timer / DASH_CHARGE_REGEN), 16,
 			Color(accent.r, accent.g, accent.b, 0.8), 2.0)
@@ -350,5 +389,8 @@ func _draw_bruiser(now: int, accent: Color):
 		draw_circle(stip, 11.0, Color(0.7, 0.7, 0.8, alpha))
 		draw_line(stip + sperp * 11, stip - sperp * 11,
 			Color(0.8, 0.8, 0.9, alpha), 8.0)
+		draw_line(stip + sperp * 11, stip - sperp * 11,
+			Color(1, 1, 1, alpha * 0.6), 2.0)
 		# impact glow at tip
 		draw_circle(stip, 14.0, Color(accent.r, accent.g, accent.b, alpha * 0.35))
+		draw_circle(stip, 20.0, Color(1, 1, 1, alpha * 0.12))

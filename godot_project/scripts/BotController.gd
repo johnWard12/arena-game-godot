@@ -53,6 +53,11 @@ func ai_decide():
 		try_ult(opponent)
 		return
 
+	# Iron Resolve — cash in combo stacks for damage reduction when under threat
+	if cd_shift <= 0 and combo_stacks >= 2 and (hp < max_hp * 0.5 or opponent.casting != null) and randf() < 0.5:
+		try_shift(opponent)
+		return
+
 	if d <= A1_RANGE and cd_a1 <= 0 and randf() < 0.4:
 		try_a1(opponent)
 		return

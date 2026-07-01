@@ -1,6 +1,8 @@
 extends Node2D
 class_name Entity
 
+const FX = preload("res://scripts/FX.gd")
+
 # ---- Tunables ----
 const MAX_SPEED = 435.0
 const ACCEL = 3450.0
@@ -80,6 +82,12 @@ const BLADESTORM_HIT_INTERVAL = 0.30
 const BLADESTORM_DMG          = 14.0
 const BLADESTORM_RANGE        = 170.0
 
+# Iron Resolve (Duelist Shift) — converts current combo stacks into a
+# temporary flat damage-reduction buff, consuming the stacks.
+const IRON_RESOLVE_CD        = 7.0
+const IRON_RESOLVE_DUR       = 2.0
+const IRON_RESOLVE_PER_STACK = 0.10
+
 # ---- State ----
 var is_player := false
 var base_color := Color(0.37, 0.88, 0.75)
@@ -107,6 +115,7 @@ var recovering = null
 var cd_auto := 0.0
 var cd_a1 := 0.0
 var cd_a2 := 0.0
+var cd_shift := 0.0
 var ult_charge := 0.0
 
 var combo_stacks := 0
@@ -131,6 +140,14 @@ var cc_immune := false
 # Flat damage reduction (0.0 = none, 0.25 = 25% less damage taken)
 var dmg_reduction := 0.0
 
+# Outgoing damage multiplier on THIS entity's own attacks (1.0 = normal,
+# 0.9 = deals 10% less). Set on an entity by a debuff like Bruiser's Warcry.
+var outgoing_dmg_mult := 1.0
+var outgoing_dmg_debuff_time_left := 0.0
+
+# Iron Resolve (Duelist Shift) active-buff timer
+var iron_resolve_time_left := 0.0
+
 # Blood-lust: granted on a successful parry (see on_landed_parry())
 var bloodlust_time_left := 0.0
 
@@ -148,6 +165,7 @@ var swing_arc_span := 0.0
 # hit flash on this entity when it receives damage
 var hit_flash_left := 0.0
 
+var dash_charges_max := DASH_CHARGES_MAX
 var dash_charges := DASH_CHARGES_MAX
 var dash_charge_timer := 0.0
 
@@ -156,6 +174,8 @@ var walk_phase := 0.0
 var knockup_time_left    := 0.0
 var bladestorm_time_left := 0.0
 var bladestorm_hit_timer := 0.0
+
+var dash_fx_timer := 0.0
 
 var opponent: Entity = null
 var arena_rect := Rect2(Vector2.ZERO, Vector2(1000, 600))
@@ -177,8 +197,17 @@ func _physics_process(delta):
 	cd_a1 = max(0.0, cd_a1 - delta * atkspd_mult)
 	cd_a2 = max(0.0, cd_a2 - delta * atkspd_mult)
 	cd_a3 = max(0.0, cd_a3 - delta * atkspd_mult)
+	cd_shift = max(0.0, cd_shift - delta)
 	parry_cd_left = max(0.0, parry_cd_left - delta)
-	if dash_charges < DASH_CHARGES_MAX:
+	if outgoing_dmg_debuff_time_left > 0:
+		outgoing_dmg_debuff_time_left = max(0.0, outgoing_dmg_debuff_time_left - delta)
+		if outgoing_dmg_debuff_time_left <= 0:
+			outgoing_dmg_mult = 1.0
+	if iron_resolve_time_left > 0:
+		iron_resolve_time_left = max(0.0, iron_resolve_time_left - delta)
+		if iron_resolve_time_left <= 0:
+			dmg_reduction = 0.0
+	if dash_charges < dash_charges_max:
 		dash_charge_timer += delta
 		if dash_charge_timer >= DASH_CHARGE_REGEN:
 			dash_charge_timer -= DASH_CHARGE_REGEN
@@ -262,6 +291,7 @@ func _physics_process(delta):
 		lunge_time_left -= delta
 		velocity = lunge_dir * lunge_speed
 		push_trail()
+		_emit_dash_fx(delta)
 		var reached = lunge_opponent != null and is_instance_valid(lunge_opponent) and lunge_opponent.alive \
 			and global_position.distance_to(lunge_opponent.global_position) <= lunge_reach
 		if lunge_time_left <= 0 or reached:
@@ -272,6 +302,7 @@ func _physics_process(delta):
 		dash_time_left -= delta
 		velocity = dash_dir * DASH_SPEED
 		push_trail()
+		_emit_dash_fx(delta)
 		if dash_time_left <= 0:
 			dashing = false
 			velocity *= CARRY
@@ -391,6 +422,12 @@ func steer_around_obstacles(desired_dir: Vector2) -> Vector2:
 			return (tangent + normal * 0.4).normalized()
 	return desired_dir
 
+func _emit_dash_fx(delta: float):
+	dash_fx_timer -= delta
+	if dash_fx_timer <= 0:
+		dash_fx_timer = 0.03
+		FX.dash_puff(get_parent(), global_position - velocity.normalized() * RADIUS * 0.6, base_color)
+
 func push_trail():
 	var now = Time.get_ticks_msec()
 	trail.append({"pos": global_position, "time": now})
@@ -472,6 +509,12 @@ func apply_slow(duration: float, pct: float = 0.5):
 	slowed_time_left = max(slowed_time_left, duration)
 	slow_pct = max(slow_pct, pct)
 
+# Weakens THIS entity's own outgoing damage for a duration — e.g. Bruiser's
+# Warcry debuffing the opponent. Not blocked by cc_immune since it isn't CC.
+func apply_outgoing_dmg_debuff(duration: float, mult: float):
+	outgoing_dmg_debuff_time_left = max(outgoing_dmg_debuff_time_left, duration)
+	outgoing_dmg_mult = min(outgoing_dmg_mult, mult)
+
 func deal_damage(target: Entity, amount: float) -> bool:
 	if target == null or not target.alive:
 		return false
@@ -481,22 +524,28 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		apply_stun(PARRY_STUN_DUR)
 		casting = null
 		lunging = false
+		FX.parry_flash(get_parent(), target.global_position)
 		return false
+	var barrier_hit := false
 	if target.barrier_hp_left > 0:
 		var absorbed = min(amount, target.barrier_hp_left)
 		target.barrier_hp_left -= absorbed
 		amount -= absorbed
 		target.hit_flash_left = 0.15
+		barrier_hit = true
 		if amount <= 0:
+			FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0))
 			return true
 	if target.casting != null:
 		target.casting = null
 		target.apply_stun(STUN_DUR)
-	amount *= (1.0 - target.dmg_reduction)
+	amount *= outgoing_dmg_mult * (1.0 - target.dmg_reduction)
 	target.hp = max(0.0, target.hp - amount)
 	target.hit_flash_left = 0.25
+	FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0) if barrier_hit else target.base_color)
 	if target.hp <= 0 and target.alive:
 		target.alive = false
+		FX.death_shatter(get_parent(), target.global_position, target.base_color)
 		target.died.emit()
 	return true
 
@@ -565,6 +614,18 @@ func try_ult(opp: Entity):
 func resolve_ult(_opp: Entity):
 	pass
 
+# Iron Resolve (Shift) — cashes in current combo stacks for a brief flat
+# damage-reduction buff. Consumes the stacks, so it's a spend, not a bonus.
+func try_shift(_opp: Entity):
+	if not can_start_ability() or cd_shift > 0 or combo_stacks <= 0:
+		return
+	dmg_reduction = combo_stacks * IRON_RESOLVE_PER_STACK
+	iron_resolve_time_left = IRON_RESOLVE_DUR
+	combo_stacks = 0
+	combo_time_left = 0.0
+	cd_shift = IRON_RESOLVE_CD
+	FX.impact_burst(get_parent(), global_position, Color(0.55, 0.75, 1.0), 14, 150.0)
+
 func try_dash(dir: Vector2):
 	if not can_dash(dir):
 		return
@@ -624,6 +685,11 @@ func _draw_hud(now: int, accent: Color):
 	if bloodlust_time_left > 0:
 		var pulse = 0.5 + 0.4 * sin(now * 0.025)
 		draw_arc(Vector2.ZERO, RADIUS + 10, 0, TAU, 40, Color(0.9, 0.1, 0.15, pulse), 3.0)
+
+	# Iron Resolve — icy blue guard shimmer
+	if iron_resolve_time_left > 0:
+		var pulse = 0.5 + 0.4 * sin(now * 0.02)
+		draw_arc(Vector2.ZERO, RADIUS + 9, 0, TAU, 40, Color(0.55, 0.75, 1.0, pulse), 3.0)
 
 	# HP bar above head
 	var hp_pct = hp / max_hp
@@ -693,6 +759,19 @@ func _draw_duelist(now: int, accent: Color):
 	# ground shadow
 	draw_circle(Vector2(2, RADIUS - 4), 14, Color(0, 0, 0, 0.18))
 
+	# --- CAPE (billows behind, opposite of facing) ---
+	var cape_sway = sin(walk_phase * 1.7) * (4.0 + spd_pct * 6.0)
+	var cape_back = -facing * (18.0 + spd_pct * 14.0)
+	var cape = PackedVector2Array([
+		facing * -9 + perp * -10,
+		facing * -9 + perp *  10,
+		cape_back + perp * (16.0 + cape_sway),
+		cape_back + perp * -3.0,
+		cape_back + perp * (-16.0 - cape_sway * 0.6),
+	])
+	draw_colored_polygon(cape, Color(0.55, 0.06, 0.05, 0.85))
+	draw_colored_polygon(cape, Color(accent.r, accent.g, accent.b, 0.12))
+
 	# --- LEGS ---
 	var lleg_end = Vector2(perp * -6 + facing * sin(walk_phase)  * stride + Vector2(0, RADIUS - 2 + bob_y))
 	var rleg_end = Vector2(perp *  6 - facing * sin(walk_phase)  * stride + Vector2(0, RADIUS - 2 + bob_y))
@@ -708,6 +787,9 @@ func _draw_duelist(now: int, accent: Color):
 		var st   = rest * (RADIUS + SWORD_LEN * 0.65)
 		draw_line(sb, st, Color(0.75, 0.78, 0.9, 0.6), SWORD_WIDTH * 0.55, true)
 		draw_line(sb + perp * 6, sb - perp * 6, Color(0.6, 0.62, 0.75, 0.7), 3.5)
+		# idle glint sparkle traveling along the blade
+		var glint_t = fmod(now * 0.0009, 1.0)
+		draw_circle(sb.lerp(st, glint_t), 2.2, Color(1, 1, 1, 0.8))
 
 	# --- BODY ---
 	var body = PackedVector2Array([
@@ -725,12 +807,16 @@ func _draw_duelist(now: int, accent: Color):
 		facing *   2 + perp * -4,
 	])
 	draw_colored_polygon(chest, Color(accent.r, accent.g, accent.b, 0.55))
+	# rim light along one edge of the torso for depth
+	draw_line(facing * -13 + perp * -9, facing * 8 + perp * -8,
+		Color(1, 1, 1, 0.30), 2.0)
 
 	# pauldrons
 	draw_circle(facing * -10 + perp * -11, 7.0, armor)
 	draw_circle(facing * -10 + perp *  11, 7.0, armor)
 	draw_circle(facing * -10 + perp * -11, 4.0, _col_dark(accent, 0.4))
 	draw_circle(facing * -10 + perp *  11, 4.0, _col_dark(accent, 0.4))
+	draw_arc(facing * -10 + perp * -11, 7.0, 0, PI, 10, Color(1, 1, 1, 0.35), 1.5)
 
 	# --- HEAD ---
 	var head = facing * -20 + Vector2(0, bob_y)
@@ -755,12 +841,12 @@ func _draw_duelist(now: int, accent: Color):
 		Color(1.00, 0.28, 0.16, 0.80), 2.5)
 
 	# --- DASH CHARGE PIPS ---
-	for i in DASH_CHARGES_MAX:
-		var px = (i - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	for i in dash_charges_max:
+		var px = (i - (dash_charges_max - 1) * 0.5) * 14.0
 		var pip_col = Color(accent.r, accent.g, accent.b, 0.85) if i < dash_charges else Color(0.2, 0.2, 0.25, 0.5)
 		draw_circle(Vector2(px, RADIUS + 14), 4.0, pip_col)
-	if dash_charges < DASH_CHARGES_MAX:
-		var px = (dash_charges - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	if dash_charges < dash_charges_max:
+		var px = (dash_charges - (dash_charges_max - 1) * 0.5) * 14.0
 		draw_arc(Vector2(px, RADIUS + 14), 4.5, -PI/2,
 			-PI/2 + TAU * (dash_charge_timer / DASH_CHARGE_REGEN), 16,
 			Color(accent.r, accent.g, accent.b, 0.8), 2.0)
@@ -796,6 +882,8 @@ func _draw_duelist(now: int, accent: Color):
 		draw_colored_polygon(PackedVector2Array([sroot + sperp * hw, sroot - sperp * hw, stip]),
 			Color(0.95, 0.97, 1.0, alpha))
 		draw_line(sroot + sperp * hw, stip, Color(1, 1, 1, alpha), 1.5)
+		# bright motion-streak core along the blade edge
+		draw_line(sroot, stip, Color(1, 1, 0.85, alpha * 0.9), 2.0)
 		# crossguard
 		var guard = sdir * (RADIUS + 7)
 		draw_line(guard + sperp * 11, guard - sperp * 11, Color(0.75, 0.78, 1.0, alpha), 4.0)

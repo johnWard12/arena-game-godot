@@ -50,10 +50,15 @@ func ai_decide():
 		return
 
 	# Unbreakable — pop when stunned or low HP to survive burst
-	if cd_a3 <= 0 and unbreakable_time_left <= 0:
+	if cd_shift <= 0 and unbreakable_time_left <= 0:
 		if stunned_time_left > 0 or (hp < max_hp * 0.40 and randf() < 0.7):
-			try_a3(opponent)
+			try_shift(opponent)
 			return
+
+	# Warcry — use when in a prolonged brawl at close range
+	if cd_a3 <= 0 and d <= WARCRY_RADIUS and randf() < 0.45:
+		try_a3(opponent)
+		return
 
 	# Shatter (stun) — high priority at melee range
 	if d <= SHATTER_RANGE and cd_a1 <= 0 and randf() < 0.65:

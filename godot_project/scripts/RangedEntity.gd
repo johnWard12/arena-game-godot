@@ -25,9 +25,18 @@ const NOVA_RADIUS   = 190.0
 const NOVA_DMG      = 20.0
 const NOVA_FREEZE   = 1.0
 
+# Shift — Barrier: brief absorb shield
 const BARRIER_CD  = 7.0
 const BARRIER_HP  = 35.0
 const BARRIER_DUR = 1.5
+
+# F — Arcane Fan: 3-bolt cone spread, rewards close-range risk
+const ARCANE_FAN_CD        = 5.0
+const ARCANE_FAN_RECOVERY  = 0.15
+const ARCANE_FAN_DMG       = 12.0
+const ARCANE_FAN_SPEED     = 1500.0
+const ARCANE_FAN_RADIUS    = 16.0
+const ARCANE_FAN_SPREAD_DEG = 26.0
 
 
 # Ult — Void Collapse: gravitational rift, pulls opponent in, then implodes
@@ -121,6 +130,7 @@ func resolve_a2(opp: Entity):
 	if opp != null:
 		facing = get_aim_dir(opp)
 	nova_fx_left = 0.35
+	FX.impact_burst(get_parent(), global_position, Color(0.72, 0.4, 1.0), 18, 260.0)
 	var landed := false
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= NOVA_RADIUS:
 		var dmg = round(NOVA_DMG * combo_mult())
@@ -146,6 +156,7 @@ func resolve_ult(opp: Entity):
 
 func _resolve_void_explosion():
 	rift_fx_left = 0.50
+	FX.impact_burst(get_parent(), rift_pos, Color(0.75, 0.15, 1.0), 34, 380.0)
 	if opponent != null and opponent.alive:
 		var dist = opponent.global_position.distance_to(rift_pos)
 		var closeness = 1.0 - clamp(dist / 320.0, 0.0, 1.0)
@@ -157,12 +168,25 @@ func _resolve_void_explosion():
 	screen_shake.emit(10.0, 0.35)
 	recovering = {"type": "ult", "time_left": VOIDCOLLAPSE_RECOVERY, "total": VOIDCOLLAPSE_RECOVERY}
 
-func try_a3(_opp: Entity):
-	if not can_start_ability() or cd_a3 > 0:
+func try_shift(_opp: Entity):
+	if not can_start_ability() or cd_shift > 0:
 		return
 	barrier_hp_left   = BARRIER_HP
 	barrier_time_left = BARRIER_DUR
-	cd_a3 = BARRIER_CD
+	cd_shift = BARRIER_CD
+
+func try_a3(opp: Entity):
+	if not can_start_ability() or cd_a3 > 0 or opp == null:
+		return
+	facing = get_aim_dir(opp)
+	var half = deg_to_rad(ARCANE_FAN_SPREAD_DEG) * 0.5
+	for i in 3:
+		var offset = (i - 1) * half
+		var dir = facing.rotated(offset)
+		_fire(dir, ARCANE_FAN_SPEED, ARCANE_FAN_RADIUS, ARCANE_FAN_DMG, opp, Color(0.6, 0.3, 1.0), 9.0, 0.0, 0.5, true)
+	FX.impact_burst(get_parent(), global_position + facing * (RADIUS + 20), Color(0.6, 0.3, 1.0), 10, 160.0)
+	cd_a3 = ARCANE_FAN_CD
+	recovering = {"type": "a3", "time_left": ARCANE_FAN_RECOVERY, "total": ARCANE_FAN_RECOVERY}
 
 func resolve_a3(_opp: Entity):
 	pass
@@ -195,28 +219,34 @@ func _draw():
 	# hover bob
 	var hover_y = sin(Time.get_ticks_msec() * 0.0025) * 2.0
 
+	# soft magical glow puddle under feet
+	draw_circle(Vector2(0, RADIUS - 2), 20, Color(accent.r, accent.g, accent.b, 0.08))
 	# ground shadow (ellipse via circle + scale trick using polygon)
 	draw_circle(Vector2(0, RADIUS - 2), 13, Color(0, 0, 0, 0.15))
 
-	# --- ROBE (main body — wide trapezoid) ---
+	# --- ROBE (main body — wide trapezoid with a rippling hem) ---
+	var hem_ripple = sin(Time.get_ticks_msec() * 0.004) * 2.0
 	var robe = PackedVector2Array([
 		facing * -14 + perp * -8  + Vector2(0, hover_y),
 		facing * -14 + perp *  8  + Vector2(0, hover_y),
-		facing *  10 + perp *  13 + Vector2(0, hover_y),
-		facing *  10 + perp * -13 + Vector2(0, hover_y),
+		facing *  10 + perp *  13 + Vector2(0, hover_y + hem_ripple),
+		facing *  10 + perp * -13 + Vector2(0, hover_y - hem_ripple),
 	])
 	draw_colored_polygon(robe, robe_col)
 	# robe trim / hem highlight
 	var hem = PackedVector2Array([
 		facing * 6  + perp * -13 + Vector2(0, hover_y),
 		facing * 6  + perp *  13 + Vector2(0, hover_y),
-		facing * 10 + perp *  13 + Vector2(0, hover_y),
-		facing * 10 + perp * -13 + Vector2(0, hover_y),
+		facing * 10 + perp *  13 + Vector2(0, hover_y + hem_ripple),
+		facing * 10 + perp * -13 + Vector2(0, hover_y - hem_ripple),
 	])
 	draw_colored_polygon(hem, Color(accent.r, accent.g, accent.b, 0.35))
 	# robe center line detail
 	draw_line(facing * -10 + Vector2(0, hover_y), facing * 8 + Vector2(0, hover_y),
 		Color(accent.r, accent.g, accent.b, 0.25), 2.0)
+	# rim light along one edge
+	draw_line(facing * -14 + perp * -8 + Vector2(0, hover_y), facing * 10 + perp * -13 + Vector2(0, hover_y),
+		Color(1, 1, 1, 0.22), 1.8)
 
 	# --- STAFF ARM ---
 	var arm_base = facing * -4 + perp * 9 + Vector2(0, hover_y)
@@ -233,7 +263,9 @@ func _draw():
 		var pct = 1.0 - (casting["time_left"] / casting["total"])
 		orb_r  += pct * 10.0
 		orb_col = Color(1, 0.92, 0.4, 0.9)
-	# glow ring
+	# glow ring — layered pulsing halo
+	var orb_pulse = 0.85 + 0.15 * sin(Time.get_ticks_msec() * 0.006)
+	draw_circle(staff_tip, orb_r * 2.4 * orb_pulse, Color(orb_col.r, orb_col.g, orb_col.b, 0.08))
 	draw_circle(staff_tip, orb_r * 1.8, Color(orb_col.r, orb_col.g, orb_col.b, 0.18))
 	# orb
 	draw_circle(staff_tip, orb_r, orb_col)
@@ -244,6 +276,12 @@ func _draw():
 		var p0 = staff_tip + Vector2(cos(a), sin(a)) * (orb_r + 1)
 		var p1 = staff_tip + Vector2(cos(a), sin(a)) * (orb_r + 7)
 		draw_line(p0, p1, Color(accent.r, accent.g, accent.b, 0.7), 2.0)
+	# orbiting energy motes
+	var mt = Time.get_ticks_msec() * 0.004
+	for i in 3:
+		var ma = mt * (1 if i % 2 == 0 else -1) + i * TAU / 3.0
+		var mp = staff_tip + Vector2(cos(ma), sin(ma)) * (orb_r + 5.0)
+		draw_circle(mp, 1.5, Color(1, 1, 0.9, 0.7))
 
 	# floating sparkles (idle particles)
 	if stunned_time_left <= 0 and not dashing:
@@ -314,12 +352,12 @@ func _draw():
 		draw_set_transform(Vector2.ZERO)
 
 	# dash charge pips below
-	for i in DASH_CHARGES_MAX:
-		var px  = (i - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	for i in dash_charges_max:
+		var px  = (i - (dash_charges_max - 1) * 0.5) * 14.0
 		var col = Color(0.6, 0.9, 1.0, 0.9) if i < dash_charges else Color(0.25, 0.25, 0.35, 0.5)
 		draw_circle(Vector2(px, RADIUS + 14), 4.0, col)
-	if dash_charges < DASH_CHARGES_MAX:
-		var px = (dash_charges - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	if dash_charges < dash_charges_max:
+		var px = (dash_charges - (dash_charges_max - 1) * 0.5) * 14.0
 		draw_arc(Vector2(px, RADIUS + 14), 4.5, -PI/2,
 			-PI/2 + TAU * (dash_charge_timer / DASH_CHARGE_REGEN), 16,
 			Color(0.6, 0.9, 1.0, 0.8), 2.0)

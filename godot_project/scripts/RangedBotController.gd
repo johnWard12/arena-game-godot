@@ -48,7 +48,12 @@ func ai_decide():
 		return
 
 	# barrier when low HP
-	if hp < max_hp * 0.45 and cd_a3 <= 0 and randf() < 0.5:
+	if hp < max_hp * 0.45 and cd_shift <= 0 and randf() < 0.5:
+		try_shift(opponent)
+		return
+
+	# Arcane Fan — close-range burst spread
+	if d < FLEE_RANGE and cd_a3 <= 0 and randf() < 0.6:
 		try_a3(opponent)
 		return
 
