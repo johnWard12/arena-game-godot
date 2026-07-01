@@ -13,20 +13,30 @@ var apply_slow := 0.0
 var apply_slow_pct := 0.5
 var obstacle_rects: Array[Rect2] = []
 
+# When true, reports whether this projectile landed back to owner_entity via
+# register_ability_result() — used for passives like Mage's Overcharge.
+var report_result := false
+
 func _physics_process(delta):
 	lifetime -= delta
 	if lifetime <= 0:
+		_report_miss()
 		queue_free()
 		return
 	global_position += velocity * delta
 	queue_redraw()
 	for obstacle in obstacle_rects:
 		if obstacle.grow(proj_radius_visual).has_point(global_position):
+			_report_miss()
 			queue_free()
 			return
 	if target != null and is_instance_valid(target) and target.alive:
 		if global_position.distance_to(target.global_position) <= hit_radius + target.RADIUS:
 			_on_hit()
+
+func _report_miss():
+	if report_result and owner_entity != null and is_instance_valid(owner_entity) and owner_entity.has_method("register_ability_result"):
+		owner_entity.register_ability_result(false)
 
 func _on_hit():
 	var landed := false
@@ -37,6 +47,8 @@ func _on_hit():
 	if landed and apply_slow > 0 and target != null and is_instance_valid(target) and target.alive:
 		target.slowed_time_left = apply_slow
 		target.slow_pct = apply_slow_pct
+	if report_result and owner_entity != null and is_instance_valid(owner_entity) and owner_entity.has_method("register_ability_result"):
+		owner_entity.register_ability_result(landed)
 	queue_free()
 
 func _draw():

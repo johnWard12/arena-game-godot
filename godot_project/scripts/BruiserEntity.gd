@@ -50,11 +50,16 @@ func _ready():
 	max_hp         = BRUISER_MAX_HP
 	base_color     = Color(0.95, 0.55, 0.15)
 	speed_override = BRUISER_MAX_SPEED
+	stun_resist_mult = 0.85  # Steady Footing: 15% less duration on incoming stuns/freezes
 
 func _physics_process(delta):
 	tremor_fx_left  = max(0.0, tremor_fx_left - delta)
 	shield_bash_fx  = max(0.0, shield_bash_fx - delta)
 	super._physics_process(delta)
+
+# Blood-lust is a Duelist-only passive.
+func on_landed_parry():
+	pass
 
 # ---- Ability overrides ----
 
@@ -80,7 +85,7 @@ func resolve_a1(opp: Entity):
 		var dmg = round(SHATTER_DMG * combo_mult())
 		deal_damage(opp, dmg)
 		if opp.alive:
-			opp.stunned_time_left = SHATTER_STUN
+			opp.apply_stun(SHATTER_STUN)
 		add_combo_stack()
 	cd_a1 = SHATTER_CD
 	recovering = {"type": "a1", "time_left": SHATTER_RECOVERY, "total": SHATTER_RECOVERY}
@@ -115,7 +120,7 @@ func resolve_ult(opp: Entity):
 		var dmg = round(BRUISER_ULT_DMG_BASE + missing_ratio * BRUISER_ULT_DMG_BONUS)
 		deal_damage(opp, dmg)
 		if opp.alive:
-			opp.stunned_time_left = 0.5
+			opp.apply_stun(0.5)
 		add_combo_stack()
 	ult_charge = 0.0
 	recovering = {"type": "ult", "time_left": BRUISER_ULT_RECOVERY, "total": BRUISER_ULT_RECOVERY}
@@ -132,7 +137,7 @@ func resolve_a3(opp: Entity):
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= SHIELD_BASH_RANGE:
 		if deal_damage(opp, SHIELD_BASH_DMG):
 			if opp.alive:
-				opp.stunned_time_left = SHIELD_BASH_STUN
+				opp.apply_stun(SHIELD_BASH_STUN)
 				opp.velocity = (opp.global_position - global_position).normalized() * SHIELD_BASH_KNOCKBACK
 	cd_a3 = SHIELD_BASH_CD
 	recovering = {"type": "a3", "time_left": SHIELD_BASH_RECOVERY, "total": SHIELD_BASH_RECOVERY}

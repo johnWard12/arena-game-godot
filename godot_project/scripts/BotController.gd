@@ -53,12 +53,13 @@ func ai_decide():
 		try_ult(opponent)
 		return
 
-	if d > 100 and d <= A3_RANGE and cd_a3 <= 0 and dash_charges > 0 and randf() < 0.35:
-		try_a3(opponent)
-		return
-
 	if d <= A1_RANGE and cd_a1 <= 0 and randf() < 0.4:
 		try_a1(opponent)
+		return
+
+	# Sword Throw — ranged poke/slow while not yet in melee range
+	if d > AUTO_RANGE and d <= 500 and cd_a3 <= 0 and randf() < 0.35:
+		try_a3(opponent)
 		return
 
 	# lunge as a gap-closer — much more eager to use it on a kiting ranged opponent

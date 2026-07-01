@@ -39,6 +39,11 @@ const RULT_DMG_MISSING_BONUS = 48.0
 
 var nova_fx_left := 0.0
 
+# Overcharge: landing 2 damaging abilities (Bolt/Burst/Ult) in a row without
+# missing shaves a bit off Bolt's and Burst's current cooldowns.
+var overcharge_streak := 0
+const OVERCHARGE_CD_REDUCTION := 0.3
+
 func _ready():
 	hp     = RANGED_MAX_HP
 	max_hp = RANGED_MAX_HP
@@ -47,6 +52,20 @@ func _ready():
 func _physics_process(delta):
 	nova_fx_left = max(0.0, nova_fx_left - delta)
 	super._physics_process(delta)
+
+# Blood-lust is a Duelist-only passive.
+func on_landed_parry():
+	pass
+
+func register_ability_result(landed: bool):
+	if landed:
+		overcharge_streak += 1
+		if overcharge_streak >= 2:
+			overcharge_streak = 0
+			cd_a1 = max(0.0, cd_a1 - OVERCHARGE_CD_REDUCTION)
+			cd_a2 = max(0.0, cd_a2 - OVERCHARGE_CD_REDUCTION)
+	else:
+		overcharge_streak = 0
 
 # ---- No combo system for ranged ----
 func combo_mult() -> float:
@@ -72,7 +91,7 @@ func try_a1(opp: Entity):
 func resolve_a1(opp: Entity):
 	facing = get_aim_dir(opp)
 	var dmg = round(BOLT_DMG * combo_mult())
-	_fire(facing, BOLT_SPEED, BOLT_RADIUS, dmg, opp, Color(0.4, 0.85, 1.0), 11.0, BOLT_SLOW_DUR, BOLT_SLOW_PCT)
+	_fire(facing, BOLT_SPEED, BOLT_RADIUS, dmg, opp, Color(0.4, 0.85, 1.0), 11.0, BOLT_SLOW_DUR, BOLT_SLOW_PCT, true)
 	add_combo_stack()
 	cd_a1 = BOLT_CD
 	recovering = {"type": "a1", "time_left": BOLT_RECOVERY, "total": BOLT_RECOVERY}
@@ -86,11 +105,14 @@ func resolve_a2(opp: Entity):
 	if opp != null:
 		facing = get_aim_dir(opp)
 	nova_fx_left = 0.35
+	var landed := false
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= NOVA_RADIUS:
 		var dmg = round(NOVA_DMG * combo_mult())
 		if deal_damage(opp, dmg):
-			opp.stunned_time_left = max(opp.stunned_time_left, NOVA_FREEZE)
+			landed = true
+			opp.apply_stun(NOVA_FREEZE)
 			add_combo_stack()
+	register_ability_result(landed)
 	cd_a2 = NOVA_CD
 	recovering = {"type": "a2", "time_left": NOVA_RECOVERY, "total": NOVA_RECOVERY}
 
@@ -103,7 +125,7 @@ func resolve_ult(opp: Entity):
 	facing = get_aim_dir(opp)
 	var missing_ratio = 1.0 - (opp.hp / opp.max_hp) if opp != null and opp.alive else 0.0
 	var dmg = round(RULT_DMG_BASE + missing_ratio * RULT_DMG_MISSING_BONUS)
-	_fire(facing, RULT_SPEED, RULT_RADIUS, dmg, opp, Color(1.0, 0.3, 0.85), 16.0)
+	_fire(facing, RULT_SPEED, RULT_RADIUS, dmg, opp, Color(1.0, 0.3, 0.85), 16.0, 0.0, 0.5, true)
 	ult_charge = 0.0
 	recovering = {"type": "ult", "time_left": RULT_RECOVERY, "total": RULT_RECOVERY}
 
@@ -116,21 +138,6 @@ func try_a3(_opp: Entity):
 
 func resolve_a3(_opp: Entity):
 	pass
-
-func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_pct: float = 0.5):
-	var proj = load("res://scripts/Projectile.gd").new()
-	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
-	proj.velocity = dir * speed
-	proj.damage = dmg
-	proj.hit_radius = radius
-	proj.owner_entity = self
-	proj.target = tgt
-	proj.proj_color = col
-	proj.proj_radius_visual = vis_r
-	proj.apply_slow = slow
-	proj.apply_slow_pct = slow_pct
-	proj.obstacle_rects = obstacle_rects
-	projectile_spawned.emit(proj)
 
 # ---- Drawing override ----
 func _draw():
