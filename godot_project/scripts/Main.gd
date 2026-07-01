@@ -2,7 +2,7 @@ extends Node2D
 
 var player: Entity
 var bot: Entity
-var arena_rect := Rect2(Vector2(60, 60), Vector2(1800, 960))
+var arena_rect := Rect2(Vector2(30, 30), Vector2(1860, 1020))
 var map_obstacles: Array[Rect2] = []
 var health_packs := []
 
@@ -12,7 +12,7 @@ var win_label: Label
 var cd_hud: Node2D   # custom-drawn cooldown panel
 
 const HEALTH_PACK_HEAL = 28.0
-const HEALTH_PACK_RADIUS = 34.0
+const HEALTH_PACK_RADIUS = 44.0
 const HEALTH_PACK_RESPAWN = 12.0
 
 func _ready():
@@ -25,7 +25,7 @@ func _ready():
 		"bruiser": player = BruiserPlayerController.new()
 		_:         player = PlayerController.new()
 	add_child(player)
-	player.global_position = Vector2(510, 540)
+	player.global_position = Vector2(450, 540)
 	player.arena_rect = arena_rect
 	player.obstacle_rects = map_obstacles
 	player.projectile_spawned.connect(func(p):
@@ -38,7 +38,7 @@ func _ready():
 		"bruiser": bot = BruiserBotController.new()
 		_:         bot = BotController.new()
 	add_child(bot)
-	bot.global_position = Vector2(1350, 540)
+	bot.global_position = Vector2(1470, 540)
 	bot.arena_rect = arena_rect
 	bot.obstacle_rects = map_obstacles
 	bot.projectile_spawned.connect(func(p):
@@ -57,16 +57,16 @@ func _ready():
 
 func build_map():
 	map_obstacles = [
-		Rect2(Vector2(860, 245), Vector2(200, 70)),
-		Rect2(Vector2(860, 765), Vector2(200, 70)),
-		Rect2(Vector2(445, 455), Vector2(80, 170)),
-		Rect2(Vector2(1395, 455), Vector2(80, 170)),
-		Rect2(Vector2(735, 505), Vector2(110, 70)),
-		Rect2(Vector2(1075, 505), Vector2(110, 70)),
+		Rect2(Vector2(857, 227), Vector2(207, 74)),
+		Rect2(Vector2(857, 779), Vector2(207, 74)),
+		Rect2(Vector2(428, 450), Vector2(83, 181)),
+		Rect2(Vector2(1410, 450), Vector2(83, 181)),
+		Rect2(Vector2(728, 503), Vector2(114, 74)),
+		Rect2(Vector2(1079, 503), Vector2(114, 74)),
 	]
 	health_packs = [
-		{"pos": Vector2(960, 405), "active": true, "respawn_left": 0.0},
-		{"pos": Vector2(960, 675), "active": true, "respawn_left": 0.0},
+		{"pos": Vector2(960, 397), "active": true, "respawn_left": 0.0},
+		{"pos": Vector2(960, 683), "active": true, "respawn_left": 0.0},
 	]
 
 func build_ui():
@@ -114,7 +114,7 @@ func build_ui():
 
 	# hint
 	var hint = Label.new()
-	hint.text = "WASD move  |  Shift/Space dash  |  LMB auto (hold)  |  E  Q  F  R abilities  |  RMB/G parry  |  Esc = char select"
+	hint.text = "WASD move  |  Shift/Space dash  |  LMB auto (hold)  |  E  Q  F  R abilities  |  RMB/G parry  |  Backspace = char select"
 	hint.position = Vector2(20, 1050)
 	hint.add_theme_font_size_override("font_size", 12)
 	canvas.add_child(hint)

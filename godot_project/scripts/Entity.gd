@@ -11,13 +11,13 @@ const CARRY = 0.7
 
 const AUTO_CD = 0.55
 const AUTO_DMG = 4.0
-const AUTO_RANGE = 130.0
+const AUTO_RANGE = 150.0
 
 const A1_CAST = 0.09
 const A1_RECOVERY = 0.13
 const A1_CD = 1.8
 const A1_DMG = 12.0
-const A1_RANGE = 125.0
+const A1_RANGE = 145.0
 const A1_SLOW_DUR = 2.0
 const A1_SLOW_PCT = 0.30
 
@@ -26,15 +26,15 @@ const A2_RECOVERY = 0.22
 const A2_MISS_RECOVERY = 0.45
 const A2_CD = 6.5
 const A2_DMG = 20.4
-const A2_RANGE = 130.0
-const A2_LUNGE_DIST = 230.0
+const A2_RANGE = 150.0
+const A2_LUNGE_DIST = 270.0
 const A2_LUNGE_DUR = 0.13
 
 const ULT_CAST = 0.45
 const ULT_RECOVERY = 0.3
 const ULT_DMG_BASE = 35.0
 const ULT_DMG_MISSING_BONUS = 40.0
-const ULT_RANGE = 135.0
+const ULT_RANGE = 155.0
 const ULT_CHARGE_MAX = 14.0
 
 const COMBO_MAX = 3
@@ -64,12 +64,12 @@ const SWORD_THROW_SLOW_PCT = 0.30
 const DASH_CHARGES_MAX  = 2
 const DASH_CHARGE_REGEN = 2.5
 
-const RADIUS = 24.0
+const RADIUS = 34.0
 const TRAIL_LIFETIME_MS = 220
 
 # sword swing tunables
-const SWORD_LEN = 72.0
-const SWORD_WIDTH = 11.0
+const SWORD_LEN = 100.0
+const SWORD_WIDTH = 15.0
 
 # ---- State ----
 var is_player := false

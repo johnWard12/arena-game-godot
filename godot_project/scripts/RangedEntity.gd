@@ -21,7 +21,7 @@ const BOLT_SLOW_PCT = 0.25
 const NOVA_CAST     = 0.2
 const NOVA_RECOVERY = 0.25
 const NOVA_CD       = 4.5
-const NOVA_RADIUS   = 155.0
+const NOVA_RADIUS   = 190.0
 const NOVA_DMG      = 20.0
 const NOVA_FREEZE   = 1.0
 
