@@ -7,7 +7,7 @@ const BRUISER_ACCEL      = 2800.0
 const BRUISER_FRICTION   = 1400.0
 
 const BRUISER_AUTO_CD    = 0.70
-const BRUISER_AUTO_DMG   = 4.0
+const BRUISER_AUTO_DMG   = 3.0
 const BRUISER_AUTO_RANGE = 145.0
 
 # E — Shatter: shield slam + stun
@@ -97,6 +97,7 @@ func resolve_a2(opp: Entity):
 		deal_damage(opp, dmg)
 		if opp.alive:
 			opp.slowed_time_left = TREMOR_SLOW
+			opp.slow_pct = 0.5
 		add_combo_stack()
 	cd_a2 = TREMOR_CD
 	recovering = {"type": "a2", "time_left": TREMOR_RECOVERY, "total": TREMOR_RECOVERY}

@@ -6,7 +6,7 @@ const RANGED_MAX_HP = 120.0
 
 const RPROJ_SPEED  = 1360.0
 const RPROJ_RADIUS = 28.0
-const RPROJ_DMG    = 5.75
+const RPROJ_DMG    = 6.75
 const RPROJ_CD     = 0.75
 
 const BOLT_CAST     = 0.25
@@ -15,13 +15,15 @@ const BOLT_CD       = 3.5
 const BOLT_SPEED    = 1800.0
 const BOLT_RADIUS   = 20.0
 const BOLT_DMG      = 22.0
+const BOLT_SLOW_DUR = 1.5
+const BOLT_SLOW_PCT = 0.25
 
 const NOVA_CAST     = 0.2
 const NOVA_RECOVERY = 0.25
 const NOVA_CD       = 4.5
 const NOVA_RADIUS   = 155.0
-const NOVA_DMG      = 18.0
-const NOVA_SLOW     = 1.2
+const NOVA_DMG      = 20.0
+const NOVA_FREEZE   = 1.0
 
 const BARRIER_CD  = 7.0
 const BARRIER_HP  = 35.0
@@ -70,7 +72,7 @@ func try_a1(opp: Entity):
 func resolve_a1(opp: Entity):
 	facing = get_aim_dir(opp)
 	var dmg = round(BOLT_DMG * combo_mult())
-	_fire(facing, BOLT_SPEED, BOLT_RADIUS, dmg, opp, Color(0.4, 0.85, 1.0), 11.0, 1.8)
+	_fire(facing, BOLT_SPEED, BOLT_RADIUS, dmg, opp, Color(0.4, 0.85, 1.0), 11.0, BOLT_SLOW_DUR, BOLT_SLOW_PCT)
 	add_combo_stack()
 	cd_a1 = BOLT_CD
 	recovering = {"type": "a1", "time_left": BOLT_RECOVERY, "total": BOLT_RECOVERY}
@@ -87,7 +89,7 @@ func resolve_a2(opp: Entity):
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= NOVA_RADIUS:
 		var dmg = round(NOVA_DMG * combo_mult())
 		if deal_damage(opp, dmg):
-			opp.slowed_time_left = NOVA_SLOW
+			opp.stunned_time_left = max(opp.stunned_time_left, NOVA_FREEZE)
 			add_combo_stack()
 	cd_a2 = NOVA_CD
 	recovering = {"type": "a2", "time_left": NOVA_RECOVERY, "total": NOVA_RECOVERY}
@@ -115,7 +117,7 @@ func try_a3(_opp: Entity):
 func resolve_a3(_opp: Entity):
 	pass
 
-func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0):
+func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_pct: float = 0.5):
 	var proj = load("res://scripts/Projectile.gd").new()
 	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
 	proj.velocity = dir * speed
@@ -126,6 +128,7 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	proj.proj_color = col
 	proj.proj_radius_visual = vis_r
 	proj.apply_slow = slow
+	proj.apply_slow_pct = slow_pct
 	proj.obstacle_rects = obstacle_rects
 	projectile_spawned.emit(proj)
 
