@@ -53,7 +53,7 @@ const CLASSES = [
 		"color": BRUISER_COLOR,
 		"key":   "bruiser",
 		"hp":    "HP  180",
-		"lines": ["Tanky melee brawler.", "Lifesteal + sustain.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Shield Bash F", "Jugger     R"]
+		"lines": ["Tanky melee brawler.", "CC chains + sustain.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Shield Bash F", "Jugger     R"]
 	},
 ]
 
