@@ -149,7 +149,7 @@ func _get_ability_defs() -> Array:
 			{"key": "LMB", "name": "Auto",    "cd": player.cd_auto, "max": Entity.AUTO_CD,                 "col": Color(0.37, 0.88, 0.75)},
 			{"key": "E",   "name": "Strike",  "cd": player.cd_a1,   "max": Entity.A1_CD,                   "col": Color(0.37, 0.88, 0.75)},
 			{"key": "Q",   "name": "Lunge",   "cd": player.cd_a2,   "max": Entity.A2_CD,                   "col": Color(1.0, 0.5, 0.2)},
-			{"key": "F",   "name": "Bspot",   "cd": player.cd_a3,   "max": Entity.A3_CD,                   "col": Color(0.37, 0.88, 0.75)},
+			{"key": "F",   "name": "Throw",   "cd": player.cd_a3,   "max": Entity.SWORD_THROW_CD,          "col": Color(0.8, 0.85, 0.95)},
 			{"key": "R",   "name": "Execute", "cd": 0.0,            "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.3, 0.48)},
 			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},

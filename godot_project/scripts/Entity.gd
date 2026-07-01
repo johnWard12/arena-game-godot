@@ -44,8 +44,20 @@ const PARRY_CD = 5.0
 const PARRY_STUN_DUR = 0.65
 const STUN_DUR = 0.5
 
-const A3_CD    = 5.0
-const A3_RANGE = 260.0
+const BLOODLUST_DUR          = 1.5
+const BLOODLUST_ATKSPD_MULT  = 1.10
+const BLOODLUST_MOVESPD_MULT = 1.10
+
+# F — Sword Throw: thrown blade, low damage, slows on hit
+const SWORD_THROW_CAST     = 0.12
+const SWORD_THROW_RECOVERY = 0.18
+const SWORD_THROW_CD       = 4.0
+const SWORD_THROW_SPEED    = 1400.0
+const SWORD_THROW_RADIUS   = 16.0
+const SWORD_THROW_DMG_BASE          = 6.0
+const SWORD_THROW_DMG_MISSING_BONUS = 8.0
+const SWORD_THROW_SLOW_DUR = 2.0
+const SWORD_THROW_SLOW_PCT = 0.30
 
 const DASH_CHARGES_MAX  = 2
 const DASH_CHARGE_REGEN = 2.5
@@ -95,6 +107,13 @@ var stunned_time_left := 0.0
 var slowed_time_left  := 0.0
 var slow_pct          := 0.5
 
+# Multiplier applied to any incoming stun/freeze duration (1.0 = no resistance).
+# Subclasses override this in _ready() to grant CC resistance.
+var stun_resist_mult  := 1.0
+
+# Blood-lust: granted on a successful parry (see on_landed_parry())
+var bloodlust_time_left := 0.0
+
 var cd_a3             := 0.0
 var barrier_hp_left   := 0.0
 var barrier_time_left := 0.0
@@ -108,10 +127,6 @@ var swing_arc_span := 0.0
 
 # hit flash on this entity when it receives damage
 var hit_flash_left := 0.0
-
-# teleport flash on this entity after Blind Spot (A3) fires
-var teleport_fx_left := 0.0
-const TELEPORT_FX_DUR := 0.3
 
 var dash_charges := DASH_CHARGES_MAX
 var dash_charge_timer := 0.0
@@ -131,10 +146,12 @@ func _physics_process(delta):
 	prune_trail(now)
 	if not alive:
 		return
-	cd_auto = max(0.0, cd_auto - delta)
-	cd_a1 = max(0.0, cd_a1 - delta)
-	cd_a2 = max(0.0, cd_a2 - delta)
-	cd_a3 = max(0.0, cd_a3 - delta)
+	bloodlust_time_left = max(0.0, bloodlust_time_left - delta)
+	var atkspd_mult = BLOODLUST_ATKSPD_MULT if bloodlust_time_left > 0 else 1.0
+	cd_auto = max(0.0, cd_auto - delta * atkspd_mult)
+	cd_a1 = max(0.0, cd_a1 - delta * atkspd_mult)
+	cd_a2 = max(0.0, cd_a2 - delta * atkspd_mult)
+	cd_a3 = max(0.0, cd_a3 - delta * atkspd_mult)
 	parry_cd_left = max(0.0, parry_cd_left - delta)
 	if dash_charges < DASH_CHARGES_MAX:
 		dash_charge_timer += delta
@@ -142,7 +159,6 @@ func _physics_process(delta):
 			dash_charge_timer -= DASH_CHARGE_REGEN
 			dash_charges += 1
 	hit_flash_left   = max(0.0, hit_flash_left - delta)
-	teleport_fx_left = max(0.0, teleport_fx_left - delta)
 	slowed_time_left = max(0.0, slowed_time_left - delta)
 	if barrier_time_left > 0:
 		barrier_time_left = max(0.0, barrier_time_left - delta)
@@ -230,6 +246,8 @@ func _physics_process(delta):
 			speed_mult = 0.5
 		elif debuffed_slow:
 			speed_mult = 1.0 - slow_pct
+		if bloodlust_time_left > 0:
+			speed_mult *= BLOODLUST_MOVESPD_MULT
 		var has_input = input_vec.length() > 0.01
 		if has_input:
 			facing = input_vec.normalized()
@@ -351,6 +369,8 @@ func can_parry() -> bool:
 func get_status_accent(default_color: Color) -> Color:
 	if stunned_time_left > 0:
 		return Color(0.9, 0.9, 0.3)
+	if bloodlust_time_left > 0:
+		return Color(0.85, 0.1, 0.15)
 	if parrying:
 		return Color(0.3, 0.7, 1.0)
 	if lunging:
@@ -379,12 +399,23 @@ func add_combo_stack():
 	combo_stacks = min(COMBO_MAX, combo_stacks + 1)
 	combo_time_left = COMBO_DECAY
 
+# Called on whoever successfully parried an attack. Base (Duelist) behavior
+# grants Blood-lust; other classes override this to no-op.
+func on_landed_parry():
+	bloodlust_time_left = BLOODLUST_DUR
+
+# Single choke point for applying a stun/freeze so per-class CC resistance
+# (e.g. Bruiser's Steady Footing) only has to live in one place.
+func apply_stun(duration: float):
+	stunned_time_left = max(stunned_time_left, duration * stun_resist_mult)
+
 func deal_damage(target: Entity, amount: float) -> bool:
 	if target == null or not target.alive:
 		return false
 	if target.parrying:
 		target.parrying = false
-		stunned_time_left = PARRY_STUN_DUR
+		target.on_landed_parry()
+		apply_stun(PARRY_STUN_DUR)
 		casting = null
 		lunging = false
 		return false
@@ -397,7 +428,7 @@ func deal_damage(target: Entity, amount: float) -> bool:
 			return true
 	if target.casting != null:
 		target.casting = null
-		target.stunned_time_left = STUN_DUR
+		target.apply_stun(STUN_DUR)
 	target.hp = max(0.0, target.hp - amount)
 	target.hit_flash_left = 0.25
 	if target.hp <= 0 and target.alive:
@@ -452,7 +483,7 @@ func resolve_lunge_strike(opp: Entity):
 		if deal_damage(opp, dmg):
 			landed = true
 			if opp.alive:
-				opp.stunned_time_left = 0.5
+				opp.apply_stun(0.5)
 			add_combo_stack()
 	var recovery_time = A2_RECOVERY if landed else A2_MISS_RECOVERY
 	recovering = {"type": "a2", "time_left": recovery_time, "total": recovery_time}
@@ -492,23 +523,34 @@ func try_parry():
 	parry_cd_left = PARRY_CD
 
 func try_a3(opp: Entity):
-	if not can_start_ability() or cd_a3 > 0 or opp == null or dash_charges <= 0:
+	if not can_start_ability() or cd_a3 > 0 or opp == null:
 		return
-	var d = global_position.distance_to(opp.global_position)
-	if d > A3_RANGE:
-		return
-	dash_charges -= 1
-	if dash_charges == 0:
-		dash_charge_timer = 0.0
-	var behind = opp.global_position + (opp.global_position - global_position).normalized() * (RADIUS * 2.0)
-	global_position = behind
-	facing = get_aim_dir(opp)
-	cd_a3 = A3_CD
-	push_trail()
-	teleport_fx_left = TELEPORT_FX_DUR
+	casting = {"type": "a3", "time_left": SWORD_THROW_CAST, "total": SWORD_THROW_CAST, "opp": opp}
 
-func resolve_a3(_opp: Entity):
-	pass
+func resolve_a3(opp: Entity):
+	facing = get_aim_dir(opp)
+	var missing_ratio = 1.0 - (opp.hp / opp.max_hp) if opp != null and opp.alive else 0.0
+	var dmg = round(SWORD_THROW_DMG_BASE + missing_ratio * SWORD_THROW_DMG_MISSING_BONUS)
+	_fire(facing, SWORD_THROW_SPEED, SWORD_THROW_RADIUS, dmg, opp,
+		Color(0.8, 0.85, 0.95), 10.0, SWORD_THROW_SLOW_DUR, SWORD_THROW_SLOW_PCT)
+	cd_a3 = SWORD_THROW_CD
+	recovering = {"type": "a3", "time_left": SWORD_THROW_RECOVERY, "total": SWORD_THROW_RECOVERY}
+
+func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_pct: float = 0.5, track: bool = false):
+	var proj = load("res://scripts/Projectile.gd").new()
+	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
+	proj.velocity = dir * speed
+	proj.damage = dmg
+	proj.hit_radius = radius
+	proj.owner_entity = self
+	proj.target = tgt
+	proj.proj_color = col
+	proj.proj_radius_visual = vis_r
+	proj.apply_slow = slow
+	proj.apply_slow_pct = slow_pct
+	proj.report_result = track
+	proj.obstacle_rects = obstacle_rects
+	projectile_spawned.emit(proj)
 
 # ---- Drawing helpers ----
 func _draw_hud(now: int, accent: Color):
@@ -516,14 +558,10 @@ func _draw_hud(now: int, accent: Color):
 	if hit_flash_left > 0:
 		draw_circle(Vector2.ZERO, RADIUS + 5, Color(1, 1, 1, (hit_flash_left / 0.25) * 0.75))
 
-	# teleport arrival flash (Blind Spot) — expanding fading ring so the
-	# instant reposition doesn't read as a glitch
-	if teleport_fx_left > 0:
-		var tpct = 1.0 - (teleport_fx_left / TELEPORT_FX_DUR)
-		var tr = RADIUS + 6.0 + tpct * 34.0
-		var talpha = (1.0 - tpct) * 0.85
-		draw_arc(Vector2.ZERO, tr, 0, TAU, 40, Color(0.65, 0.85, 1.0, talpha), 3.0)
-		draw_circle(Vector2.ZERO, RADIUS * (1.0 - tpct * 0.6), Color(0.75, 0.9, 1.0, talpha * 0.4))
+	# Blood-lust aura (active for BLOODLUST_DUR after landing a parry)
+	if bloodlust_time_left > 0:
+		var pulse = 0.5 + 0.4 * sin(now * 0.025)
+		draw_arc(Vector2.ZERO, RADIUS + 10, 0, TAU, 40, Color(0.9, 0.1, 0.15, pulse), 3.0)
 
 	# HP bar above head
 	var hp_pct = hp / max_hp

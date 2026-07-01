@@ -39,7 +39,7 @@ const CLASSES = [
 		"color": MELEE_COLOR,
 		"key":   "melee",
 		"hp":    "HP  150",
-		"lines": ["Melee glass cannon.", "Combos + execute ult.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Blind Spot F", "Execute    R"]
+		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Execute    R"]
 	},
 	{
 		"label": "MAGE",
