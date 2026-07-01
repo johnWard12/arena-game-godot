@@ -12,14 +12,14 @@ const BRUISER_AUTO_RANGE = 167.0
 
 # E — Shatter: shield slam + stun (instant)
 const SHATTER_RECOVERY = 0.25
-const SHATTER_CD       = 4.5
+const SHATTER_CD       = 5.5
 const SHATTER_DMG      = 22.0
 const SHATTER_RANGE    = 151.0
 const SHATTER_STUN     = 0.70
 
 # Q — Tremor: ground stomp AoE + slow (instant)
 const TREMOR_RECOVERY = 0.25
-const TREMOR_CD       = 7.0
+const TREMOR_CD       = 8.0
 const TREMOR_DMG      = 18.0
 const TREMOR_RADIUS   = 180.0
 const TREMOR_SLOW     = 2.0
@@ -33,7 +33,7 @@ const SEISMIC_KNOCKUP    = 1.0
 const SEISMIC_RECOVERY   = 0.65
 
 # F — Unbreakable: CC cleanse + immunity + damage reduction
-const UNBREAKABLE_CD           = 7.0
+const UNBREAKABLE_CD           = 8.5
 const UNBREAKABLE_DUR          = 3.0
 const UNBREAKABLE_DMG_REDUCE   = 0.25
 const UNBREAKABLE_MOVE_MULT    = 1.40
@@ -50,6 +50,8 @@ func _ready():
 	speed_override = BRUISER_MAX_SPEED
 	stun_resist_mult = 0.85
 	recovery_slows_movement = false  # Steady Footing: 15% less duration on incoming stuns/freezes
+	dash_charges_max = 1
+	dash_charges = 1
 
 func _physics_process(delta):
 	tremor_fx_left     = max(0.0, tremor_fx_left - delta)
@@ -323,12 +325,12 @@ func _draw_bruiser(now: int, accent: Color):
 			  Color(accent.r, accent.g, accent.b, 0.65), 2.5)
 
 	# --- DASH CHARGE PIPS ---
-	for i in DASH_CHARGES_MAX:
-		var px = (i - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	for i in dash_charges_max:
+		var px = (i - (dash_charges_max - 1) * 0.5) * 14.0
 		var pip_col = Color(accent.r, accent.g, accent.b, 0.85) if i < dash_charges else Color(0.2, 0.2, 0.25, 0.5)
 		draw_circle(Vector2(px, RADIUS + 14), 4.0, pip_col)
-	if dash_charges < DASH_CHARGES_MAX:
-		var px = (dash_charges - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	if dash_charges < dash_charges_max:
+		var px = (dash_charges - (dash_charges_max - 1) * 0.5) * 14.0
 		draw_arc(Vector2(px, RADIUS + 14), 4.5, -PI/2,
 			-PI/2 + TAU * (dash_charge_timer / DASH_CHARGE_REGEN), 16,
 			Color(accent.r, accent.g, accent.b, 0.8), 2.0)

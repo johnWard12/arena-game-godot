@@ -150,6 +150,7 @@ var swing_arc_span := 0.0
 # hit flash on this entity when it receives damage
 var hit_flash_left := 0.0
 
+var dash_charges_max := DASH_CHARGES_MAX
 var dash_charges := DASH_CHARGES_MAX
 var dash_charge_timer := 0.0
 
@@ -182,7 +183,7 @@ func _physics_process(delta):
 	cd_a2 = max(0.0, cd_a2 - delta * atkspd_mult)
 	cd_a3 = max(0.0, cd_a3 - delta * atkspd_mult)
 	parry_cd_left = max(0.0, parry_cd_left - delta)
-	if dash_charges < DASH_CHARGES_MAX:
+	if dash_charges < dash_charges_max:
 		dash_charge_timer += delta
 		if dash_charge_timer >= DASH_CHARGE_REGEN:
 			dash_charge_timer -= DASH_CHARGE_REGEN
@@ -793,12 +794,12 @@ func _draw_duelist(now: int, accent: Color):
 		Color(1.00, 0.28, 0.16, 0.80), 2.5)
 
 	# --- DASH CHARGE PIPS ---
-	for i in DASH_CHARGES_MAX:
-		var px = (i - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	for i in dash_charges_max:
+		var px = (i - (dash_charges_max - 1) * 0.5) * 14.0
 		var pip_col = Color(accent.r, accent.g, accent.b, 0.85) if i < dash_charges else Color(0.2, 0.2, 0.25, 0.5)
 		draw_circle(Vector2(px, RADIUS + 14), 4.0, pip_col)
-	if dash_charges < DASH_CHARGES_MAX:
-		var px = (dash_charges - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	if dash_charges < dash_charges_max:
+		var px = (dash_charges - (dash_charges_max - 1) * 0.5) * 14.0
 		draw_arc(Vector2(px, RADIUS + 14), 4.5, -PI/2,
 			-PI/2 + TAU * (dash_charge_timer / DASH_CHARGE_REGEN), 16,
 			Color(accent.r, accent.g, accent.b, 0.8), 2.0)

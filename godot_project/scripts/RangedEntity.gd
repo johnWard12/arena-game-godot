@@ -330,12 +330,12 @@ func _draw():
 		draw_set_transform(Vector2.ZERO)
 
 	# dash charge pips below
-	for i in DASH_CHARGES_MAX:
-		var px  = (i - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	for i in dash_charges_max:
+		var px  = (i - (dash_charges_max - 1) * 0.5) * 14.0
 		var col = Color(0.6, 0.9, 1.0, 0.9) if i < dash_charges else Color(0.25, 0.25, 0.35, 0.5)
 		draw_circle(Vector2(px, RADIUS + 14), 4.0, col)
-	if dash_charges < DASH_CHARGES_MAX:
-		var px = (dash_charges - (DASH_CHARGES_MAX - 1) * 0.5) * 14.0
+	if dash_charges < dash_charges_max:
+		var px = (dash_charges - (dash_charges_max - 1) * 0.5) * 14.0
 		draw_arc(Vector2(px, RADIUS + 14), 4.5, -PI/2,
 			-PI/2 + TAU * (dash_charge_timer / DASH_CHARGE_REGEN), 16,
 			Color(0.6, 0.9, 1.0, 0.8), 2.0)
