@@ -6,6 +6,9 @@ var arena_rect := Rect2(Vector2(30, 30), Vector2(1860, 1020))
 var map_obstacles: Array[Rect2] = []
 var health_packs := []
 
+var shake_time_left  := 0.0
+var shake_intensity  := 0.0
+
 var hp_me: ProgressBar
 var hp_bot: ProgressBar
 var win_label: Label
@@ -48,6 +51,8 @@ func _ready():
 
 	player.opponent = bot
 	bot.opponent = player
+	player.screen_shake.connect(start_shake)
+	bot.screen_shake.connect(start_shake)
 
 	player.died.connect(func(): _on_died(player))
 	bot.died.connect(func(): _on_died(bot))
@@ -130,7 +135,7 @@ func _get_ability_defs() -> Array:
 			{"key": "E",   "name": "Shatter", "cd": player.cd_a1,   "max": BruiserEntity.SHATTER_CD,       "col": Color(1.0, 0.7, 0.2)},
 			{"key": "Q",   "name": "Tremor",  "cd": player.cd_a2,   "max": BruiserEntity.TREMOR_CD,        "col": Color(0.9, 0.4, 0.1)},
 			{"key": "F",   "name": "Unbrkbl", "cd": player.cd_a3,   "max": BruiserEntity.UNBREAKABLE_CD,  "col": Color(1.0, 1.0, 1.0)},
-			{"key": "R",   "name": "Jugger",  "cd": 0.0,            "max": 1.0, "charge": true,
+			{"key": "R",   "name": "Seismic", "cd": 0.0,            "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.25, 0.1)},
 			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},
 		]
@@ -140,7 +145,7 @@ func _get_ability_defs() -> Array:
 			{"key": "E",   "name": "Bolt",    "cd": player.cd_a1,   "max": RangedEntity.BOLT_CD,           "col": Color(0.4, 0.85, 1.0)},
 			{"key": "Q",   "name": "Burst",   "cd": player.cd_a2,   "max": RangedEntity.NOVA_CD,           "col": Color(0.72, 0.4, 1.0)},
 			{"key": "F",   "name": "Barrier", "cd": player.cd_a3,   "max": RangedEntity.BARRIER_CD,        "col": Color(0.3, 0.7, 1.0)},
-			{"key": "R",   "name": "Ult",     "cd": 0.0,            "max": 1.0, "charge": true,
+			{"key": "R",   "name": "VoidColl","cd": 0.0,            "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.3, 0.85)},
 			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},
 		]
@@ -150,10 +155,14 @@ func _get_ability_defs() -> Array:
 			{"key": "E",   "name": "Strike",  "cd": player.cd_a1,   "max": Entity.A1_CD,                   "col": Color(0.37, 0.88, 0.75)},
 			{"key": "Q",   "name": "Lunge",   "cd": player.cd_a2,   "max": Entity.A2_CD,                   "col": Color(1.0, 0.5, 0.2)},
 			{"key": "F",   "name": "Throw",   "cd": player.cd_a3,   "max": Entity.SWORD_THROW_CD,          "col": Color(0.8, 0.85, 0.95)},
-			{"key": "R",   "name": "Execute", "cd": 0.0,            "max": 1.0, "charge": true,
+			{"key": "R",   "name": "Storm",   "cd": 0.0,            "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.3, 0.48)},
 			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},
 		]
+
+func start_shake(intensity: float, duration: float):
+	shake_intensity = max(shake_intensity, intensity)
+	shake_time_left = max(shake_time_left, duration)
 
 func _process(delta):
 	update_health_packs(delta)
@@ -161,6 +170,14 @@ func _process(delta):
 		hp_me.value = player.hp
 	if is_instance_valid(bot):
 		hp_bot.value = bot.hp
+	if shake_time_left > 0:
+		shake_time_left -= delta
+		if shake_time_left > 0:
+			position = Vector2(randf_range(-shake_intensity, shake_intensity),
+				randf_range(-shake_intensity, shake_intensity))
+		else:
+			position = Vector2.ZERO
+			shake_intensity = 0.0
 	queue_redraw()
 
 func update_health_packs(delta: float):

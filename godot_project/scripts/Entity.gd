@@ -71,6 +71,15 @@ const TRAIL_LIFETIME_MS = 220
 const SWORD_LEN = 100.0
 const SWORD_WIDTH = 15.0
 
+# Shared CC / knockup
+const KNOCKUP_DUR = 1.0
+
+# Bladestorm (Duelist R)
+const BLADESTORM_DUR          = 1.5
+const BLADESTORM_HIT_INTERVAL = 0.30
+const BLADESTORM_DMG          = 14.0
+const BLADESTORM_RANGE        = 170.0
+
 # ---- State ----
 var is_player := false
 var base_color := Color(0.37, 0.88, 0.75)
@@ -85,6 +94,8 @@ var lunging := false
 var lunge_time_left := 0.0
 var lunge_dir := Vector2.ZERO
 var lunge_opponent: Entity = null
+var lunge_speed := 0.0
+var lunge_reach := 0.0
 
 var hp := 150.0
 var max_hp := 150.0
@@ -142,6 +153,10 @@ var dash_charge_timer := 0.0
 
 var walk_phase := 0.0
 
+var knockup_time_left    := 0.0
+var bladestorm_time_left := 0.0
+var bladestorm_hit_timer := 0.0
+
 var opponent: Entity = null
 var arena_rect := Rect2(Vector2.ZERO, Vector2(1000, 600))
 var obstacle_rects: Array[Rect2] = []
@@ -149,6 +164,7 @@ var trail := []
 
 signal died
 signal projectile_spawned(proj)
+signal screen_shake(intensity: float, duration: float)
 
 func _physics_process(delta):
 	var now = Time.get_ticks_msec()
@@ -167,8 +183,18 @@ func _physics_process(delta):
 		if dash_charge_timer >= DASH_CHARGE_REGEN:
 			dash_charge_timer -= DASH_CHARGE_REGEN
 			dash_charges += 1
-	hit_flash_left   = max(0.0, hit_flash_left - delta)
-	slowed_time_left = max(0.0, slowed_time_left - delta)
+	hit_flash_left    = max(0.0, hit_flash_left - delta)
+	slowed_time_left  = max(0.0, slowed_time_left - delta)
+	knockup_time_left = max(0.0, knockup_time_left - delta)
+	if bladestorm_time_left > 0:
+		bladestorm_time_left  = max(0.0, bladestorm_time_left - delta)
+		bladestorm_hit_timer  = max(0.0, bladestorm_hit_timer - delta)
+		if stunned_time_left <= 0 and bladestorm_hit_timer <= 0 and opponent != null and opponent.alive:
+			if global_position.distance_to(opponent.global_position) <= BLADESTORM_RANGE:
+				start_swing(360.0, 0.25)
+				deal_damage(opponent, BLADESTORM_DMG)
+				add_combo_stack()
+			bladestorm_hit_timer = BLADESTORM_HIT_INTERVAL
 	if barrier_time_left > 0:
 		barrier_time_left = max(0.0, barrier_time_left - delta)
 		if barrier_time_left <= 0:
@@ -192,6 +218,15 @@ func _physics_process(delta):
 		var spd = velocity.length()
 		if spd > 0:
 			velocity = velocity.normalized() * max(0.0, spd - FRICTION * 2.0 * delta)
+		global_position += velocity * delta
+		clamp_to_arena()
+		queue_redraw()
+		return
+
+	if knockup_time_left > 0:
+		var spd = velocity.length()
+		if spd > 0:
+			velocity = velocity.normalized() * max(0.0, spd - FRICTION * 2.5 * delta)
 		global_position += velocity * delta
 		clamp_to_arena()
 		queue_redraw()
@@ -225,11 +260,10 @@ func _physics_process(delta):
 
 	if lunging:
 		lunge_time_left -= delta
-		var lspeed = A2_LUNGE_DIST / A2_LUNGE_DUR
-		velocity = lunge_dir * lspeed
+		velocity = lunge_dir * lunge_speed
 		push_trail()
 		var reached = lunge_opponent != null and is_instance_valid(lunge_opponent) and lunge_opponent.alive \
-			and global_position.distance_to(lunge_opponent.global_position) <= A2_RANGE
+			and global_position.distance_to(lunge_opponent.global_position) <= lunge_reach
 		if lunge_time_left <= 0 or reached:
 			lunging = false
 			velocity *= 0.3
@@ -249,7 +283,9 @@ func _physics_process(delta):
 			velocity = velocity.normalized() * ns
 	else:
 		var speed_mult = 1.0
-		if recovering_slow and debuffed_slow:
+		if bladestorm_time_left > 0:
+			speed_mult = 1.0  # immune to slows during bladestorm
+		elif recovering_slow and debuffed_slow:
 			speed_mult = min(0.5, 1.0 - slow_pct)
 		elif recovering_slow:
 			speed_mult = 0.5
@@ -378,6 +414,10 @@ func can_parry() -> bool:
 func get_status_accent(default_color: Color) -> Color:
 	if stunned_time_left > 0:
 		return Color(0.9, 0.9, 0.3)
+	if knockup_time_left > 0:
+		return Color(0.9, 0.6, 0.15)
+	if bladestorm_time_left > 0:
+		return Color(1.0, 0.82, 0.15)
 	if bloodlust_time_left > 0:
 		return Color(0.85, 0.1, 0.15)
 	if parrying:
@@ -391,6 +431,12 @@ func get_status_accent(default_color: Color) -> Color:
 	if recovering != null:
 		return Color(0.78, 0.61, 1)
 	return default_color
+
+func get_knockup_draw_offset() -> float:
+	if knockup_time_left <= 0.0:
+		return 0.0
+	var t = (1.0 - knockup_time_left / KNOCKUP_DUR) * PI
+	return -sin(t) * 65.0
 
 # ---- Sword swing ----
 func start_swing(arc_span_deg: float, duration: float):
@@ -490,6 +536,8 @@ func resolve_a2(opp: Entity):
 	facing = dir
 	lunging = true
 	lunge_time_left = A2_LUNGE_DUR
+	lunge_speed = A2_LUNGE_DIST / A2_LUNGE_DUR
+	lunge_reach = A2_RANGE
 	lunge_dir = dir
 	lunge_opponent = opp
 	cd_a2 = A2_CD
@@ -510,17 +558,12 @@ func resolve_lunge_strike(opp: Entity):
 func try_ult(opp: Entity):
 	if not can_start_ability() or ult_charge < ULT_CHARGE_MAX or opp == null:
 		return
-	casting = {"type": "ult", "time_left": ULT_CAST, "total": ULT_CAST, "opp": opp}
-
-func resolve_ult(opp: Entity):
-	start_swing(160.0, 0.35)
-	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= ULT_RANGE:
-		var missing_ratio = 1.0 - (opp.hp / opp.max_hp)
-		var dmg = round(ULT_DMG_BASE + missing_ratio * ULT_DMG_MISSING_BONUS)
-		if deal_damage(opp, dmg):
-			add_combo_stack()
 	ult_charge = 0.0
-	recovering = {"type": "ult", "time_left": ULT_RECOVERY, "total": ULT_RECOVERY}
+	bladestorm_time_left = BLADESTORM_DUR
+	bladestorm_hit_timer = 0.0
+
+func resolve_ult(_opp: Entity):
+	pass
 
 func try_dash(dir: Vector2):
 	if not can_dash(dir):
@@ -610,6 +653,15 @@ func _draw_hud(now: int, accent: Color):
 		for i in 3:
 			var a = t + i * TAU / 3.0
 			draw_circle(Vector2(cos(a), sin(a)) * (RADIUS + 14), 4.5, Color(1.0, 0.9, 0.2))
+
+	# knockup — upward arrow indicators
+	if knockup_time_left > 0:
+		var pct = knockup_time_left / KNOCKUP_DUR
+		for i in 3:
+			var arrow_y = -RADIUS - 28 - i * 10
+			var alpha = pct * (1.0 - float(i) / 3.0)
+			draw_line(Vector2(0, arrow_y), Vector2(-6, arrow_y + 8), Color(0.95, 0.6, 0.1, alpha), 2.5)
+			draw_line(Vector2(0, arrow_y), Vector2( 6, arrow_y + 8), Color(0.95, 0.6, 0.1, alpha), 2.5)
 
 	# cast bar
 	if casting != null:
@@ -764,6 +816,32 @@ func _draw():
 		return
 
 	var accent = get_status_accent(base_color)
+	var ku_y = get_knockup_draw_offset()
+	if ku_y != 0.0:
+		draw_set_transform(Vector2(0, ku_y))
 
 	_draw_duelist(now, accent)
+
+	# Bladestorm — 3 orbiting ghost swords
+	if bladestorm_time_left > 0:
+		var t = now * 0.003
+		var pct = bladestorm_time_left / BLADESTORM_DUR
+		for i in 3:
+			var a = t * 4.0 + i * TAU / 3.0
+			var sd = Vector2(cos(a), sin(a))
+			var sp = Vector2(-sd.y, sd.x)
+			var sr = RADIUS + 14.0
+			var s0 = sd * sr
+			var s1 = sd * (sr + SWORD_LEN * 0.85)
+			var hw = SWORD_WIDTH * 0.45
+			draw_colored_polygon(PackedVector2Array([s0 + sp * hw, s0 - sp * hw, s1]),
+				Color(1.0, 0.88, 0.2, pct * 0.75))
+			draw_line(s0 + sp * hw, s1, Color(1, 1, 0.7, pct * 0.5), 1.5)
+		var pulse = 0.4 + 0.35 * sin(t * 6.0)
+		draw_arc(Vector2.ZERO, RADIUS + SWORD_LEN * 0.9, 0, TAU, 64,
+			Color(1.0, 0.8, 0.15, pct * pulse * 0.45), 3.0)
+
+	if ku_y != 0.0:
+		draw_set_transform(Vector2.ZERO)
+
 	_draw_hud(now, accent)

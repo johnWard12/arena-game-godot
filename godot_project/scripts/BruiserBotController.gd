@@ -34,7 +34,7 @@ func ai_decide():
 	var d = global_position.distance_to(opponent.global_position)
 	var is_kiter = opponent is RangedEntity
 
-	if casting != null or recovering != null:
+	if casting != null or recovering != null or lunging:
 		ai_target = Vector2.ZERO
 		return
 
@@ -45,7 +45,7 @@ func ai_decide():
 		return
 
 	# ult when charged and in range
-	if ult_charge >= ULT_CHARGE_MAX and d <= BRUISER_ULT_RANGE and randf() < 0.5:
+	if ult_charge >= ULT_CHARGE_MAX and d <= SEISMIC_RANGE * 1.3 and randf() < 0.5:
 		try_ult(opponent)
 		return
 

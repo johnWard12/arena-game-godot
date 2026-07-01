@@ -24,11 +24,13 @@ const TREMOR_DMG      = 18.0
 const TREMOR_RADIUS   = 200.0
 const TREMOR_SLOW     = 2.0
 
-# Ult — Juggernaut: heavy blow, scales with target missing HP (instant)
-const BRUISER_ULT_RECOVERY = 0.35
-const BRUISER_ULT_DMG_BASE = 40.0
-const BRUISER_ULT_DMG_BONUS = 35.0
-const BRUISER_ULT_RANGE    = 175.0
+# Ult — Seismic Slam: lunge + ground slam, knockup
+const SEISMIC_LUNGE_DUR  = 0.14
+const SEISMIC_LUNGE_DIST = 280.0
+const SEISMIC_RANGE      = 220.0
+const SEISMIC_DMG        = 55.0
+const SEISMIC_KNOCKUP    = 1.0
+const SEISMIC_RECOVERY   = 0.65
 
 # F — Unbreakable: CC cleanse + immunity + damage reduction
 const UNBREAKABLE_CD           = 7.0
@@ -38,6 +40,8 @@ const UNBREAKABLE_MOVE_MULT    = 1.40
 
 var tremor_fx_left        := 0.0
 var unbreakable_time_left := 0.0
+var seismic_slam_fx_left  := 0.0
+var seismic_lunge_pending := false
 
 func _ready():
 	hp             = BRUISER_MAX_HP
@@ -48,7 +52,8 @@ func _ready():
 	recovery_slows_movement = false  # Steady Footing: 15% less duration on incoming stuns/freezes
 
 func _physics_process(delta):
-	tremor_fx_left = max(0.0, tremor_fx_left - delta)
+	tremor_fx_left     = max(0.0, tremor_fx_left - delta)
+	seismic_slam_fx_left = max(0.0, seismic_slam_fx_left - delta)
 	if unbreakable_time_left > 0:
 		unbreakable_time_left = max(0.0, unbreakable_time_left - delta)
 		if unbreakable_time_left <= 0:
@@ -74,7 +79,7 @@ func try_auto(opp: Entity):
 		add_combo_stack()
 
 func try_a1(opp: Entity):
-	if not alive or cd_a1 > 0 or recovering != null or opp == null:
+	if not alive or cd_a1 > 0 or recovering != null or lunging or opp == null:
 		return
 	facing = get_aim_dir(opp)
 	start_swing(100.0, 0.22)
@@ -91,7 +96,7 @@ func resolve_a1(_opp: Entity):
 	pass
 
 func try_a2(opp: Entity):
-	if not alive or cd_a2 > 0 or recovering != null or opp == null:
+	if not alive or cd_a2 > 0 or recovering != null or lunging or opp == null:
 		return
 	tremor_fx_left = 0.4
 	if opp.alive and global_position.distance_to(opp.global_position) <= TREMOR_RADIUS:
@@ -107,22 +112,35 @@ func resolve_a2(_opp: Entity):
 	pass
 
 func try_ult(opp: Entity):
-	if not alive or ult_charge < ULT_CHARGE_MAX or recovering != null or opp == null:
+	if not alive or ult_charge < ULT_CHARGE_MAX or recovering != null or lunging or opp == null:
 		return
-	facing = get_aim_dir(opp)
-	start_swing(180.0, 0.4)
-	if opp.alive and global_position.distance_to(opp.global_position) <= BRUISER_ULT_RANGE:
-		var missing_ratio = 1.0 - (opp.hp / opp.max_hp)
-		var dmg = round(BRUISER_ULT_DMG_BASE + missing_ratio * BRUISER_ULT_DMG_BONUS)
-		deal_damage(opp, dmg)
-		if opp.alive:
-			opp.apply_stun(0.5)
-		add_combo_stack()
 	ult_charge = 0.0
-	recovering = {"type": "ult", "time_left": BRUISER_ULT_RECOVERY, "total": BRUISER_ULT_RECOVERY}
+	facing = get_aim_dir(opp)
+	seismic_lunge_pending = true
+	lunging = true
+	lunge_time_left = SEISMIC_LUNGE_DUR
+	lunge_speed = SEISMIC_LUNGE_DIST / SEISMIC_LUNGE_DUR
+	lunge_reach = SEISMIC_RANGE
+	lunge_dir = facing
+	lunge_opponent = opp
 
 func resolve_ult(_opp: Entity):
 	pass
+
+func resolve_lunge_strike(opp: Entity):
+	if seismic_lunge_pending:
+		seismic_lunge_pending = false
+		_do_seismic_slam(opp)
+
+func _do_seismic_slam(opp: Entity):
+	start_swing(360.0, 0.45)
+	seismic_slam_fx_left = 0.70
+	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= SEISMIC_RANGE:
+		if deal_damage(opp, SEISMIC_DMG):
+			add_combo_stack()
+			if opp.alive:
+				opp.knockup_time_left = SEISMIC_KNOCKUP
+	screen_shake.emit(14.0, 0.45)
 
 func try_a3(_opp: Entity):
 	# Usable even while stunned — that's the point
@@ -153,14 +171,17 @@ func _draw():
 		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
 		return
 
-	var accent = base_color
-	if stunned_time_left > 0:  accent = Color(0.9, 0.9, 0.3)
-	elif parrying:             accent = Color(0.3, 0.7, 1.0)
-	elif dashing:              accent = Color(1, 0.36, 0.48)
-	elif casting != null:      accent = Color(1, 0.82, 0.4)
-	elif recovering != null:   accent = Color(0.85, 0.55, 0.2)
+	var accent = get_status_accent(base_color)
+
+	var ku_y = get_knockup_draw_offset()
+	if ku_y != 0.0:
+		draw_set_transform(Vector2(0, ku_y))
 
 	_draw_bruiser(now, accent)
+
+	if ku_y != 0.0:
+		draw_set_transform(Vector2.ZERO)
+
 	_draw_hud(now, accent)
 
 func _draw_bruiser(now: int, accent: Color):
@@ -181,6 +202,18 @@ func _draw_bruiser(now: int, accent: Color):
 		draw_circle(Vector2.ZERO, RADIUS + 3, Color(1, 1, 1, pulse * 0.30))
 		draw_arc(Vector2.ZERO, RADIUS + 5,  0, TAU, 48, Color(1, 1, 1, pulse * 0.90), 4.0)
 		draw_arc(Vector2.ZERO, RADIUS + 13, 0, TAU, 36, Color(1, 1, 1, pulse * 0.45), 2.0)
+
+	# Seismic Slam — expanding crack ring + radiating lines
+	if seismic_slam_fx_left > 0:
+		var sp = seismic_slam_fx_left / 0.70
+		var ring_r = (1.0 - sp) * SEISMIC_RANGE * 0.9 + RADIUS
+		draw_arc(Vector2.ZERO, ring_r,       0, TAU, 64, Color(0.95, 0.55, 0.1, sp * 0.85), 5.0 * sp)
+		draw_arc(Vector2.ZERO, ring_r * 0.6, 0, TAU, 48, Color(1.0, 0.8, 0.3,  sp * 0.45), 2.5)
+		for i in 8:
+			var a = i * TAU / 8.0
+			var crack_end = Vector2(cos(a), sin(a)) * (RADIUS + (1.0 - sp) * 170.0)
+			draw_line(Vector2(cos(a), sin(a)) * RADIUS, crack_end,
+				Color(0.85, 0.45, 0.05, sp * 0.9), 3.5 * sp, true)
 
 	# tremor shockwave ring
 	if tremor_fx_left > 0:

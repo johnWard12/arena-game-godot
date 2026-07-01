@@ -30,14 +30,20 @@ const BARRIER_HP  = 35.0
 const BARRIER_DUR = 1.5
 
 
-const RULT_CAST     = 0.55
-const RULT_RECOVERY = 0.3
-const RULT_SPEED    = 380.0
-const RULT_RADIUS   = 44.0
-const RULT_DMG_BASE = 42.0
-const RULT_DMG_MISSING_BONUS = 48.0
+# Ult — Void Collapse: gravitational rift, pulls opponent in, then implodes
+const VOIDCOLLAPSE_CAST        = 0.35
+const VOIDCOLLAPSE_PULL_DUR    = 1.5
+const VOIDCOLLAPSE_PULL_FORCE  = 550.0
+const VOIDCOLLAPSE_DMG_MIN     = 45.0
+const VOIDCOLLAPSE_DMG_MAX     = 92.0
+const VOIDCOLLAPSE_CLOSE_RANGE = 90.0
+const VOIDCOLLAPSE_STUN_DUR    = 1.0
+const VOIDCOLLAPSE_RECOVERY    = 0.4
 
 var nova_fx_left := 0.0
+var rift_pos      := Vector2.ZERO
+var rift_pull_left := 0.0
+var rift_fx_left   := 0.0
 
 # Overcharge: landing 2 damaging abilities (Bolt/Burst/Ult) in a row without
 # missing shaves a bit off Bolt's and Burst's current cooldowns.
@@ -51,6 +57,16 @@ func _ready():
 
 func _physics_process(delta):
 	nova_fx_left = max(0.0, nova_fx_left - delta)
+	rift_fx_left = max(0.0, rift_fx_left - delta)
+	if rift_pull_left > 0:
+		rift_pull_left -= delta
+		if opponent != null and opponent.alive and opponent.knockup_time_left <= 0:
+			var to_rift = rift_pos - opponent.global_position
+			var dist = to_rift.length()
+			if dist > 12.0:
+				opponent.velocity += to_rift.normalized() * VOIDCOLLAPSE_PULL_FORCE * delta
+		if rift_pull_left <= 0:
+			_resolve_void_explosion()
 	super._physics_process(delta)
 
 # Blood-lust is a Duelist-only passive.
@@ -119,15 +135,27 @@ func resolve_a2(opp: Entity):
 func try_ult(opp: Entity):
 	if not can_start_ability() or ult_charge < ULT_CHARGE_MAX or opp == null:
 		return
-	casting = {"type": "ult", "time_left": RULT_CAST, "total": RULT_CAST, "opp": opp}
+	casting = {"type": "ult", "time_left": VOIDCOLLAPSE_CAST, "total": VOIDCOLLAPSE_CAST, "opp": opp}
 
 func resolve_ult(opp: Entity):
-	facing = get_aim_dir(opp)
-	var missing_ratio = 1.0 - (opp.hp / opp.max_hp) if opp != null and opp.alive else 0.0
-	var dmg = round(RULT_DMG_BASE + missing_ratio * RULT_DMG_MISSING_BONUS)
-	_fire(facing, RULT_SPEED, RULT_RADIUS, dmg, opp, Color(1.0, 0.3, 0.85), 16.0, 0.0, 0.5, true)
 	ult_charge = 0.0
-	recovering = {"type": "ult", "time_left": RULT_RECOVERY, "total": RULT_RECOVERY}
+	if opp != null and opp.alive:
+		rift_pos = opp.global_position
+		rift_pull_left = VOIDCOLLAPSE_PULL_DUR
+		rift_fx_left   = VOIDCOLLAPSE_PULL_DUR + 0.5
+
+func _resolve_void_explosion():
+	rift_fx_left = 0.50
+	if opponent != null and opponent.alive:
+		var dist = opponent.global_position.distance_to(rift_pos)
+		var closeness = 1.0 - clamp(dist / 320.0, 0.0, 1.0)
+		var dmg = round(VOIDCOLLAPSE_DMG_MIN + closeness * (VOIDCOLLAPSE_DMG_MAX - VOIDCOLLAPSE_DMG_MIN))
+		if deal_damage(opponent, dmg):
+			add_combo_stack()
+			if dist <= VOIDCOLLAPSE_CLOSE_RANGE and opponent.alive:
+				opponent.apply_stun(VOIDCOLLAPSE_STUN_DUR)
+	screen_shake.emit(10.0, 0.35)
+	recovering = {"type": "ult", "time_left": VOIDCOLLAPSE_RECOVERY, "total": VOIDCOLLAPSE_RECOVERY}
 
 func try_a3(_opp: Entity):
 	if not can_start_ability() or cd_a3 > 0:
@@ -154,6 +182,9 @@ func _draw():
 		return
 
 	var accent = get_status_accent(base_color)
+	var ku_y = get_knockup_draw_offset()
+	if ku_y != 0.0:
+		draw_set_transform(Vector2(0, ku_y))
 
 	var perp     = Vector2(-facing.y, facing.x)
 	var robe_col = _col_dark(accent, 0.6)
@@ -255,6 +286,31 @@ func _draw():
 		var r   = NOVA_RADIUS * pct
 		draw_arc(Vector2.ZERO, r, 0, TAU, 48, Color(accent.r, accent.g, accent.b, (1.0 - pct) * 0.8), 3.0)
 		draw_circle(Vector2.ZERO, r * 0.3, Color(accent.r, accent.g, accent.b, (1.0 - pct) * 0.25))
+
+	# Void Collapse rift visual (drawn in world-space via to_local)
+	if rift_fx_left > 0 and rift_pos != Vector2.ZERO:
+		var rp = to_local(rift_pos)
+		if rift_pull_left > 0:
+			var t = now * 0.004
+			var phase = rift_pull_left / VOIDCOLLAPSE_PULL_DUR
+			var rift_r = 35.0 + (1.0 - phase) * 28.0
+			for ring in 3:
+				var rr = rift_r * (0.45 + ring * 0.3)
+				var ra = t * (2.2 + ring * 0.8) * (1 if ring % 2 == 0 else -1)
+				draw_arc(rp, rr, ra, ra + TAU * 0.78, 32,
+					Color(0.5, 0.1, 0.95, 0.65 * phase), 3.5)
+			draw_circle(rp, rift_r * 0.22, Color(0.2, 0.0, 0.8, 0.55 * phase))
+			var pulse = 0.35 + 0.4 * sin(now * 0.008)
+			draw_arc(rp, rift_r + 18, 0, TAU, 48, Color(0.7, 0.3, 1.0, pulse * phase), 2.0)
+		else:
+			var exp_pct = rift_fx_left / 0.50
+			var exp_r = (1.0 - exp_pct) * 300.0 + 25.0
+			draw_arc(rp, exp_r,       0, TAU, 64, Color(0.75, 0.15, 1.0, exp_pct * 0.9),  6.0)
+			draw_arc(rp, exp_r * 0.55, 0, TAU, 48, Color(1.0, 0.7, 1.0,  exp_pct * 0.5),  3.0)
+			draw_circle(rp, 22.0 * exp_pct, Color(1.0, 0.85, 1.0, exp_pct * 0.65))
+
+	if ku_y != 0.0:
+		draw_set_transform(Vector2.ZERO)
 
 	# dash charge pips below
 	for i in DASH_CHARGES_MAX:
