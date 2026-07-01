@@ -8,26 +8,26 @@ const BRUISER_FRICTION   = 1400.0
 
 const BRUISER_AUTO_CD    = 0.70
 const BRUISER_AUTO_DMG   = 3.0
-const BRUISER_AUTO_RANGE = 185.0
+const BRUISER_AUTO_RANGE = 167.0
 
 # E — Shatter: shield slam + stun (instant)
 const SHATTER_RECOVERY = 0.25
 const SHATTER_CD       = 4.5
 const SHATTER_DMG      = 22.0
-const SHATTER_RANGE    = 168.0
+const SHATTER_RANGE    = 151.0
 const SHATTER_STUN     = 0.70
 
 # Q — Tremor: ground stomp AoE + slow (instant)
 const TREMOR_RECOVERY = 0.25
 const TREMOR_CD       = 7.0
 const TREMOR_DMG      = 18.0
-const TREMOR_RADIUS   = 200.0
+const TREMOR_RADIUS   = 180.0
 const TREMOR_SLOW     = 2.0
 
 # Ult — Seismic Slam: lunge + ground slam, knockup
 const SEISMIC_LUNGE_DUR  = 0.14
 const SEISMIC_LUNGE_DIST = 280.0
-const SEISMIC_RANGE      = 220.0
+const SEISMIC_RANGE      = 198.0
 const SEISMIC_DMG        = 55.0
 const SEISMIC_KNOCKUP    = 1.0
 const SEISMIC_RECOVERY   = 0.65
@@ -115,7 +115,12 @@ func try_ult(opp: Entity):
 	if not alive or ult_charge < ULT_CHARGE_MAX or recovering != null or lunging or opp == null:
 		return
 	ult_charge = 0.0
-	facing = get_aim_dir(opp)
+	# Always lunge straight at the opponent's actual position — this is a
+	# guaranteed gap-closing execute, not a mouse-aim skill shot. Using
+	# get_aim_dir() (mouse direction) here would let imprecise aim send the
+	# Bruiser lunging past the target and whiff the slam entirely.
+	var to_opp = opp.global_position - global_position
+	facing = to_opp.normalized() if to_opp.length() > 0.01 else get_aim_dir(opp)
 	seismic_lunge_pending = true
 	lunging = true
 	lunge_time_left = SEISMIC_LUNGE_DUR
@@ -141,6 +146,7 @@ func _do_seismic_slam(opp: Entity):
 			if opp.alive:
 				opp.knockup_time_left = SEISMIC_KNOCKUP
 	screen_shake.emit(14.0, 0.45)
+	recovering = {"type": "ult", "time_left": SEISMIC_RECOVERY, "total": SEISMIC_RECOVERY}
 
 func try_a3(_opp: Entity):
 	# Usable even while stunned — that's the point
@@ -175,6 +181,7 @@ func _draw():
 
 	var ku_y = get_knockup_draw_offset()
 	if ku_y != 0.0:
+		draw_circle(Vector2(0, RADIUS - 4), 16.0 - abs(ku_y) * 0.06, Color(0, 0, 0, 0.35))
 		draw_set_transform(Vector2(0, ku_y))
 
 	_draw_bruiser(now, accent)

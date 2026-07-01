@@ -184,6 +184,7 @@ func _draw():
 	var accent = get_status_accent(base_color)
 	var ku_y = get_knockup_draw_offset()
 	if ku_y != 0.0:
+		draw_circle(Vector2(0, RADIUS - 4), 16.0 - abs(ku_y) * 0.06, Color(0, 0, 0, 0.35))
 		draw_set_transform(Vector2(0, ku_y))
 
 	var perp     = Vector2(-facing.y, facing.x)
