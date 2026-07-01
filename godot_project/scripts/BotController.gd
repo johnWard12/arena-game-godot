@@ -12,7 +12,7 @@ func _ready():
 	base_color = Color(1, 0.54, 0.36)
 
 func get_movement_input() -> Vector2:
-	return ai_move
+	return steer_around_obstacles(ai_move)
 
 func _physics_process(delta):
 	if alive and opponent != null and opponent.alive:

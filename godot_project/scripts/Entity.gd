@@ -293,6 +293,26 @@ func resolve_obstacle_collisions():
 				global_position.y = obstacle.position.y + obstacle.size.y + RADIUS
 				velocity.y = max(0.0, velocity.y)
 
+func steer_around_obstacles(desired_dir: Vector2) -> Vector2:
+	if desired_dir.length() < 0.01:
+		return desired_dir
+	var dir = desired_dir.normalized()
+	var probe_dist = RADIUS + 34.0
+	for obstacle in obstacle_rects:
+		var grown = obstacle.grow(RADIUS + 16.0)
+		if grown.has_point(global_position + dir * probe_dist):
+			var closest = Vector2(
+				clamp(global_position.x, obstacle.position.x, obstacle.position.x + obstacle.size.x),
+				clamp(global_position.y, obstacle.position.y, obstacle.position.y + obstacle.size.y)
+			)
+			var normal = global_position - closest
+			normal = normal.normalized() if normal.length() > 0.01 else -dir
+			var tangent = Vector2(-normal.y, normal.x)
+			if tangent.dot(dir) < 0:
+				tangent = -tangent
+			return (tangent + normal * 0.4).normalized()
+	return desired_dir
+
 func push_trail():
 	var now = Time.get_ticks_msec()
 	trail.append({"pos": global_position, "time": now})

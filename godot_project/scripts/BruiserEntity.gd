@@ -7,7 +7,7 @@ const BRUISER_ACCEL      = 2800.0
 const BRUISER_FRICTION   = 1400.0
 
 const BRUISER_AUTO_CD    = 0.70
-const BRUISER_AUTO_DMG   = 7.0
+const BRUISER_AUTO_DMG   = 4.0
 const BRUISER_AUTO_RANGE = 145.0
 
 # E — Shatter: shield slam + stun

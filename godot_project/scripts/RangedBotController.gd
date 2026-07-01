@@ -14,16 +14,29 @@ func _ready():
 	base_color = Color(0.85, 0.4, 1.0)
 
 func get_movement_input() -> Vector2:
-	return ai_move
+	return steer_around_obstacles(ai_move)
 
 func _physics_process(delta):
 	if alive and opponent != null and opponent.alive:
+		try_dodge_dash()
 		ai_timer -= delta
 		if ai_timer <= 0:
 			ai_decide()
 			ai_timer = 0.38 + randf() * 0.22
 		ai_move = ai_move.lerp(ai_target, min(1.0, delta * 5.0))
 	super._physics_process(delta)
+
+# Checked every physics frame (not gated by the ai_timer decision cadence) because
+# melee cast windows (~0.12-0.25s) and instant autos are shorter than our decision
+# interval (~0.4-0.6s) — a periodic check would usually miss the telegraph entirely.
+func try_dodge_dash():
+	if dashing or dash_charges <= 0 or casting != null:
+		return
+	var d = global_position.distance_to(opponent.global_position)
+	var threat_cast = opponent.casting != null and d < 280.0
+	var point_blank = d < 140.0
+	if threat_cast or point_blank:
+		try_dash((global_position - opponent.global_position).normalized())
 
 func ai_decide():
 	if not alive or opponent == null or not opponent.alive:
