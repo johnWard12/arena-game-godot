@@ -39,21 +39,21 @@ const CLASSES = [
 		"color": MELEE_COLOR,
 		"key":   "melee",
 		"hp":    "HP  150",
-		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Execute    R"]
+		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Bladestorm R"]
 	},
 	{
 		"label": "MAGE",
 		"color": RANGED_COLOR,
 		"key":   "ranged",
 		"hp":    "HP  120",
-		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "Barrier    F", "Ult Shot   R"]
+		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "Barrier    F", "VoidColl   R"]
 	},
 	{
 		"label": "BRUISER",
 		"color": BRUISER_COLOR,
 		"key":   "bruiser",
 		"hp":    "HP  180",
-		"lines": ["Tanky melee brawler.", "CC chains + sustain.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Shield Bash F", "Jugger     R"]
+		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Unbreakable F", "Seismic    R"]
 	},
 ]
 

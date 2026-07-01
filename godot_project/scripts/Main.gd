@@ -2,9 +2,12 @@ extends Node2D
 
 var player: Entity
 var bot: Entity
-var arena_rect := Rect2(Vector2(60, 60), Vector2(1800, 960))
+var arena_rect := Rect2(Vector2(30, 30), Vector2(1860, 1020))
 var map_obstacles: Array[Rect2] = []
 var health_packs := []
+
+var shake_time_left  := 0.0
+var shake_intensity  := 0.0
 
 var hp_me: ProgressBar
 var hp_bot: ProgressBar
@@ -12,7 +15,7 @@ var win_label: Label
 var cd_hud: Node2D   # custom-drawn cooldown panel
 
 const HEALTH_PACK_HEAL = 28.0
-const HEALTH_PACK_RADIUS = 34.0
+const HEALTH_PACK_RADIUS = 44.0
 const HEALTH_PACK_RESPAWN = 12.0
 
 func _ready():
@@ -25,7 +28,7 @@ func _ready():
 		"bruiser": player = BruiserPlayerController.new()
 		_:         player = PlayerController.new()
 	add_child(player)
-	player.global_position = Vector2(510, 540)
+	player.global_position = Vector2(450, 540)
 	player.arena_rect = arena_rect
 	player.obstacle_rects = map_obstacles
 	player.projectile_spawned.connect(func(p):
@@ -38,7 +41,7 @@ func _ready():
 		"bruiser": bot = BruiserBotController.new()
 		_:         bot = BotController.new()
 	add_child(bot)
-	bot.global_position = Vector2(1350, 540)
+	bot.global_position = Vector2(1470, 540)
 	bot.arena_rect = arena_rect
 	bot.obstacle_rects = map_obstacles
 	bot.projectile_spawned.connect(func(p):
@@ -48,6 +51,8 @@ func _ready():
 
 	player.opponent = bot
 	bot.opponent = player
+	player.screen_shake.connect(start_shake)
+	bot.screen_shake.connect(start_shake)
 
 	player.died.connect(func(): _on_died(player))
 	bot.died.connect(func(): _on_died(bot))
@@ -57,16 +62,16 @@ func _ready():
 
 func build_map():
 	map_obstacles = [
-		Rect2(Vector2(860, 245), Vector2(200, 70)),
-		Rect2(Vector2(860, 765), Vector2(200, 70)),
-		Rect2(Vector2(445, 455), Vector2(80, 170)),
-		Rect2(Vector2(1395, 455), Vector2(80, 170)),
-		Rect2(Vector2(735, 505), Vector2(110, 70)),
-		Rect2(Vector2(1075, 505), Vector2(110, 70)),
+		Rect2(Vector2(857, 227), Vector2(207, 74)),
+		Rect2(Vector2(857, 779), Vector2(207, 74)),
+		Rect2(Vector2(428, 450), Vector2(83, 181)),
+		Rect2(Vector2(1410, 450), Vector2(83, 181)),
+		Rect2(Vector2(728, 503), Vector2(114, 74)),
+		Rect2(Vector2(1079, 503), Vector2(114, 74)),
 	]
 	health_packs = [
-		{"pos": Vector2(960, 405), "active": true, "respawn_left": 0.0},
-		{"pos": Vector2(960, 675), "active": true, "respawn_left": 0.0},
+		{"pos": Vector2(960, 397), "active": true, "respawn_left": 0.0},
+		{"pos": Vector2(960, 683), "active": true, "respawn_left": 0.0},
 	]
 
 func build_ui():
@@ -114,7 +119,7 @@ func build_ui():
 
 	# hint
 	var hint = Label.new()
-	hint.text = "WASD move  |  Shift/Space dash  |  LMB auto (hold)  |  E  Q  F  R abilities  |  RMB/G parry  |  Esc = char select"
+	hint.text = "WASD move  |  Shift/Space dash  |  LMB auto (hold)  |  E  Q  F  R abilities  |  RMB/G parry  |  Backspace = char select"
 	hint.position = Vector2(20, 1050)
 	hint.add_theme_font_size_override("font_size", 12)
 	canvas.add_child(hint)
@@ -129,8 +134,8 @@ func _get_ability_defs() -> Array:
 			{"key": "LMB", "name": "Smash",   "cd": player.cd_auto, "max": BruiserEntity.BRUISER_AUTO_CD,  "col": Color(0.95, 0.55, 0.15)},
 			{"key": "E",   "name": "Shatter", "cd": player.cd_a1,   "max": BruiserEntity.SHATTER_CD,       "col": Color(1.0, 0.7, 0.2)},
 			{"key": "Q",   "name": "Tremor",  "cd": player.cd_a2,   "max": BruiserEntity.TREMOR_CD,        "col": Color(0.9, 0.4, 0.1)},
-			{"key": "F",   "name": "SBash",   "cd": player.cd_a3,   "max": BruiserEntity.SHIELD_BASH_CD,   "col": Color(0.5, 0.8, 1.0)},
-			{"key": "R",   "name": "Jugger",  "cd": 0.0,            "max": 1.0, "charge": true,
+			{"key": "F",   "name": "Unbrkbl", "cd": player.cd_a3,   "max": BruiserEntity.UNBREAKABLE_CD,  "col": Color(1.0, 1.0, 1.0)},
+			{"key": "R",   "name": "Seismic", "cd": 0.0,            "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.25, 0.1)},
 			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},
 		]
@@ -140,7 +145,7 @@ func _get_ability_defs() -> Array:
 			{"key": "E",   "name": "Bolt",    "cd": player.cd_a1,   "max": RangedEntity.BOLT_CD,           "col": Color(0.4, 0.85, 1.0)},
 			{"key": "Q",   "name": "Burst",   "cd": player.cd_a2,   "max": RangedEntity.NOVA_CD,           "col": Color(0.72, 0.4, 1.0)},
 			{"key": "F",   "name": "Barrier", "cd": player.cd_a3,   "max": RangedEntity.BARRIER_CD,        "col": Color(0.3, 0.7, 1.0)},
-			{"key": "R",   "name": "Ult",     "cd": 0.0,            "max": 1.0, "charge": true,
+			{"key": "R",   "name": "VoidColl","cd": 0.0,            "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.3, 0.85)},
 			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},
 		]
@@ -150,10 +155,14 @@ func _get_ability_defs() -> Array:
 			{"key": "E",   "name": "Strike",  "cd": player.cd_a1,   "max": Entity.A1_CD,                   "col": Color(0.37, 0.88, 0.75)},
 			{"key": "Q",   "name": "Lunge",   "cd": player.cd_a2,   "max": Entity.A2_CD,                   "col": Color(1.0, 0.5, 0.2)},
 			{"key": "F",   "name": "Throw",   "cd": player.cd_a3,   "max": Entity.SWORD_THROW_CD,          "col": Color(0.8, 0.85, 0.95)},
-			{"key": "R",   "name": "Execute", "cd": 0.0,            "max": 1.0, "charge": true,
+			{"key": "R",   "name": "Storm",   "cd": 0.0,            "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                           "col": Color(1.0, 0.3, 0.48)},
 			{"key": "RMB", "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,          "col": Color(0.3, 0.7, 1.0)},
 		]
+
+func start_shake(intensity: float, duration: float):
+	shake_intensity = max(shake_intensity, intensity)
+	shake_time_left = max(shake_time_left, duration)
 
 func _process(delta):
 	update_health_packs(delta)
@@ -161,6 +170,14 @@ func _process(delta):
 		hp_me.value = player.hp
 	if is_instance_valid(bot):
 		hp_bot.value = bot.hp
+	if shake_time_left > 0:
+		shake_time_left -= delta
+		if shake_time_left > 0:
+			position = Vector2(randf_range(-shake_intensity, shake_intensity),
+				randf_range(-shake_intensity, shake_intensity))
+		else:
+			position = Vector2.ZERO
+			shake_intensity = 0.0
 	queue_redraw()
 
 func update_health_packs(delta: float):
@@ -192,7 +209,7 @@ func _on_died(who):
 		Color(1, 0.36, 0.48) if who == player else Color(0.37, 0.88, 0.75))
 
 func _unhandled_input(event):
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_BACKSPACE:
 		get_tree().change_scene_to_file("res://scenes/CharSelect.tscn")
 
 func _draw():

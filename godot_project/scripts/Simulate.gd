@@ -11,10 +11,10 @@ const CLASS_KEYS = ["melee", "ranged", "bruiser"]
 const CLASS_LABELS = {"melee": "Duelist", "ranged": "Mage", "bruiser": "Bruiser"}
 
 const HEALTH_PACK_HEAL = 28.0
-const HEALTH_PACK_RADIUS = 34.0
+const HEALTH_PACK_RADIUS = 44.0
 const HEALTH_PACK_RESPAWN = 12.0
 
-var arena_rect := Rect2(Vector2(60, 60), Vector2(1800, 960))
+var arena_rect := Rect2(Vector2(30, 30), Vector2(1860, 1020))
 var map_obstacles: Array[Rect2] = []
 
 func _ready():
@@ -42,12 +42,12 @@ func _ready():
 
 func build_map():
 	map_obstacles = [
-		Rect2(Vector2(860, 245), Vector2(200, 70)),
-		Rect2(Vector2(860, 765), Vector2(200, 70)),
-		Rect2(Vector2(445, 455), Vector2(80, 170)),
-		Rect2(Vector2(1395, 455), Vector2(80, 170)),
-		Rect2(Vector2(735, 505), Vector2(110, 70)),
-		Rect2(Vector2(1075, 505), Vector2(110, 70)),
+		Rect2(Vector2(857, 227), Vector2(207, 74)),
+		Rect2(Vector2(857, 779), Vector2(207, 74)),
+		Rect2(Vector2(428, 450), Vector2(83, 181)),
+		Rect2(Vector2(1410, 450), Vector2(83, 181)),
+		Rect2(Vector2(728, 503), Vector2(114, 74)),
+		Rect2(Vector2(1079, 503), Vector2(114, 74)),
 	]
 
 func make_bot(key: String) -> Entity:
