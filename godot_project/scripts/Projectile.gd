@@ -10,6 +10,7 @@ var lifetime := 3.0
 var proj_color := Color(1.0, 0.85, 0.3)
 var proj_radius_visual := 8.0
 var apply_slow := 0.0
+var apply_slow_pct := 0.5
 var obstacle_rects: Array[Rect2] = []
 
 func _physics_process(delta):
@@ -35,6 +36,7 @@ func _on_hit():
 			owner_entity.add_combo_stack()
 	if landed and apply_slow > 0 and target != null and is_instance_valid(target) and target.alive:
 		target.slowed_time_left = apply_slow
+		target.slow_pct = apply_slow_pct
 	queue_free()
 
 func _draw():

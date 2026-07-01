@@ -92,6 +92,7 @@ var parry_cd_left := 0.0
 
 var stunned_time_left := 0.0
 var slowed_time_left  := 0.0
+var slow_pct          := 0.5
 
 var cd_a3             := 0.0
 var barrier_hp_left   := 0.0
@@ -106,6 +107,10 @@ var swing_arc_span := 0.0
 
 # hit flash on this entity when it receives damage
 var hit_flash_left := 0.0
+
+# teleport flash on this entity after Blind Spot (A3) fires
+var teleport_fx_left := 0.0
+const TELEPORT_FX_DUR := 0.3
 
 var dash_charges := DASH_CHARGES_MAX
 var dash_charge_timer := 0.0
@@ -136,6 +141,7 @@ func _physics_process(delta):
 			dash_charge_timer -= DASH_CHARGE_REGEN
 			dash_charges += 1
 	hit_flash_left   = max(0.0, hit_flash_left - delta)
+	teleport_fx_left = max(0.0, teleport_fx_left - delta)
 	slowed_time_left = max(0.0, slowed_time_left - delta)
 	if barrier_time_left > 0:
 		barrier_time_left = max(0.0, barrier_time_left - delta)
@@ -187,7 +193,9 @@ func _physics_process(delta):
 
 	var input_vec := get_movement_input()
 	var locked = casting != null
-	var slowed = recovering != null or slowed_time_left > 0
+	var recovering_slow = recovering != null
+	var debuffed_slow = slowed_time_left > 0
+	var slowed = recovering_slow or debuffed_slow
 
 	if lunging:
 		lunge_time_left -= delta
@@ -214,7 +222,13 @@ func _physics_process(delta):
 			var ns = max(0.0, spd - dec)
 			velocity = velocity.normalized() * ns
 	else:
-		var speed_mult = 0.5 if slowed else 1.0
+		var speed_mult = 1.0
+		if recovering_slow and debuffed_slow:
+			speed_mult = min(0.5, 1.0 - slow_pct)
+		elif recovering_slow:
+			speed_mult = 0.5
+		elif debuffed_slow:
+			speed_mult = 1.0 - slow_pct
 		var has_input = input_vec.length() > 0.01
 		if has_input:
 			facing = input_vec.normalized()
@@ -484,6 +498,7 @@ func try_a3(opp: Entity):
 	facing = get_aim_dir(opp)
 	cd_a3 = A3_CD
 	push_trail()
+	teleport_fx_left = TELEPORT_FX_DUR
 
 func resolve_a3(_opp: Entity):
 	pass
@@ -493,6 +508,15 @@ func _draw_hud(now: int, accent: Color):
 	# hit flash
 	if hit_flash_left > 0:
 		draw_circle(Vector2.ZERO, RADIUS + 5, Color(1, 1, 1, (hit_flash_left / 0.25) * 0.75))
+
+	# teleport arrival flash (Blind Spot) — expanding fading ring so the
+	# instant reposition doesn't read as a glitch
+	if teleport_fx_left > 0:
+		var tpct = 1.0 - (teleport_fx_left / TELEPORT_FX_DUR)
+		var tr = RADIUS + 6.0 + tpct * 34.0
+		var talpha = (1.0 - tpct) * 0.85
+		draw_arc(Vector2.ZERO, tr, 0, TAU, 40, Color(0.65, 0.85, 1.0, talpha), 3.0)
+		draw_circle(Vector2.ZERO, RADIUS * (1.0 - tpct * 0.6), Color(0.75, 0.9, 1.0, talpha * 0.4))
 
 	# HP bar above head
 	var hp_pct = hp / max_hp
