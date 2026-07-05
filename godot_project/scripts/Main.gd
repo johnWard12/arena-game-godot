@@ -16,6 +16,10 @@ var hp_bot: ProgressBar
 var win_label: Label
 var cd_hud: Node2D   # custom-drawn cooldown panel
 
+var world_3d: Node3D
+var camera3d: Camera3D
+var camera3d_base_pos := Vector3.ZERO
+
 const HEALTH_PACK_HEAL = 28.0
 const HEALTH_PACK_RADIUS = 44.0
 const HEALTH_PACK_RESPAWN = 12.0
@@ -33,9 +37,14 @@ func _ready():
 	player.global_position = Vector2(450, 540)
 	player.arena_rect = arena_rect
 	player.obstacle_rects = map_obstacles
+	player.visible = false  # 2D vector art replaced by EntityView3D
 	player.projectile_spawned.connect(func(p):
 		p.obstacle_rects = map_obstacles
+		p.visible = false  # 2D vector art replaced by ProjectileView3D
 		add_child(p)
+		var pv = ProjectileView3D.new()
+		world_3d.add_child(pv)
+		pv.setup(p)
 	)
 
 	match bot_class:
@@ -46,9 +55,14 @@ func _ready():
 	bot.global_position = Vector2(1470, 540)
 	bot.arena_rect = arena_rect
 	bot.obstacle_rects = map_obstacles
+	bot.visible = false  # 2D vector art replaced by EntityView3D
 	bot.projectile_spawned.connect(func(p):
 		p.obstacle_rects = map_obstacles
+		p.visible = false  # 2D vector art replaced by ProjectileView3D
 		add_child(p)
+		var pv = ProjectileView3D.new()
+		world_3d.add_child(pv)
+		pv.setup(p)
 	)
 
 	player.opponent = bot
@@ -59,8 +73,106 @@ func _ready():
 	player.died.connect(func(): _on_died(player))
 	bot.died.connect(func(): _on_died(bot))
 
+	build_3d_world()
 	build_ui()
 	queue_redraw()
+
+func build_3d_world():
+	world_3d = Node3D.new()
+	add_child(world_3d)
+
+	var arena3d = Arena3D.new()
+	world_3d.add_child(arena3d)
+	arena3d.setup(arena_rect, map_obstacles, health_packs)
+
+	var player_view = EntityView3D.new()
+	world_3d.add_child(player_view)
+	player_view.setup(player)
+
+	var bot_view = EntityView3D.new()
+	world_3d.add_child(bot_view)
+	bot_view.setup(bot)
+
+	camera3d = Camera3D.new()
+	camera3d.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera3d.keep_aspect = Camera3D.KEEP_HEIGHT
+	var center = arena_rect.position + arena_rect.size * 0.5
+	var target = CoordUtil.to_world(center)
+	var arena_span = max(arena_rect.size.x, arena_rect.size.y) / CoordUtil.SIM_SCALE
+	# 45 degree down-angle (MOBA-style, not top-down) — height:back ratio
+	# controls the pitch; equal parts is exactly 45 degrees.
+	var height = arena_span * 0.7
+	var back = arena_span * 0.7
+	camera3d.position = target + Vector3(0, height, back)
+	camera3d.add_to_group("game_camera")
+	world_3d.add_child(camera3d)
+	camera3d.look_at(target, Vector3.UP)
+	_fit_camera_to_arena()
+	# window/stretch/mode="canvas_items" only rescales 2D UI — it does not
+	# lock the actual Viewport (and thus this 3D camera) to a fixed
+	# 1920x1080 size. In fullscreen the real viewport takes on the OS
+	# window's actual resolution/aspect, which may not be 16:9 and may not
+	# be settled yet when _ready() runs, so re-fit whenever it changes.
+	get_viewport().size_changed.connect(_fit_camera_to_arena)
+
+# Frames the ENTIRE arena so no part of the play area can ever be off-screen
+# (a player must never be able to walk into an unseen zone). Fits both width
+# and height for the current viewport aspect, then pans the camera along its
+# own right/up axes so the arena's true projected midpoint sits at screen
+# center — the old version centered on the ground-level arena center, but the
+# angled projection makes the real vertical bounds asymmetric around that,
+# which cut off the near (bottom) edge where the player walks.
+func _fit_camera_to_arena():
+	# Re-derive the un-panned "look at arena center" pose first so repeated
+	# calls (viewport resize) don't accumulate pan offsets.
+	var center = arena_rect.position + arena_rect.size * 0.5
+	var target = CoordUtil.to_world(center)
+	var arena_span = max(arena_rect.size.x, arena_rect.size.y) / CoordUtil.SIM_SCALE
+	camera3d.position = target + Vector3(0, arena_span * 0.7, arena_span * 0.7)
+	camera3d.look_at(target, Vector3.UP)
+
+	var basis = camera3d.global_transform.basis
+	var right = basis.x
+	var up = basis.y
+	var margin = 40.0  # sim units of padding around the play area
+	var rect = arena_rect.grow(margin)
+	# Include a modest content height (character-scale, ~2.2m) rather than the
+	# full wall height so tall back walls don't eat vertical framing budget.
+	const CONTENT_HEIGHT := 2.2
+	var corners_2d = [
+		rect.position,
+		rect.position + Vector2(rect.size.x, 0),
+		rect.position + Vector2(0, rect.size.y),
+		rect.position + rect.size,
+	]
+	var min_r = INF
+	var max_r = -INF
+	var min_u = INF
+	var max_u = -INF
+	for c2d in corners_2d:
+		for h in [0.0, CONTENT_HEIGHT]:
+			var c = CoordUtil.to_world(c2d, h)
+			min_r = min(min_r, c.dot(right))
+			max_r = max(max_r, c.dot(right))
+			min_u = min(min_u, c.dot(up))
+			max_u = max(max_u, c.dot(up))
+
+	var needed_width = max_r - min_r
+	var needed_height = max_u - min_u
+	var viewport_size = get_viewport().get_visible_rect().size
+	var aspect = viewport_size.x / max(1.0, viewport_size.y)
+	# KEEP_HEIGHT: visible height == size, visible width == size * aspect.
+	# Cover whichever dimension binds so nothing clips on any aspect ratio.
+	camera3d.size = max(needed_height, needed_width / aspect) * 1.04
+
+	# Pan the camera so the projected bbox midpoint lands at screen center,
+	# correcting the asymmetry the look-at pose leaves along the up axis.
+	var mid_r = (min_r + max_r) * 0.5
+	var mid_u = (min_u + max_u) * 0.5
+	var off_r = mid_r - target.dot(right)
+	var off_u = mid_u - target.dot(up)
+	camera3d.position += right * off_r + up * off_u
+	camera3d_base_pos = camera3d.position
 
 func build_map():
 	map_obstacles = [
@@ -177,11 +289,15 @@ func _process(delta):
 		hp_bot.value = bot.hp
 	if shake_time_left > 0:
 		shake_time_left -= delta
-		if shake_time_left > 0:
-			position = Vector2(randf_range(-shake_intensity, shake_intensity),
-				randf_range(-shake_intensity, shake_intensity))
-		else:
-			position = Vector2.ZERO
+		if camera3d != null:
+			if shake_time_left > 0:
+				var off = Vector3(randf_range(-shake_intensity, shake_intensity),
+					randf_range(-shake_intensity, shake_intensity), 0) * 0.02
+				camera3d.position = camera3d_base_pos + off
+			else:
+				camera3d.position = camera3d_base_pos
+				shake_intensity = 0.0
+		elif shake_time_left <= 0:
 			shake_intensity = 0.0
 	queue_redraw()
 
@@ -219,8 +335,9 @@ func _unhandled_input(event):
 		get_tree().change_scene_to_file("res://scenes/CharSelect.tscn")
 
 func _draw():
-	draw_map()
-	# draw cooldown HUD directly here since we have player reference
+	# Arena is now rendered by Arena3D (see build_3d_world()); the old
+	# draw_map() and its helpers below are unused but left in place for
+	# reference during the 3D migration.
 	if is_instance_valid(player) and player.alive:
 		_draw_cooldown_hud()
 

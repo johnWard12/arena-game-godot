@@ -19,7 +19,19 @@ func get_movement_input() -> Vector2:
 		v.y += 1
 	return v
 
-func get_aim_dir(opp: Entity) -> Vector2:
+func get_aim_dir(_opp: Entity) -> Vector2:
+	var cam = get_tree().get_first_node_in_group("game_camera")
+	if cam != null:
+		var mouse_pos = get_viewport().get_mouse_position()
+		var ray_origin = cam.project_ray_origin(mouse_pos)
+		var ray_dir = cam.project_ray_normal(mouse_pos)
+		var hit = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_dir)
+		if hit != null:
+			var dir = CoordUtil.to_sim(hit) - global_position
+			if dir.length() > 0.01:
+				return dir.normalized()
+		return facing
+	# Fallback if no 3D camera is present in the scene.
 	var dir = get_global_mouse_position() - global_position
 	if dir.length() < 0.01:
 		return facing
