@@ -33,6 +33,11 @@ var hit_entities: Array = []
 # register_ability_result() — used for passives like Mage's Overcharge.
 var report_result := false
 
+# When true, this projectile heals its target instead of damaging it —
+# used by Cleric's Mending Light. Everything else about it (travel,
+# collision, obstacles, trail) is identical to a damage projectile.
+var is_heal := false
+
 var trail: Array = []
 const TRAIL_MAX_POINTS = 9
 var spawn_fx_done := false
@@ -88,9 +93,13 @@ func _report_miss():
 func _on_hit():
 	var landed := false
 	if owner_entity != null and is_instance_valid(owner_entity) and owner_entity.alive:
-		landed = owner_entity.deal_damage(target, damage)
-		if landed:
-			owner_entity.add_combo_stack()
+		if is_heal:
+			owner_entity.heal(target, damage)
+			landed = true
+		else:
+			landed = owner_entity.deal_damage(target, damage)
+			if landed:
+				owner_entity.add_combo_stack()
 	if landed and apply_slow > 0 and target != null and is_instance_valid(target) and target.alive:
 		target.slowed_time_left = apply_slow
 		target.slow_pct = apply_slow_pct

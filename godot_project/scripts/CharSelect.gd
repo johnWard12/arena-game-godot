@@ -3,10 +3,13 @@ extends Node2D
 const W = 1920
 const H = 1080
 
-const CARD_W = 210.0
+# CARD_W/GAP shrink automatically if there isn't room for CLASSES.size()
+# cards side by side (see _ready()) — these are the "up to 4 cards" sizes.
+var CARD_W := 210.0
 const CARD_H = 360.0
 const CARD_Y = 180.0
-const GAP    = 18.0
+var GAP := 18.0
+const MAX_SIDE_WIDTH := 900.0
 
 # left section (player): N cards centered in left half (0..960)
 # right section (bot): N cards centered in right half (960..1920)
@@ -31,6 +34,7 @@ const RANGED_COLOR = Color(0.72, 0.4,  1.0)
 
 const BRUISER_COLOR = Color(0.95, 0.55, 0.15)
 const RANGER_COLOR  = Color(0.45, 0.75, 0.35)
+const CLERIC_COLOR  = Color(0.95, 0.88, 0.6)
 
 const CLASSES = [
 	{
@@ -85,12 +89,27 @@ const CLASSES = [
 		"hp":    "HP  130",
 		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "RainArrows R"],
 		"ability_descs": [
-			"5 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
-			"16 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
+			"8 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
+			"24 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
 			"Throws a trap 110 out that arms in 0.6s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
-			"10 dmg shot that also recoils you backward — damage and distance in one button. 6s cooldown.",
-			"Vanish from AI targeting for 2.5s (a human player tracking you can still hit you). 10s cooldown.",
+			"16 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
+			"Vanish from AI targeting for 3s (a human player tracking you can still hit you). 10s cooldown.",
 			"Targets a zone that rains arrows for 2s, ticking 9 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
+		]
+	},
+	{
+		"label": "CLERIC",
+		"color": CLERIC_COLOR,
+		"key":   "cleric",
+		"hp":    "HP  130",
+		"lines": ["Team support/healer.", "Protects & empowers allies.", "", "Smite      LMB", "Mending    E", "Consecrate Q", "Purify     F", "GuardianWard Shift", "GuardBond  R"],
+		"ability_descs": [
+			"7 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
+			"Skill-shot heal toward your lowest-HP ally within 400 range (self if none). Heals 24 (+10% per combo stack). 3s cooldown, 0.2s wind-up.",
+			"Instant zone at your feet: damages enemies and heals allies standing in it, ticking every 1s for 3s. 150 radius. 8s cooldown.",
+			"Rectangle cast (240 long, 150 wide) — cleanses CC/debuffs from every ally it hits (including you) and adds a small heal-over-time. 10s cooldown.",
+			"Shields your lowest-HP ally within 400 range (self if none): 30 HP + 8 per banked combo stack, consuming them. 9s cooldown.",
+			"Links you with your lowest-HP ally in range for 4s: damage either takes splits 50/50, both take 20% less damage and heal over time. No ally in range -> self-only (still get the reduction + healing). Usable even while stunned.",
 		]
 	},
 ]
@@ -98,6 +117,11 @@ const CLASSES = [
 func _ready():
 	var n = CLASSES.size()
 	var total_w = CARD_W * n + GAP * (n - 1)
+	if total_w > MAX_SIDE_WIDTH:
+		var s = MAX_SIDE_WIDTH / total_w
+		CARD_W *= s
+		GAP *= s
+		total_w = MAX_SIDE_WIDTH
 	for i in n:
 		player_cards_x.append(W * 0.25 - total_w * 0.5 + i * (CARD_W + GAP))
 		bot_cards_x.append(W * 0.75 - total_w * 0.5 + i * (CARD_W + GAP))

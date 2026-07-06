@@ -176,6 +176,9 @@ func try_shift(_opp: Entity):
 	invisible_time_left = CAMO_DUR
 	cd_shift = CAMO_CD
 
+func get_shift_active() -> bool:
+	return invisible_time_left > 0 or barrier_time_left > 0
+
 func try_ult(opp: Entity):
 	if not can_start_ability() or ult_charge < ULT_CHARGE_MAX or opp == null:
 		return

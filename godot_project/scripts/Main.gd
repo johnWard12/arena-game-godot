@@ -77,11 +77,13 @@ func _make_fighter(cls_key: String, is_human: bool) -> Entity:
 			"ranged":  return RangedPlayerController.new()
 			"bruiser": return BruiserPlayerController.new()
 			"ranger":  return RangerPlayerController.new()
+			"cleric":  return ClericPlayerController.new()
 			_:         return PlayerController.new()
 	match cls_key:
 		"ranged":  return RangedBotController.new()
 		"bruiser": return BruiserBotController.new()
 		"ranger":  return RangerBotController.new()
+		"cleric":  return ClericBotController.new()
 		_:         return BotController.new()
 
 func _spawn_fighter(e: Entity):
@@ -334,6 +336,17 @@ func _get_ability_defs() -> Array:
 			{"key": "Shift", "name": "Camo",    "cd": player.cd_shift, "max": RangerEntity.CAMO_CD,         "col": Color(0.4, 0.9, 0.4)},
 			{"key": "R",     "name": "Rain",    "cd": 0.0,             "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(0.5, 0.9, 0.3)},
+			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
+		]
+	elif player is ClericEntity:
+		return [
+			{"key": "LMB",   "name": "Smite",   "cd": player.cd_auto,  "max": ClericEntity.SMITE_CD,        "col": Color(0.95, 0.9, 0.6)},
+			{"key": "E",     "name": "Mending", "cd": player.cd_a1,    "max": ClericEntity.MENDING_CD,      "col": Color(0.95, 0.85, 0.5)},
+			{"key": "Q",     "name": "Consec",  "cd": player.cd_a2,    "max": ClericEntity.CONSECRATE_CD,   "col": Color(0.95, 0.9, 0.55)},
+			{"key": "F",     "name": "Purify",  "cd": player.cd_a3,    "max": ClericEntity.PURIFY_CD,       "col": Color(0.95, 0.92, 0.7)},
+			{"key": "Shift", "name": "Ward",    "cd": player.cd_shift, "max": ClericEntity.WARD_CD,         "col": Color(0.95, 0.9, 0.6)},
+			{"key": "R",     "name": "Bond",    "cd": 0.0,             "max": 1.0, "charge": true,
+				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(0.95, 0.9, 0.5)},
 			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
 		]
 	else:

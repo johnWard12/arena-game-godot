@@ -157,6 +157,43 @@ var rooted_time_left  := 0.0
 # Camouflage; nothing else sets it yet.
 var invisible_time_left := 0.0
 
+# Heal-over-time — generic, so any future ability can use it the same way
+# attacks all route through deal_damage(). Introduced for Cleric.
+var hot_time_left := 0.0
+var hot_tick_timer := 0.0
+var hot_per_tick := 0.0
+const HOT_TICK_INTERVAL := 1.0
+
+func apply_heal_over_time(duration: float, per_tick: float):
+	hot_time_left = max(hot_time_left, duration)
+	hot_per_tick = max(hot_per_tick, per_tick)
+
+# Resets every CC/debuff timer at once — Cleric's Purify uses this, but
+# it's generically reusable for any future cleanse-type ability.
+func cleanse_status():
+	stunned_time_left = 0.0
+	rooted_time_left = 0.0
+	slowed_time_left = 0.0
+	freeze_time_left = 0.0
+	outgoing_dmg_debuff_time_left = 0.0
+	outgoing_dmg_mult = 1.0
+
+# Damage-sharing link (Cleric's Guardian's Bond). Only bond_partner/
+# bond_time_left/bond_split_pct live here, for the split calculation in
+# deal_damage() below — any incoming damage-reduction from being bonded is
+# each class's own responsibility to fold into its own dmg_reduction
+# computation (same pattern Bruiser already uses to combine Unbreakable +
+# Warcry), so this can't accidentally clobber another class's other
+# damage-reduction sources.
+var bond_partner: Entity = null
+var bond_time_left := 0.0
+var bond_split_pct := 0.5
+
+func apply_damage_bond(partner: Entity, duration: float, split_pct: float):
+	bond_partner = partner
+	bond_time_left = max(bond_time_left, duration)
+	bond_split_pct = split_pct
+
 # Cosmetic-only tag on top of stunned_time_left so the view layer can show a
 # distinct ice-crystal effect for freeze (Mage's Nova) instead of the generic
 # stun stars — set alongside stunned_time_left by apply_freeze(), never read
@@ -266,6 +303,57 @@ func get_enemies_in_range(radius: float, center = null) -> Array:
 			result.append(c)
 	return result
 
+# Whichever of (self, allies within radius) has the lower HP% — the
+# standard targeting rule for Cleric's single-target support abilities.
+# include_self=true means it always returns *something* (never null),
+# degrading gracefully to "always self" in 1v1 or when no ally is close.
+# Pass include_self=false when the caller specifically needs a separate
+# partner (e.g. Guardian's Bond, which can't "bond" with itself).
+func get_lowest_hp_ally(radius: float, include_self: bool = true) -> Entity:
+	var best: Entity = self if include_self else null
+	var best_pct = (hp / max_hp) if include_self else INF
+	for c in all_fighters:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id != team_id:
+			continue
+		if global_position.distance_to(c.global_position) > radius:
+			continue
+		var pct = c.hp / c.max_hp
+		if pct < best_pct:
+			best_pct = pct
+			best = c
+	return best
+
+# Every living ally within `radius` of `center` (self's position by
+# default), self included — mirrors get_enemies_in_range for the ally
+# side. Used by zone abilities that heal allies standing in them.
+func get_allies_in_range(radius: float, center = null) -> Array:
+	var origin: Vector2 = global_position if center == null else center
+	var result := []
+	for c in all_fighters:
+		if not is_instance_valid(c) or not c.alive or c.team_id != team_id:
+			continue
+		if origin.distance_to(c.global_position) <= radius:
+			result.append(c)
+	return result
+
+# Every living ally inside a rectangle extending `length` forward from
+# self in the facing direction, `width` wide — the first non-circular AoE
+# shape in the game. Self is included automatically (it's always at the
+# rectangle's own origin corner). Used by Purify's line skill-shot.
+func get_allies_in_rect(length: float, width: float) -> Array:
+	var result := []
+	var perp = Vector2(-facing.y, facing.x)
+	var half_w = width * 0.5
+	for c in all_fighters:
+		if not is_instance_valid(c) or not c.alive or c.team_id != team_id:
+			continue
+		var rel = c.global_position - global_position
+		var fwd_dist = rel.dot(facing)
+		var lat_dist = rel.dot(perp)
+		if fwd_dist >= 0.0 and fwd_dist <= length and abs(lat_dist) <= half_w:
+			result.append(c)
+	return result
+
 signal died
 signal projectile_spawned(proj)
 signal trap_spawned(trap)
@@ -304,6 +392,16 @@ func _physics_process(delta):
 	invisible_time_left = max(0.0, invisible_time_left - delta)
 	freeze_time_left  = max(0.0, freeze_time_left - delta)
 	knockup_time_left = max(0.0, knockup_time_left - delta)
+	if hot_time_left > 0:
+		hot_time_left -= delta
+		hot_tick_timer -= delta
+		if hot_tick_timer <= 0:
+			hot_tick_timer = HOT_TICK_INTERVAL
+			hp = min(max_hp, hp + hot_per_tick)
+	if bond_time_left > 0:
+		bond_time_left = max(0.0, bond_time_left - delta)
+		if bond_time_left <= 0:
+			bond_partner = null
 	if bladestorm_time_left > 0:
 		bladestorm_time_left  = max(0.0, bladestorm_time_left - delta)
 		bladestorm_hit_timer  = max(0.0, bladestorm_hit_timer - delta)
@@ -636,10 +734,12 @@ func apply_freeze(duration: float):
 
 # Whether this entity's Shift ability is currently in its active-buff window.
 # Each class parks its Shift payoff in a different field (Iron Resolve,
-# Barrier, Unbreakable), so the view layer asks this instead of knowing the
-# per-class field names.
+# Barrier, Unbreakable, Camouflage...), so the view layer asks this instead
+# of knowing the per-class field names. Also true whenever an ally-granted
+# Guardian Ward barrier is active, regardless of whose Shift field this is,
+# since that's a real, class-agnostic buff a player needs to see.
 func get_shift_active() -> bool:
-	return iron_resolve_time_left > 0
+	return iron_resolve_time_left > 0 or barrier_time_left > 0
 
 # Weakens THIS entity's own outgoing damage for a duration — e.g. Bruiser's
 # Warcry debuffing the opponent. Not blocked by cc_immune since it isn't CC.
@@ -673,6 +773,20 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		target.casting = null
 		target.apply_stun(STUN_DUR)
 	amount *= outgoing_dmg_mult * (1.0 - target.dmg_reduction)
+	# Guardian's Bond — split the hit with the linked partner before it
+	# lands, each side reduced by their own dmg_reduction independently.
+	if target.bond_time_left > 0 and target.bond_partner != null and is_instance_valid(target.bond_partner) and target.bond_partner.alive:
+		var partner = target.bond_partner
+		var shared = amount * target.bond_split_pct
+		amount -= shared
+		shared *= (1.0 - partner.dmg_reduction)
+		partner.hp = max(0.0, partner.hp - shared)
+		partner.hit_flash_left = 0.25
+		FX.hit_spark(get_parent(), partner.global_position, partner.base_color)
+		if partner.hp <= 0 and partner.alive:
+			partner.alive = false
+			FX.death_shatter(get_parent(), partner.global_position, partner.base_color)
+			partner.died.emit()
 	target.hp = max(0.0, target.hp - amount)
 	target.hit_flash_left = 0.25
 	FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0) if barrier_hit else target.base_color)
@@ -804,7 +918,7 @@ func resolve_a3(opp: Entity):
 	cd_a3 = SWORD_THROW_CD
 	recovering = {"type": "a3", "time_left": SWORD_THROW_RECOVERY, "total": SWORD_THROW_RECOVERY}
 
-func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false, kind: String = "orb"):
+func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false, kind: String = "orb", is_heal: bool = false):
 	var proj = load("res://scripts/Projectile.gd").new()
 	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
 	proj.velocity = dir * speed
@@ -819,6 +933,7 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	proj.report_result = track
 	proj.pierce = pierce
 	proj.visual_kind = kind
+	proj.is_heal = is_heal
 	proj.obstacle_rects = obstacle_rects
 	projectile_spawned.emit(proj)
 

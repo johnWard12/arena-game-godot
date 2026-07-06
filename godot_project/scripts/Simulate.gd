@@ -7,8 +7,8 @@ const FIXED_DT := 1.0 / 60.0
 const MAX_MATCH_SECONDS := 90.0
 const MAX_MATCH_TICKS := int(MAX_MATCH_SECONDS / FIXED_DT)
 
-const CLASS_KEYS = ["melee", "ranged", "bruiser", "ranger"]
-const CLASS_LABELS = {"melee": "Duelist", "ranged": "Mage", "bruiser": "Bruiser", "ranger": "Ranger"}
+const CLASS_KEYS = ["melee", "ranged", "bruiser", "ranger", "cleric"]
+const CLASS_LABELS = {"melee": "Duelist", "ranged": "Mage", "bruiser": "Bruiser", "ranger": "Ranger", "cleric": "Cleric"}
 
 const HEALTH_PACK_HEAL = 28.0
 const HEALTH_PACK_RADIUS = 44.0
@@ -56,6 +56,7 @@ func make_bot(key: String) -> Entity:
 		"ranged":  bot = RangedBotController.new()
 		"bruiser": bot = BruiserBotController.new()
 		"ranger":  bot = RangerBotController.new()
+		"cleric":  bot = ClericBotController.new()
 		_:         bot = BotController.new()
 	bot._ready()
 	return bot

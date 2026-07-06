@@ -14,6 +14,7 @@ class_name EntityView3D
 
 const CoordUtil = preload("res://scripts/CoordUtil.gd")
 const RangerEntity = preload("res://scripts/RangerEntity.gd")
+const ClericEntity = preload("res://scripts/ClericEntity.gd")
 
 const KIT_PATH := "res://assets/RPG Characters - Nov 2020/glTF/"
 
@@ -56,6 +57,14 @@ const MODEL_CONFIG := {
 		"attack_anim": "Bow_Shoot",
 		"cast_anim": "Idle_Attacking",
 	},
+	"cleric": {
+		"scene_path": KIT_PATH + "Cleric.gltf",
+		"measured_height": 3.035844,
+		"ground_offset": -0.003267,
+		"target_height": 1.66 * SIZE_BUMP,
+		"attack_anim": "Staff_Attack",
+		"cast_anim": "Spell1",
+	},
 }
 
 var entity: Entity = null
@@ -97,7 +106,7 @@ var _warcry_particles: GPUParticles3D
 
 func setup(e: Entity):
 	entity = e
-	var key = "bruiser" if e is BruiserEntity else ("mage" if e is RangedEntity else ("ranger" if e is RangerEntity else "duelist"))
+	var key = "bruiser" if e is BruiserEntity else ("mage" if e is RangedEntity else ("ranger" if e is RangerEntity else ("cleric" if e is ClericEntity else "duelist")))
 	_cfg = MODEL_CONFIG[key]
 
 	var scene: PackedScene = load(_cfg["scene_path"])
@@ -225,6 +234,7 @@ func _build_shift_shield(key: String):
 		"mage": _build_barrier_fx()
 		"bruiser": _build_unbreakable_fx()
 		"ranger": _build_camouflage_fx()
+		"cleric": _build_barrier_fx()
 
 # Duelist — Iron Resolve: a slim shimmering ring at chest height, cool blue,
 # matching the old 2D "icy blue guard shimmer" flavor. No dome — this is a

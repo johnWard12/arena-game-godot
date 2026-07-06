@@ -185,7 +185,7 @@ func try_shift(_opp: Entity):
 	cd_shift = UNBREAKABLE_CD
 
 func get_shift_active() -> bool:
-	return unbreakable_time_left > 0
+	return unbreakable_time_left > 0 or barrier_time_left > 0
 
 func try_a3(_opp: Entity):
 	if not alive or cd_a3 > 0:
