@@ -28,6 +28,12 @@ var player_sel := 0
 var bot_sel    := 1
 var hovered    := Vector2i(-1, -1)  # x=side (0=player,1=bot), y=card idx
 
+# Team size (1v1/2v2/3v3). The chosen class fills every slot on a side for
+# now — teammates/enemies beyond the human player are AI-controlled copies
+# of that same class. A per-slot class picker is a natural follow-up.
+const TEAM_SIZES = [1, 2, 3]
+var team_size := 1
+
 const MELEE_COLOR  = Color(0.37, 0.88, 0.75)
 const RANGED_COLOR = Color(0.72, 0.4,  1.0)
 
@@ -103,9 +109,21 @@ func _input(event):
 		elif c.x == 1:
 			bot_sel = c.y
 			queue_redraw()
+		for i in TEAM_SIZES.size():
+			if _team_size_btn_rect(i).has_point(event.position):
+				team_size = TEAM_SIZES[i]
+				queue_redraw()
 		# fight button
 		if _fight_btn_rect().has_point(event.position):
 			_start()
+
+func _team_size_btn_rect(i: int) -> Rect2:
+	var w = 64.0
+	var h = 32.0
+	var gap = 10.0
+	var total_w = w * TEAM_SIZES.size() + gap * (TEAM_SIZES.size() - 1)
+	var start_x = W * 0.5 - total_w * 0.5
+	return Rect2(start_x + i * (w + gap), 108, w, h)
 
 func _card_under(pos: Vector2) -> Vector2i:
 	for i in 3:
@@ -124,6 +142,7 @@ func _fight_btn_rect() -> Rect2:
 func _start():
 	get_tree().root.set_meta("player_class", CLASSES[player_sel]["key"])
 	get_tree().root.set_meta("bot_class",    CLASSES[bot_sel]["key"])
+	get_tree().root.set_meta("team_size",    team_size)
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
 func _draw():
@@ -131,6 +150,18 @@ func _draw():
 
 	_draw_text("ARENA PROTOTYPE", Vector2(W * 0.5, 48), 22, Color(1, 1, 1, 0.5), true)
 	_draw_text("CHOOSE YOUR FIGHTERS", Vector2(W * 0.5, 82), 34, Color(1, 1, 1, 0.92), true)
+
+	# team size selector
+	for i in TEAM_SIZES.size():
+		var size_val = TEAM_SIZES[i]
+		var r = _team_size_btn_rect(i)
+		var is_sel = team_size == size_val
+		var is_hot = r.has_point(get_viewport().get_mouse_position())
+		var bg_a = 0.30 if is_sel else (0.16 if is_hot else 0.08)
+		draw_rect(r, Color(1, 1, 1, bg_a))
+		draw_rect(r, Color(1, 1, 1, 0.9 if is_sel else 0.3), false, 1.5)
+		_draw_text("%dv%d" % [size_val, size_val], r.position + r.size * 0.5,
+			14, Color(1, 1, 1, 0.95 if is_sel else 0.6), true)
 
 	# section headers
 	_draw_text("YOU", Vector2(W * 0.25, 148), 18, Color(0.8, 0.8, 0.9, 0.7), true)
@@ -162,7 +193,9 @@ func _draw():
 	# matchup summary below button
 	var p_name = CLASSES[player_sel]["label"]
 	var b_name = CLASSES[bot_sel]["label"]
-	_draw_text("%s  vs  %s (bot)" % [p_name, b_name],
+	var summary = ("%s  vs  %s (bot)" % [p_name, b_name]) if team_size == 1 \
+		else ("%s x%d  vs  %s x%d (bot)" % [p_name, team_size, b_name, team_size])
+	_draw_text(summary,
 		Vector2(W * 0.5, btn.position.y + btn.size.y + 28), 15, Color(0.55, 0.55, 0.65, 0.7), true)
 
 	if tooltip_text != "":
