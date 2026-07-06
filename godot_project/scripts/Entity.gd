@@ -139,6 +139,10 @@ var stunned_time_left := 0.0
 var slowed_time_left  := 0.0
 var slow_pct          := 0.5
 
+# A root locks movement but NOT abilities — distinct from a stun, which
+# locks both. Introduced for Ranger's Snare Trap; nothing else uses it yet.
+var rooted_time_left  := 0.0
+
 # Cosmetic-only tag on top of stunned_time_left so the view layer can show a
 # distinct ice-crystal effect for freeze (Mage's Nova) instead of the generic
 # stun stars — set alongside stunned_time_left by apply_freeze(), never read
@@ -239,6 +243,7 @@ func get_enemies_in_range(radius: float) -> Array:
 
 signal died
 signal projectile_spawned(proj)
+signal trap_spawned(trap)
 signal screen_shake(intensity: float, duration: float)
 
 func _physics_process(delta):
@@ -269,6 +274,7 @@ func _physics_process(delta):
 			dash_charges += 1
 	hit_flash_left    = max(0.0, hit_flash_left - delta)
 	slowed_time_left  = max(0.0, slowed_time_left - delta)
+	rooted_time_left  = max(0.0, rooted_time_left - delta)
 	freeze_time_left  = max(0.0, freeze_time_left - delta)
 	knockup_time_left = max(0.0, knockup_time_left - delta)
 	if bladestorm_time_left > 0:
@@ -367,7 +373,7 @@ func _physics_process(delta):
 		if dash_time_left <= 0:
 			dashing = false
 			velocity *= CARRY
-	elif locked:
+	elif locked or rooted_time_left > 0:
 		var spd = velocity.length()
 		if spd > 0:
 			var dec = FRICTION * delta * 2.0
@@ -570,6 +576,12 @@ func apply_slow(duration: float, pct: float = 0.5):
 	slowed_time_left = max(slowed_time_left, duration)
 	slow_pct = max(slow_pct, pct)
 
+# Locks movement only — abilities/attacks still work. Used by traps.
+func apply_root(duration: float):
+	if cc_immune:
+		return
+	rooted_time_left = max(rooted_time_left, duration)
+
 # Same lockup as apply_stun, but tagged as a freeze so the view layer can
 # render ice shards instead of stun stars — used by Mage's Nova.
 func apply_freeze(duration: float):
@@ -751,6 +763,17 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	proj.obstacle_rects = obstacle_rects
 	projectile_spawned.emit(proj)
 
+func _place_trap(pos: Vector2, radius: float, arm_delay: float, lifetime: float, root_duration: float, col: Color):
+	var trap = load("res://scripts/Trap.gd").new()
+	trap.global_position = pos
+	trap.owner_entity = self
+	trap.radius = radius
+	trap.arm_delay = arm_delay
+	trap.lifetime = lifetime
+	trap.root_duration = root_duration
+	trap.trap_color = col
+	trap_spawned.emit(trap)
+
 # ---- Drawing helpers ----
 func _draw_hud(now: int, accent: Color):
 	# hit flash
@@ -782,6 +805,15 @@ func _draw_hud(now: int, accent: Color):
 	if slowed_time_left > 0:
 		var pulse = 0.5 + 0.3 * sin(now * 0.015)
 		draw_arc(Vector2.ZERO, RADIUS + 11, 0, TAU, 40, Color(0.3, 0.6, 1.0, pulse), 2.5)
+
+	# root — small stakes/vines pinning the feet, distinct from the slow ring
+	if rooted_time_left > 0:
+		var pulse = 0.55 + 0.35 * sin(now * 0.018)
+		for i in 4:
+			var a = i * TAU / 4.0 + 0.4
+			var p0 = Vector2(cos(a), sin(a)) * (RADIUS - 2)
+			var p1 = Vector2(cos(a), sin(a)) * (RADIUS + 10)
+			draw_line(p0, p1, Color(0.45, 0.3, 0.15, pulse), 2.5)
 
 	# parry ring
 	if parrying:

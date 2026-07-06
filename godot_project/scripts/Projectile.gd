@@ -15,6 +15,14 @@ var apply_slow := 0.0
 var apply_slow_pct := 0.5
 var obstacle_rects: Array[Rect2] = []
 
+# When true, this projectile ignores `target` and instead checks against
+# every living enemy on owner_entity.all_fighters as it travels, damaging
+# each one once and continuing rather than despawning on first contact.
+# Used by Ranger's Piercing Shot; every existing single-target ability is
+# unaffected since this defaults to false.
+var pierce := false
+var hit_entities: Array = []
+
 # When true, reports whether this projectile landed back to owner_entity via
 # register_ability_result() — used for passives like Mage's Overcharge.
 var report_result := false
@@ -42,9 +50,30 @@ func _physics_process(delta):
 			_report_miss()
 			queue_free()
 			return
+
+	if pierce:
+		_check_pierce_hits()
+		return
+
 	if target != null and is_instance_valid(target) and target.alive:
 		if global_position.distance_to(target.global_position) <= hit_radius + target.RADIUS:
 			_on_hit()
+
+func _check_pierce_hits():
+	if owner_entity == null or not is_instance_valid(owner_entity) or not owner_entity.alive:
+		return
+	for e in owner_entity.all_fighters:
+		if e == owner_entity or not is_instance_valid(e) or not e.alive or e.team_id == owner_entity.team_id:
+			continue
+		if e in hit_entities:
+			continue
+		if global_position.distance_to(e.global_position) <= hit_radius + e.RADIUS:
+			hit_entities.append(e)
+			if owner_entity.deal_damage(e, damage):
+				owner_entity.add_combo_stack()
+				if apply_slow > 0 and e.alive:
+					e.slowed_time_left = apply_slow
+					e.slow_pct = apply_slow_pct
 
 func _report_miss():
 	if report_result and owner_entity != null and is_instance_valid(owner_entity) and owner_entity.has_method("register_ability_result"):
