@@ -233,7 +233,6 @@ func _draw():
 
 	var perp     = Vector2(-facing.y, facing.x)
 	var robe_col = _col_dark(accent, 0.6)
-	var trim_col = Color(accent.r, accent.g, accent.b, 0.85)
 	var skin_col = Color(0.88, 0.72, 0.56)
 
 	# hover bob

@@ -261,6 +261,7 @@ func get_enemies_in_range(radius: float, center = null) -> Array:
 signal died
 signal projectile_spawned(proj)
 signal trap_spawned(trap)
+@warning_ignore("unused_signal") # emitted by subclasses (Bruiser/Mage), not the base class itself
 signal screen_shake(intensity: float, duration: float)
 
 func _physics_process(delta):
@@ -370,7 +371,6 @@ func _physics_process(delta):
 	var locked = casting != null
 	var recovering_slow = recovering != null and recovery_slows_movement
 	var debuffed_slow = slowed_time_left > 0
-	var slowed = recovering_slow or debuffed_slow
 
 	if lunging:
 		lunge_time_left -= delta
@@ -781,7 +781,7 @@ func resolve_a3(opp: Entity):
 	cd_a3 = SWORD_THROW_CD
 	recovering = {"type": "a3", "time_left": SWORD_THROW_RECOVERY, "total": SWORD_THROW_RECOVERY}
 
-func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_pct: float = 0.5, track: bool = false, pierce: bool = false):
+func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false):
 	var proj = load("res://scripts/Projectile.gd").new()
 	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
 	proj.velocity = dir * speed
@@ -792,7 +792,7 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	proj.proj_color = col
 	proj.proj_radius_visual = vis_r
 	proj.apply_slow = slow
-	proj.apply_slow_pct = slow_pct
+	proj.apply_slow_pct = slow_amount
 	proj.report_result = track
 	proj.pierce = pierce
 	proj.obstacle_rects = obstacle_rects
@@ -900,7 +900,6 @@ func _col_dark(c: Color, f: float) -> Color:
 func _draw_duelist(now: int, accent: Color):
 	var perp    = Vector2(-facing.y, facing.x)
 	var armor   = _col_dark(accent, 0.55)
-	var dark    = Color(0.10, 0.11, 0.14)
 	var skin    = Color(0.88, 0.72, 0.56)
 	var boot    = Color(0.20, 0.16, 0.12)
 

@@ -239,7 +239,6 @@ func _draw():
 func _draw_bruiser(now: int, accent: Color):
 	var perp   = Vector2(-facing.y, facing.x)
 	var armor  = _col_dark(accent, 0.5)
-	var dark   = Color(0.10, 0.11, 0.14)
 	var skin   = Color(0.88, 0.72, 0.56)
 	var boot   = Color(0.18, 0.14, 0.10)
 
