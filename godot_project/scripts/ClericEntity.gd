@@ -32,8 +32,8 @@ const CONSECRATE_CD             = 8.0
 
 # F — Purify: rectangle skill-shot, wide enough to catch two allies
 # standing close together. Cleanses CC/debuffs + a small heal-over-time.
-const PURIFY_LENGTH   = 240.0
-const PURIFY_WIDTH    = 150.0
+const PURIFY_LENGTH   = 300.0
+const PURIFY_WIDTH    = 180.0
 const PURIFY_HOT_DUR  = 4.0
 const PURIFY_HOT_TICK = 6.0
 const PURIFY_CD       = 10.0
@@ -199,6 +199,12 @@ func try_ult(_opp: Entity):
 		partner.apply_heal_over_time(BOND_DUR, BOND_HOT_TICK * heal_mult())
 		devotion_time_left = DEVOTION_DUR
 	FX.impact_burst(get_parent(), global_position, Color(0.95, 0.9, 0.5), 22, 220.0)
+	# Activation moment needs to read as clearly as a big ultimate should —
+	# the persistent ring/beam (EntityView3D._update_bond_fx) shows it's
+	# ongoing, but this marks the exact instant it went off.
+	_spawn_zone_fx(global_position, 90.0, 0.6, Color(1.0, 0.92, 0.55))
+	if partner != null:
+		_spawn_zone_fx(partner.global_position, 90.0, 0.6, Color(1.0, 0.92, 0.55))
 
 func resolve_ult(_opp: Entity):
 	pass

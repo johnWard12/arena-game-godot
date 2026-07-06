@@ -285,7 +285,7 @@ func build_ui():
 		hp_bars.append(bar)
 
 		var label = Label.new()
-		var cls_name = "BRUISER" if f is BruiserEntity else ("MAGE" if f is RangedEntity else "DUELIST")
+		var cls_name = "BRUISER" if f is BruiserEntity else ("MAGE" if f is RangedEntity else ("RANGER" if f is RangerEntity else ("CLERIC" if f is ClericEntity else "DUELIST")))
 		var prefix = "" if f == player else ("ALLY " if side == 0 else "BOT ")
 		label.text = prefix + cls_name
 		label.position = Vector2(x, y + 26)
