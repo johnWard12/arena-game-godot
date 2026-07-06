@@ -72,17 +72,35 @@ func _make_stone_material(base_color: Color, seed_val: int, uv_scale: float, rou
 	noise.seed = seed_val
 	noise.frequency = 0.045
 	noise.fractal_octaves = 3
-	var tex := NoiseTexture2D.new()
-	tex.width = 256
-	tex.height = 256
-	tex.noise = noise
-	tex.seamless = true
+
+	var albedo_tex := NoiseTexture2D.new()
+	albedo_tex.width = 256
+	albedo_tex.height = 256
+	albedo_tex.noise = noise
+	albedo_tex.seamless = true
+
+	# Same underlying noise, read as a normal map — previously the noise
+	# only varied albedo brightness, so lighting couldn't tell the surface
+	# had any bump at all. Sharing the noise source means the bumps align
+	# with the color variation instead of reading as two unrelated patterns.
+	var normal_tex := NoiseTexture2D.new()
+	normal_tex.width = 256
+	normal_tex.height = 256
+	normal_tex.noise = noise
+	normal_tex.seamless = true
+	normal_tex.as_normal_map = true
+	normal_tex.bump_strength = 6.0
+
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = base_color
-	mat.albedo_texture = tex
+	mat.albedo_texture = albedo_tex
 	mat.uv1_scale = Vector3(uv_scale, uv_scale, uv_scale)
 	mat.roughness = roughness
+	mat.roughness_texture = albedo_tex  # subtle micro-variation in shininess
 	mat.metallic = 0.0
+	mat.normal_enabled = true
+	mat.normal_texture = normal_tex
+	mat.normal_scale = 1.1
 	return mat
 
 # Kenney's kit assigns different flat colors per part (tan walls, blue
@@ -411,7 +429,7 @@ func _build_lighting():
 	# shadows outright (which was the earlier fix for a different problem —
 	# a single huge flat quad's stretched shadow).
 	sun.shadow_enabled = true
-	sun.shadow_blur = 3.0
+	sun.shadow_blur = 1.5
 	sun.shadow_bias = 0.15
 	sun.shadow_normal_bias = 2.0
 	add_child(sun)
@@ -445,5 +463,25 @@ func _build_lighting():
 	env.glow_intensity = 0.4
 	env.glow_bloom = 0.06
 	env.glow_hdr_threshold = 1.1
+
+	# SSAO was cut — it's one of the more GPU-expensive post-process effects
+	# and, combined with 4x MSAA and a 4096 shadow map, made the game
+	# noticeably laggy/jittery. The normal maps + tonemap + color grading
+	# below do most of the visual work at a much lower cost; re-add SSAO
+	# later if performance allows.
+	env.ssao_enabled = false
+
+	# Filmic tonemapping gives much better highlight rolloff than the
+	# default Linear mode, which matters here since several elements are
+	# emissive/bloom-lit (torches, health packs, the center ring) — Linear
+	# tends to blow those out to flat white instead of a graded glow.
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+
+	# A small color-grading pass for a less flat, more "produced" look.
+	env.adjustment_enabled = true
+	env.adjustment_brightness = 1.0
+	env.adjustment_contrast = 1.08
+	env.adjustment_saturation = 1.12
+
 	env_node.environment = env
 	add_child(env_node)
