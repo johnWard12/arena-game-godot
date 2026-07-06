@@ -83,7 +83,11 @@ func _spawn_fighter(e: Entity):
 	add_child(e)
 	e.arena_rect = arena_rect
 	e.obstacle_rects = map_obstacles
-	e.visible = false  # 2D vector art replaced by EntityView3D
+	# Stays visible — use_3d_view only skips the character-art pass inside
+	# _draw(), not the whole node. It draws the overhead HUD overlay (HP
+	# bar, cast bar, combo pips, status rings) that has no 3D equivalent;
+	# hiding the whole node would silently kill that too.
+	e.use_3d_view = true
 	e.projectile_spawned.connect(func(p):
 		p.obstacle_rects = map_obstacles
 		p.visible = false  # 2D vector art replaced by ProjectileView3D

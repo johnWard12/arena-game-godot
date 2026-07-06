@@ -90,6 +90,16 @@ const IRON_RESOLVE_PER_STACK = 0.10
 
 # ---- State ----
 var is_player := false
+
+# When true, Main.gd is presenting this entity via EntityView3D instead of
+# this node's own procedural 2D art, so _draw() skips the character-art
+# pass entirely. It must NOT skip _draw_hud(): the entity node itself stays
+# visible (only the body art is suppressed) specifically so the overhead
+# HUD — HP bar, cast bar, combo pips, status rings, stun stars, knockup
+# arrows — keeps rendering. None of that has a 3D equivalent; setting the
+# whole node invisible (the original approach) silently killed all of it.
+var use_3d_view := false
+
 var base_color := Color(0.37, 0.88, 0.75)
 var velocity := Vector2.ZERO
 var facing := Vector2.RIGHT
@@ -964,6 +974,12 @@ func _draw_duelist(now: int, accent: Color):
 # ---- Drawing ----
 func _draw():
 	var now = Time.get_ticks_msec()
+
+	if use_3d_view:
+		if not alive:
+			return
+		_draw_hud(now, get_status_accent(base_color))
+		return
 
 	# trail
 	for p in trail:

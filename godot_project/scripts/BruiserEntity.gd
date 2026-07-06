@@ -204,6 +204,12 @@ func resolve_a3(_opp: Entity):
 func _draw():
 	var now = Time.get_ticks_msec()
 
+	if use_3d_view:
+		if not alive:
+			return
+		_draw_hud(now, get_status_accent(base_color))
+		return
+
 	for p in trail:
 		var age = (now - p["time"]) / 200.0
 		if age < 1.0:
