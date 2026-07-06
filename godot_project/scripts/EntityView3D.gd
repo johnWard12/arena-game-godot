@@ -224,6 +224,7 @@ func _build_shift_shield(key: String):
 		"duelist": _build_iron_resolve_fx()
 		"mage": _build_barrier_fx()
 		"bruiser": _build_unbreakable_fx()
+		"ranger": _build_camouflage_fx()
 
 # Duelist — Iron Resolve: a slim shimmering ring at chest height, cool blue,
 # matching the old 2D "icy blue guard shimmer" flavor. No dome — this is a
@@ -322,6 +323,27 @@ func _build_unbreakable_fx():
 	_shift_ring2.material_override = _shift_ring2_mat
 	_shift_ring2.visible = false
 	add_child(_shift_ring2)
+
+# Ranger — Camouflage: a soft, low-key green ground shimmer — this is a
+# fade into the terrain, not a shield popping up, so no dome and a dimmer
+# pulse than the other three.
+func _build_camouflage_fx():
+	_shift_ring = MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.46
+	ring_mesh.outer_radius = 0.50
+	_shift_ring.mesh = ring_mesh
+	_shift_ring.position = Vector3(0, 0.05, 0)
+	_shift_ring_mat = StandardMaterial3D.new()
+	_shift_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_shift_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_shift_ring_mat.albedo_color = Color(0.4, 0.9, 0.4, 0.5)
+	_shift_ring_mat.emission_enabled = true
+	_shift_ring_mat.emission = Color(0.4, 0.9, 0.4)
+	_shift_ring_mat.emission_energy_multiplier = 1.4
+	_shift_ring.material_override = _shift_ring_mat
+	_shift_ring.visible = false
+	add_child(_shift_ring)
 
 # Slow — generic debuff shared by several abilities (Duelist's A1/Sword
 # Throw, Mage's Bolt, Bruiser's Tremor). A dull frost ring at the feet so a
@@ -483,7 +505,8 @@ func _update_status_fx(delta: float):
 	_bloodlust_particles.emitting = entity.bloodlust_time_left > 0
 
 	var shift_active = entity.get_shift_active()
-	_shift_ring.visible = shift_active
+	if _shift_ring != null:
+		_shift_ring.visible = shift_active
 	if _shift_dome != null:
 		_shift_dome.visible = shift_active
 	if _shift_ring2 != null:
@@ -493,6 +516,7 @@ func _update_status_fx(delta: float):
 			"duelist": _animate_iron_resolve_fx()
 			"mage": _animate_barrier_fx(delta)
 			"bruiser": _animate_unbreakable_fx()
+			"ranger": _animate_camouflage_fx()
 	_shift_was_active = shift_active
 
 	_slow_ring.visible = entity.slowed_time_left > 0
@@ -548,6 +572,12 @@ func _animate_unbreakable_fx():
 	var flash2 = 0.5 + 0.5 * sin(t * 5.0 - 0.6)
 	_shift_ring2_mat.emission_energy_multiplier = 0.8 + flash2 * 1.2
 	_shift_ring2_mat.albedo_color.a = 0.25 + flash2 * 0.3
+
+# Camouflage — slow, low-key pulse (fading into the terrain, not popping).
+func _animate_camouflage_fx():
+	var pulse = 0.4 + 0.3 * sin(Time.get_ticks_msec() * 0.008)
+	_shift_ring_mat.emission_energy_multiplier = 0.8 + pulse * 0.8
+	_shift_ring_mat.albedo_color.a = 0.3 + pulse * 0.25
 
 func _update_animation():
 	# Priority: attack swing > just got hit > cast wind-up > parry guard >
