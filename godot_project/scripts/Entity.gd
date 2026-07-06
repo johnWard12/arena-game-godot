@@ -188,6 +188,27 @@ var arena_rect := Rect2(Vector2.ZERO, Vector2(1000, 600))
 var obstacle_rects: Array[Rect2] = []
 var trail := []
 
+# Which side this entity is on. 1v1 never needs to touch this (default 0
+# for everyone would make "nearest enemy" degenerate); Main.gd assigns 0
+# to the player's team and 1 to the opposing team for any match size.
+var team_id := 0
+
+# Picks the closest living entity from `candidates` that isn't on this
+# entity's team. Used by Main.gd to keep every fighter's `opponent`
+# pointed at a sensible target in 2v2/3v3, and works unchanged for 1v1
+# (a candidates list of exactly one enemy just returns that enemy).
+func get_nearest_enemy(candidates: Array) -> Entity:
+	var nearest: Entity = null
+	var nearest_d := INF
+	for c in candidates:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
+			continue
+		var d = global_position.distance_to(c.global_position)
+		if d < nearest_d:
+			nearest_d = d
+			nearest = c
+	return nearest
+
 signal died
 signal projectile_spawned(proj)
 signal screen_shake(intensity: float, duration: float)

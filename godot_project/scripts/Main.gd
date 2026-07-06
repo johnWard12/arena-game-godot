@@ -6,8 +6,9 @@ const EntityView3D = preload("res://scripts/EntityView3D.gd")
 const ProjectileView3D = preload("res://scripts/ProjectileView3D.gd")
 const CoordUtil = preload("res://scripts/CoordUtil.gd")
 
-var player: Entity
-var bot: Entity
+var player: Entity  # the human-controlled fighter specifically
+var fighters: Array[Entity] = []  # every fighter, both teams — team 0 is the player's
+var team_size := 1
 var arena_rect := Rect2(Vector2(30, 30), Vector2(1860, 1020))
 var map_obstacles: Array[Rect2] = []
 var health_packs := []
@@ -15,8 +16,7 @@ var health_packs := []
 var shake_time_left  := 0.0
 var shake_intensity  := 0.0
 
-var hp_me: ProgressBar
-var hp_bot: ProgressBar
+var hp_bars: Array[ProgressBar] = []  # parallel to `fighters`
 var win_label: Label
 var cd_hud: Node2D   # custom-drawn cooldown panel
 
@@ -32,54 +32,77 @@ func _ready():
 	build_map()
 	var player_class = get_tree().root.get_meta("player_class", "melee")
 	var bot_class    = get_tree().root.get_meta("bot_class",    "melee")
+	team_size = get_tree().root.get_meta("team_size", 1)
 
-	match player_class:
-		"ranged":  player = RangedPlayerController.new()
-		"bruiser": player = BruiserPlayerController.new()
-		_:         player = PlayerController.new()
-	add_child(player)
-	player.global_position = Vector2(450, 540)
-	player.arena_rect = arena_rect
-	player.obstacle_rects = map_obstacles
-	player.visible = false  # 2D vector art replaced by EntityView3D
-	player.projectile_spawned.connect(func(p):
-		p.obstacle_rects = map_obstacles
-		p.visible = false  # 2D vector art replaced by ProjectileView3D
-		add_child(p)
-		var pv = ProjectileView3D.new()
-		world_3d.add_child(pv)
-		pv.setup(p)
-	)
+	var player_positions = _team_spawn_positions(team_size, 450.0)
+	var enemy_positions  = _team_spawn_positions(team_size, 1470.0)
 
-	match bot_class:
-		"ranged":  bot = RangedBotController.new()
-		"bruiser": bot = BruiserBotController.new()
-		_:         bot = BotController.new()
-	add_child(bot)
-	bot.global_position = Vector2(1470, 540)
-	bot.arena_rect = arena_rect
-	bot.obstacle_rects = map_obstacles
-	bot.visible = false  # 2D vector art replaced by EntityView3D
-	bot.projectile_spawned.connect(func(p):
-		p.obstacle_rects = map_obstacles
-		p.visible = false  # 2D vector art replaced by ProjectileView3D
-		add_child(p)
-		var pv = ProjectileView3D.new()
-		world_3d.add_child(pv)
-		pv.setup(p)
-	)
+	for i in team_size:
+		var e = _make_fighter(player_class, i == 0)
+		e.team_id = 0
+		e.global_position = player_positions[i]
+		_spawn_fighter(e)
+		if i == 0:
+			player = e
 
-	player.opponent = bot
-	bot.opponent = player
-	player.screen_shake.connect(start_shake)
-	bot.screen_shake.connect(start_shake)
+	for i in team_size:
+		var e = _make_fighter(bot_class, false)
+		e.team_id = 1
+		e.global_position = enemy_positions[i]
+		_spawn_fighter(e)
 
-	player.died.connect(func(): _on_died(player))
-	bot.died.connect(func(): _on_died(bot))
+	_update_targeting()
 
 	build_3d_world()
 	build_ui()
 	queue_redraw()
+
+# Team 0 fighters are indices [0, count); team 1 fighters (built from the
+# same helper with a different base x) fill [count, 2*count). Spreads each
+# team vertically around the arena's mid-height so 1v1/2v2/3v3 all just work.
+func _team_spawn_positions(count: int, x: float) -> Array:
+	var positions := []
+	var spacing = 220.0
+	var start_y = 540.0 - spacing * (count - 1) * 0.5
+	for i in count:
+		positions.append(Vector2(x, start_y + i * spacing))
+	return positions
+
+func _make_fighter(cls_key: String, is_human: bool) -> Entity:
+	if is_human:
+		match cls_key:
+			"ranged":  return RangedPlayerController.new()
+			"bruiser": return BruiserPlayerController.new()
+			_:         return PlayerController.new()
+	match cls_key:
+		"ranged":  return RangedBotController.new()
+		"bruiser": return BruiserBotController.new()
+		_:         return BotController.new()
+
+func _spawn_fighter(e: Entity):
+	add_child(e)
+	e.arena_rect = arena_rect
+	e.obstacle_rects = map_obstacles
+	e.visible = false  # 2D vector art replaced by EntityView3D
+	e.projectile_spawned.connect(func(p):
+		p.obstacle_rects = map_obstacles
+		p.visible = false  # 2D vector art replaced by ProjectileView3D
+		add_child(p)
+		var pv = ProjectileView3D.new()
+		world_3d.add_child(pv)
+		pv.setup(p)
+	)
+	e.screen_shake.connect(start_shake)
+	e.died.connect(func(): _on_fighter_died(e))
+	fighters.append(e)
+
+# Keeps every living fighter's `opponent` pointed at their nearest living
+# enemy. Called once at spawn and every frame thereafter (_process), so a
+# fighter whose target dies immediately reacquires instead of idling.
+func _update_targeting():
+	for f in fighters:
+		if is_instance_valid(f) and f.alive:
+			f.opponent = f.get_nearest_enemy(fighters)
 
 func build_3d_world():
 	world_3d = Node3D.new()
@@ -89,13 +112,10 @@ func build_3d_world():
 	world_3d.add_child(arena3d)
 	arena3d.setup(arena_rect, map_obstacles, health_packs)
 
-	var player_view = EntityView3D.new()
-	world_3d.add_child(player_view)
-	player_view.setup(player)
-
-	var bot_view = EntityView3D.new()
-	world_3d.add_child(bot_view)
-	bot_view.setup(bot)
+	for f in fighters:
+		var view = EntityView3D.new()
+		world_3d.add_child(view)
+		view.setup(f)
 
 	camera3d = Camera3D.new()
 	camera3d.projection = Camera3D.PROJECTION_ORTHOGONAL
@@ -196,37 +216,32 @@ func build_ui():
 	var canvas = CanvasLayer.new()
 	add_child(canvas)
 
-	# HP bars (top corners)
-	hp_me = ProgressBar.new()
-	hp_me.min_value = 0
-	hp_me.max_value = player.max_hp
-	hp_me.value = player.hp
-	hp_me.position = Vector2(20, 20)
-	hp_me.size = Vector2(220, 22)
-	hp_me.show_percentage = false
-	canvas.add_child(hp_me)
+	# HP bars + class labels, one per fighter, stacked by team side
+	hp_bars.clear()
+	for i in fighters.size():
+		var f = fighters[i]
+		var side = f.team_id
+		var slot = i if side == 0 else i - team_size
+		var x = 20.0 if side == 0 else 1680.0
+		var y = 20.0 + slot * 56.0
 
-	hp_bot = ProgressBar.new()
-	hp_bot.min_value = 0
-	hp_bot.max_value = bot.max_hp
-	hp_bot.value = bot.hp
-	hp_bot.position = Vector2(1680, 20)
-	hp_bot.size = Vector2(220, 22)
-	hp_bot.show_percentage = false
-	canvas.add_child(hp_bot)
+		var bar = ProgressBar.new()
+		bar.min_value = 0
+		bar.max_value = f.max_hp
+		bar.value = f.hp
+		bar.position = Vector2(x, y)
+		bar.size = Vector2(220, 22)
+		bar.show_percentage = false
+		canvas.add_child(bar)
+		hp_bars.append(bar)
 
-	# class name labels
-	var p_label = Label.new()
-	p_label.text = "BRUISER" if player is BruiserEntity else ("MAGE" if player is RangedEntity else "DUELIST")
-	p_label.position = Vector2(20, 46)
-	p_label.add_theme_font_size_override("font_size", 13)
-	canvas.add_child(p_label)
-
-	var b_label = Label.new()
-	b_label.text = "BOT  " + ("BRUISER" if bot is BruiserEntity else ("MAGE" if bot is RangedEntity else "DUELIST"))
-	b_label.position = Vector2(1680, 46)
-	b_label.add_theme_font_size_override("font_size", 13)
-	canvas.add_child(b_label)
+		var label = Label.new()
+		var cls_name = "BRUISER" if f is BruiserEntity else ("MAGE" if f is RangedEntity else "DUELIST")
+		var prefix = "" if f == player else ("ALLY " if side == 0 else "BOT ")
+		label.text = prefix + cls_name
+		label.position = Vector2(x, y + 26)
+		label.add_theme_font_size_override("font_size", 13)
+		canvas.add_child(label)
 
 	# win label
 	win_label = Label.new()
@@ -287,10 +302,10 @@ func start_shake(intensity: float, duration: float):
 
 func _process(delta):
 	update_health_packs(delta)
-	if is_instance_valid(player):
-		hp_me.value = player.hp
-	if is_instance_valid(bot):
-		hp_bot.value = bot.hp
+	_update_targeting()
+	for i in fighters.size():
+		if is_instance_valid(fighters[i]):
+			hp_bars[i].value = fighters[i].hp
 	if shake_time_left > 0:
 		shake_time_left -= delta
 		if camera3d != null:
@@ -312,9 +327,9 @@ func update_health_packs(delta: float):
 			if pack["respawn_left"] <= 0.0:
 				pack["active"] = true
 		else:
-			if try_pickup_health_pack(pack, player):
-				continue
-			try_pickup_health_pack(pack, bot)
+			for f in fighters:
+				if try_pickup_health_pack(pack, f):
+					break
 
 func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 	if entity == null or not is_instance_valid(entity) or not entity.alive or entity.hp >= entity.max_hp:
@@ -328,11 +343,29 @@ func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 	pack["respawn_left"] = HEALTH_PACK_RESPAWN
 	return true
 
-func _on_died(who):
+func _on_fighter_died(_who: Entity):
+	# Re-target immediately so nobody spends a frame aiming at a corpse.
+	_update_targeting()
+
+	var team0_alive := false
+	var team1_alive := false
+	for f in fighters:
+		if is_instance_valid(f) and f.alive:
+			if f.team_id == 0: team0_alive = true
+			else: team1_alive = true
+	if team0_alive and team1_alive:
+		return  # match continues
+
 	win_label.visible = true
-	win_label.text = "BOT WINS" if who == player else "YOU WIN"
-	win_label.add_theme_color_override("font_color",
-		Color(1, 0.36, 0.48) if who == player else Color(0.37, 0.88, 0.75))
+	if team0_alive and not team1_alive:
+		win_label.text = "YOU WIN" if team_size == 1 else "YOUR TEAM WINS"
+		win_label.add_theme_color_override("font_color", Color(0.37, 0.88, 0.75))
+	elif team1_alive and not team0_alive:
+		win_label.text = "BOT WINS" if team_size == 1 else "ENEMY TEAM WINS"
+		win_label.add_theme_color_override("font_color", Color(1, 0.36, 0.48))
+	else:
+		win_label.text = "DRAW"
+		win_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 
 func _unhandled_input(event):
 	if event is InputEventKey and event.pressed and event.keycode == KEY_BACKSPACE:
