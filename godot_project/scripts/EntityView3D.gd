@@ -1,150 +1,157 @@
 extends Node3D
 class_name EntityView3D
-# Phase-0 placeholder 3D presentation for an Entity. Mirrors the entity's
-# already-simulated Vector2 state every frame; the entity itself has zero
-# awareness this exists. Only ever instantiated by Main.gd — Simulate.gd
-# never creates one, so headless balance runs are completely unaffected.
+# 3D presentation for an Entity, using real rigged/animated Quaternius RPG
+# Character models (Warrior/Wizard/Monk) instead of procedural primitives.
+# Mirrors the entity's already-simulated Vector2 state every frame; the
+# entity itself has zero awareness this exists. Only ever instantiated by
+# Main.gd — Simulate.gd never creates one, so headless balance runs are
+# completely unaffected.
 #
-# Gives each class a distinct silhouette (body proportions + weapon prop)
-# so they're readable at a glance even as placeholder primitives, matching
-# the "is BruiserEntity / is RangedEntity" class-check pattern Main.gd
-# already uses elsewhere.
+# Animation selection is driven entirely from existing Entity fields
+# (swing_time_left/total, casting, hit_flash_left, stunned_time_left,
+# parrying, velocity) — no changes to gameplay code, this stays a
+# read-only observer like the rest of the view layer.
 
-const BODY_HEIGHT := 1.6
-const BODY_RADIUS := 0.34
-const HEAD_RADIUS := 0.17
+const KIT_PATH := "res://assets/RPG Characters - Nov 2020/glTF/"
+
+# Per-class model config. measured_height/ground_offset come from the
+# model's actual rest-pose AABB (probed once via a debug scene) rather than
+# guessed — same approach used for the Castle Kit props.
+const MODEL_CONFIG := {
+	"duelist": {
+		"scene_path": KIT_PATH + "Warrior.gltf",
+		"measured_height": 2.974859,
+		"ground_offset": 0.087153,
+		"target_height": 1.6,
+		"attack_anim": "Sword_Attack",
+		"cast_anim": "Idle_Attacking",
+	},
+	"mage": {
+		"scene_path": KIT_PATH + "Wizard.gltf",
+		"measured_height": 3.123627,
+		"ground_offset": 0.129306,
+		"target_height": 1.68,
+		"attack_anim": "Staff_Attack",
+		"cast_anim": "Spell1",
+	},
+	"bruiser": {
+		"scene_path": KIT_PATH + "Monk.gltf",
+		"measured_height": 3.2853,
+		"ground_offset": 0.337144,
+		"target_height": 1.76,
+		"attack_anim": "Attack",
+		"cast_anim": "Idle_Attacking",
+	},
+}
 
 var entity: Entity = null
-var _body_height := BODY_HEIGHT
-
-var _body: MeshInstance3D
-var _head: MeshInstance3D
-var _mat: StandardMaterial3D
+var _cfg: Dictionary
+var _model: Node3D
+var _anim: AnimationPlayer
+var _current_anim := ""
+var _swing_was_active := false
+var _death_timer := 0.0
+var _was_alive := true
 
 func setup(e: Entity):
 	entity = e
+	var key = "bruiser" if e is BruiserEntity else ("mage" if e is RangedEntity else "duelist")
+	_cfg = MODEL_CONFIG[key]
 
-	var body_radius = BODY_RADIUS
-	var body_height = BODY_HEIGHT
-	if e is BruiserEntity:
-		body_radius = BODY_RADIUS * 1.3
-		body_height = BODY_HEIGHT * 1.1
-	elif e is RangedEntity:
-		body_radius = BODY_RADIUS * 0.85
-		body_height = BODY_HEIGHT * 1.05
-	_body_height = body_height
+	var scene: PackedScene = load(_cfg["scene_path"])
+	_model = scene.instantiate()
+	add_child(_model)
+	var s = _cfg["target_height"] / _cfg["measured_height"]
+	_model.scale = Vector3.ONE * s
+	_model.position = Vector3(0, _cfg["ground_offset"] * s, 0)
 
-	_mat = StandardMaterial3D.new()
-	_mat.albedo_color = e.base_color
-	_mat.emission_enabled = true
-	_mat.emission = e.base_color
-	_mat.emission_energy_multiplier = 0.15
+	_anim = _find_anim_player(_model)
+	if _anim != null:
+		_anim.play("Idle")
+		_current_anim = "Idle"
 
-	_body = MeshInstance3D.new()
-	var capsule := CapsuleMesh.new()
-	capsule.height = body_height
-	capsule.radius = body_radius
-	_body.mesh = capsule
-	_body.position = Vector3(0, body_height * 0.5, 0)
-	_body.material_override = _mat
-	add_child(_body)
+func _find_anim_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node
+	for child in node.get_children():
+		var found = _find_anim_player(child)
+		if found != null:
+			return found
+	return null
 
-	_head = MeshInstance3D.new()
-	var head_sphere := SphereMesh.new()
-	head_sphere.radius = HEAD_RADIUS
-	head_sphere.height = HEAD_RADIUS * 2.0
-	_head.mesh = head_sphere
-	_head.position = Vector3(0, body_height + HEAD_RADIUS * 0.55, 0)
-	var head_mat := StandardMaterial3D.new()
-	head_mat.albedo_color = Color(0.85, 0.7, 0.55)
-	_head.material_override = head_mat
-	add_child(_head)
+func _play(anim_name: String, blend: float = 0.15):
+	if _anim == null or _current_anim == anim_name or not _anim.has_animation(anim_name):
+		return
+	_anim.play(anim_name, blend)
+	_current_anim = anim_name
 
-	if e is BruiserEntity:
-		_build_hammer(body_height)
-	elif e is RangedEntity:
-		_build_staff(body_height)
-	else:
-		_build_sword(body_height)
+func _force_play(anim_name: String, blend: float = 0.08):
+	if _anim == null or not _anim.has_animation(anim_name):
+		return
+	_anim.play(anim_name, blend)
+	_current_anim = anim_name
 
-func _build_sword(body_height: float):
-	var blade := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(0.07, 0.07, 0.85)
-	blade.mesh = box
-	blade.position = Vector3(0.35, body_height * 0.65, 0.35)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.82, 0.84, 0.9)
-	mat.metallic = 0.6
-	blade.material_override = mat
-	add_child(blade)
-
-func _build_hammer(body_height: float):
-	var shaft := MeshInstance3D.new()
-	var shaft_mesh := CylinderMesh.new()
-	shaft_mesh.top_radius = 0.045
-	shaft_mesh.bottom_radius = 0.045
-	shaft_mesh.height = 0.75
-	shaft.mesh = shaft_mesh
-	shaft.rotation_degrees = Vector3(90, 0, 0)
-	shaft.position = Vector3(0.42, body_height * 0.55, 0.3)
-	var shaft_mat := StandardMaterial3D.new()
-	shaft_mat.albedo_color = Color(0.4, 0.3, 0.22)
-	shaft.material_override = shaft_mat
-	add_child(shaft)
-
-	var head := MeshInstance3D.new()
-	var head_box := BoxMesh.new()
-	head_box.size = Vector3(0.28, 0.22, 0.22)
-	head.mesh = head_box
-	head.position = Vector3(0.42, body_height * 0.55, 0.68)
-	var head_mat := StandardMaterial3D.new()
-	head_mat.albedo_color = Color(0.5, 0.5, 0.56)
-	head_mat.metallic = 0.5
-	head.material_override = head_mat
-	add_child(head)
-
-func _build_staff(body_height: float):
-	var shaft := MeshInstance3D.new()
-	var shaft_mesh := CylinderMesh.new()
-	shaft_mesh.top_radius = 0.03
-	shaft_mesh.bottom_radius = 0.03
-	shaft_mesh.height = 1.05
-	shaft.mesh = shaft_mesh
-	shaft.rotation_degrees = Vector3(90, 0, 0)
-	shaft.position = Vector3(0.32, body_height * 0.6, 0.3)
-	var shaft_mat := StandardMaterial3D.new()
-	shaft_mat.albedo_color = Color(0.4, 0.28, 0.18)
-	shaft.material_override = shaft_mat
-	add_child(shaft)
-
-	var orb := MeshInstance3D.new()
-	var orb_mesh := SphereMesh.new()
-	orb_mesh.radius = 0.1
-	orb_mesh.height = 0.2
-	orb.mesh = orb_mesh
-	orb.position = Vector3(0.32, body_height * 0.6, 0.82)
-	var orb_mat := StandardMaterial3D.new()
-	orb_mat.albedo_color = Color(0.85, 0.55, 1.0)
-	orb_mat.emission_enabled = true
-	orb_mat.emission = Color(0.85, 0.55, 1.0)
-	orb_mat.emission_energy_multiplier = 2.0
-	orb.material_override = orb_mat
-	add_child(orb)
-
-func _process(_delta):
-	if entity == null or not is_instance_valid(entity) or not entity.alive:
+func _process(delta):
+	if entity == null or not is_instance_valid(entity):
 		visible = false
 		return
+
+	if not entity.alive:
+		_animate_death(delta)
+		return
+	_was_alive = true
+	_death_timer = 0.0
 	visible = true
+	scale = Vector3.ONE
+	rotation = Vector3.ZERO
 
 	position = CoordUtil.to_world(entity.global_position)
-
 	var look_dir = Vector3(entity.facing.x, 0.0, entity.facing.y)
 	if look_dir.length() > 0.001:
 		look_at(position + look_dir, Vector3.UP)
 
-	var accent = entity.get_status_accent(entity.base_color)
-	_mat.albedo_color = accent
-	_mat.emission = accent
-	_mat.emission_energy_multiplier = 1.6 if entity.hit_flash_left > 0 else 0.15
+	_update_animation()
+
+func _update_animation():
+	# Priority: attack swing > just got hit > cast wind-up > parry guard >
+	# stunned > movement > idle.
+	var swinging = entity.swing_time_left > 0 and entity.swing_total > 0
+	if swinging:
+		if not _swing_was_active:
+			_force_play(_cfg["attack_anim"])
+		_swing_was_active = true
+		return
+	_swing_was_active = false
+
+	if entity.hit_flash_left > 0.15:
+		_play("RecieveHit", 0.05)
+		return
+	if entity.casting != null:
+		_play(_cfg["cast_anim"], 0.1)
+		return
+	if entity.parrying:
+		_play("Idle_Weapon", 0.1)
+		return
+	if entity.stunned_time_left > 0:
+		_play("RecieveHit", 0.1)
+		return
+
+	var max_speed = entity.speed_override if entity.speed_override > 0.0 else Entity.MAX_SPEED
+	var speed_pct = entity.velocity.length() / max_speed
+	if speed_pct > 0.55:
+		_play("Run", 0.15)
+	elif speed_pct > 0.15:
+		_play("Walk", 0.15)
+	else:
+		_play("Idle", 0.15)
+
+func _animate_death(delta: float):
+	if _was_alive:
+		_was_alive = false
+		_death_timer = 0.0
+		_force_play("Death", 0.1)
+	visible = true
+	position = CoordUtil.to_world(entity.global_position)
+	_death_timer += delta
+	if _death_timer >= 2.0:
+		visible = false
