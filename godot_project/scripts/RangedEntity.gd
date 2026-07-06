@@ -106,7 +106,7 @@ func try_auto(opp: Entity):
 		return
 	cd_auto = RPROJ_CD
 	facing = get_aim_dir(opp)
-	_fire(facing, RPROJ_SPEED, RPROJ_RADIUS, RPROJ_DMG, opp, Color(1.0, 0.85, 0.3), 8.0)
+	_fire(facing, RPROJ_SPEED, RPROJ_RADIUS, RPROJ_DMG, opp, Color(1.0, 0.85, 0.3), 8.0, 0.0, 0.5, false, false, "icicle")
 
 func try_a1(opp: Entity):
 	if not can_start_ability() or cd_a1 > 0 or opp == null:
@@ -116,7 +116,7 @@ func try_a1(opp: Entity):
 func resolve_a1(opp: Entity):
 	facing = get_aim_dir(opp)
 	var dmg = round(BOLT_DMG * combo_mult())
-	_fire(facing, BOLT_SPEED, BOLT_RADIUS, dmg, opp, Color(0.4, 0.85, 1.0), 11.0, BOLT_SLOW_DUR, BOLT_SLOW_PCT, true)
+	_fire(facing, BOLT_SPEED, BOLT_RADIUS, dmg, opp, Color(0.4, 0.85, 1.0), 11.0, BOLT_SLOW_DUR, BOLT_SLOW_PCT, true, false, "icicle")
 	add_combo_stack()
 	cd_a1 = BOLT_CD
 	recovering = {"type": "a1", "time_left": BOLT_RECOVERY, "total": BOLT_RECOVERY}
@@ -195,7 +195,7 @@ func try_a3(opp: Entity):
 	for i in 3:
 		var offset = (i - 1) * half
 		var dir = facing.rotated(offset)
-		_fire(dir, ARCANE_FAN_SPEED, ARCANE_FAN_RADIUS, ARCANE_FAN_DMG, opp, Color(0.6, 0.3, 1.0), 9.0, 0.0, 0.5, true)
+		_fire(dir, ARCANE_FAN_SPEED, ARCANE_FAN_RADIUS, ARCANE_FAN_DMG, opp, Color(0.6, 0.3, 1.0), 9.0, 0.0, 0.5, true, false, "icicle")
 	FX.impact_burst(get_parent(), global_position + facing * (RADIUS + 20), Color(0.6, 0.3, 1.0), 10, 160.0)
 	cd_a3 = ARCANE_FAN_CD
 	recovering = {"type": "a3", "time_left": ARCANE_FAN_RECOVERY, "total": ARCANE_FAN_RECOVERY}

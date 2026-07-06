@@ -37,11 +37,12 @@ const DISENGAGE_CD     = 6.0
 const DISENGAGE_DMG    = 16.0
 const DISENGAGE_SPEED  = 1400.0
 const DISENGAGE_RADIUS = 16.0
-const DISENGAGE_RECOIL = 480.0
+const DISENGAGE_RECOIL = 1400.0
+const DISENGAGE_RECOIL_DUR = 0.14
 
 # Shift — Camouflage: brief stealth from AI targeting
 const CAMO_CD  = 10.0
-const CAMO_DUR = 2.5
+const CAMO_DUR = 3.0
 
 # R — Rain of Arrows: zone that ticks damage to anyone standing in it
 const RAIN_CAST          = 0.3
@@ -117,7 +118,7 @@ func try_auto(opp: Entity):
 		return
 	cd_auto = QUICKSHOT_CD
 	facing = get_aim_dir(opp)
-	_fire(facing, QUICKSHOT_SPEED, QUICKSHOT_RADIUS, QUICKSHOT_DMG, opp, Color(0.6, 1.0, 0.4), 7.0, 0.0, 0.5, true)
+	_fire(facing, QUICKSHOT_SPEED, QUICKSHOT_RADIUS, QUICKSHOT_DMG, opp, Color(0.6, 1.0, 0.4), 7.0, 0.0, 0.5, true, false, "arrow")
 
 func try_a1(opp: Entity):
 	if not can_start_ability() or cd_a1 > 0 or opp == null:
@@ -127,7 +128,7 @@ func try_a1(opp: Entity):
 func resolve_a1(opp: Entity):
 	facing = get_aim_dir(opp)
 	_fire(facing, PIERCE_SPEED, PIERCE_RADIUS, PIERCE_DMG, opp, Color(0.85, 1.0, 0.5), 9.0,
-		PIERCE_SLOW_DUR, PIERCE_SLOW_PCT, false, true)
+		PIERCE_SLOW_DUR, PIERCE_SLOW_PCT, false, true, "arrow")
 	cd_a1 = PIERCE_CD
 	recovering = {"type": "a1", "time_left": PIERCE_RECOVERY, "total": PIERCE_RECOVERY}
 
@@ -146,9 +147,25 @@ func try_a3(opp: Entity):
 	if not can_start_ability() or cd_a3 > 0 or opp == null:
 		return
 	facing = get_aim_dir(opp)
-	_fire(facing, DISENGAGE_SPEED, DISENGAGE_RADIUS, DISENGAGE_DMG, opp, Color(0.3, 0.85, 0.55), 8.0)
-	velocity = -facing * DISENGAGE_RECOIL
+	_fire(facing, DISENGAGE_SPEED, DISENGAGE_RADIUS, DISENGAGE_DMG, opp, Color(0.3, 0.85, 0.55), 8.0, 0.0, 0.5, false, false, "arrow")
+	# A plain one-frame velocity nudge got immediately overridden by normal
+	# movement acceleration the instant any direction key was held (which is
+	# most of the time — this is a reactive peel tool). Reusing `lunging`
+	# forces velocity every frame for its duration regardless of input,
+	# exactly like a dash, giving a real, guaranteed shove backward.
+	lunging = true
+	lunge_dir = -facing
+	lunge_speed = DISENGAGE_RECOIL
+	lunge_time_left = DISENGAGE_RECOIL_DUR
+	lunge_reach = 0.0
+	lunge_opponent = null
 	cd_a3 = DISENGAGE_CD
+
+# The recoil already did its job via try_a3's forced lunge; the ranged
+# damage already landed via the projectile fired there too, so arriving
+# at the end of the recoil "lunge" does nothing further.
+func resolve_lunge_strike(_opp: Entity):
+	pass
 
 func resolve_a3(_opp: Entity):
 	pass

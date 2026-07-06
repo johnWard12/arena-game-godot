@@ -15,6 +15,12 @@ var apply_slow := 0.0
 var apply_slow_pct := 0.5
 var obstacle_rects: Array[Rect2] = []
 
+# Which 3D shape ProjectileView3D builds for this projectile: "orb" (the
+# original glowing-ball look, still the default), "icicle" (Mage), or
+# "arrow" (Ranger). Purely a presentation switch — read once in
+# ProjectileView3D.setup(), has no effect on gameplay/collision at all.
+var visual_kind := "orb"
+
 # When true, this projectile ignores `target` and instead checks against
 # every living enemy on owner_entity.all_fighters as it travels, damaging
 # each one once and continuing rather than despawning on first contact.
