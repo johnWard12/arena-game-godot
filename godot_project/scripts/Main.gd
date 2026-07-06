@@ -5,6 +5,7 @@ const Arena3D = preload("res://scripts/Arena3D.gd")
 const EntityView3D = preload("res://scripts/EntityView3D.gd")
 const ProjectileView3D = preload("res://scripts/ProjectileView3D.gd")
 const TrapView3D = preload("res://scripts/TrapView3D.gd")
+const AreaFxView3D = preload("res://scripts/AreaFxView3D.gd")
 const CoordUtil = preload("res://scripts/CoordUtil.gd")
 
 var player: Entity  # the human-controlled fighter specifically
@@ -109,6 +110,11 @@ func _spawn_fighter(e: Entity):
 		var tv = TrapView3D.new()
 		world_3d.add_child(tv)
 		tv.setup(t)
+	)
+	e.area_fx_spawned.connect(func(fx):
+		var av = AreaFxView3D.new()
+		world_3d.add_child(av)
+		av.setup(fx)
 	)
 	e.screen_shake.connect(start_shake)
 	e.died.connect(func(): _on_fighter_died(e))

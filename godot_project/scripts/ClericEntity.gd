@@ -70,7 +70,6 @@ const HEAL_PER_STACK = 0.10
 var consecrate_time_left := 0.0
 var consecrate_tick_timer := 0.0
 var consecrate_pos := Vector2.ZERO
-var consecrate_fx_left := 0.0
 
 func _ready():
 	hp     = CLERIC_MAX_HP
@@ -79,7 +78,6 @@ func _ready():
 
 func _physics_process(delta):
 	devotion_time_left = max(0.0, devotion_time_left - delta)
-	consecrate_fx_left  = max(0.0, consecrate_fx_left - delta)
 	if consecrate_time_left > 0:
 		consecrate_time_left -= delta
 		consecrate_tick_timer -= delta
@@ -145,8 +143,8 @@ func try_a2(_opp: Entity):
 	consecrate_pos = global_position
 	consecrate_time_left = CONSECRATE_DUR
 	consecrate_tick_timer = 0.0
-	consecrate_fx_left = CONSECRATE_DUR
 	FX.impact_burst(get_parent(), global_position, Color(0.95, 0.9, 0.55), 18, 180.0)
+	_spawn_zone_fx(consecrate_pos, CONSECRATE_RADIUS, CONSECRATE_DUR, Color(0.95, 0.85, 0.4))
 	cd_a2 = CONSECRATE_CD
 
 func resolve_a2(_opp: Entity):
@@ -160,11 +158,13 @@ func try_a3(opp: Entity):
 	for a in get_allies_in_rect(PURIFY_LENGTH, PURIFY_WIDTH):
 		a.cleanse_status()
 		a.apply_heal_over_time(PURIFY_HOT_DUR, PURIFY_HOT_TICK * heal_mult())
+		FX.heal_sparkle(get_parent(), a.global_position)
 		if a != self:
 			hit_ally = true
 	if hit_ally:
 		devotion_time_left = DEVOTION_DUR
 	FX.impact_burst(get_parent(), global_position + facing * (PURIFY_LENGTH * 0.5), Color(0.95, 0.92, 0.7), 16, 180.0)
+	_spawn_rect_fx(global_position, facing, PURIFY_LENGTH, PURIFY_WIDTH, 0.5, Color(0.95, 0.9, 0.55))
 	cd_a3 = PURIFY_CD
 
 func resolve_a3(_opp: Entity):
@@ -212,7 +212,6 @@ func _draw():
 			return
 		var accent = get_status_accent(base_color)
 		draw_set_transform(_get_hud_screen_correction())
-		_draw_consecrate_zone()
 		_draw_hud(now, accent)
 		draw_set_transform(Vector2.ZERO)
 		return
@@ -228,15 +227,11 @@ func _draw():
 		return
 
 	var accent = get_status_accent(base_color)
-	_draw_consecrate_zone()
+	if consecrate_time_left > 0:
+		var local_center = to_local(consecrate_pos)
+		var pulse = 0.5 + 0.4 * sin(Time.get_ticks_msec() * 0.008)
+		draw_arc(local_center, CONSECRATE_RADIUS, 0, TAU, 48, Color(0.95, 0.9, 0.55, 0.3 * pulse), 3.0)
 	_draw_hud(now, accent)
-
-func _draw_consecrate_zone():
-	if consecrate_time_left <= 0:
-		return
-	var local_center = to_local(consecrate_pos)
-	var pulse = 0.5 + 0.4 * sin(Time.get_ticks_msec() * 0.008)
-	draw_arc(local_center, CONSECRATE_RADIUS, 0, TAU, 48, Color(0.95, 0.9, 0.55, 0.3 * pulse), 3.0)
 
 # Combo pip: a small holy cross, distinct from Duelist's sword/Bruiser's hammer.
 func _draw_combo_pip(pos: Vector2):

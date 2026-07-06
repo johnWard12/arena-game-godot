@@ -357,6 +357,10 @@ func get_allies_in_rect(length: float, width: float) -> Array:
 signal died
 signal projectile_spawned(proj)
 signal trap_spawned(trap)
+# Fire-and-forget ground-effect visual (a cast flash or a pulsing zone glow).
+# Purely cosmetic — Main.gd is the only listener, so headless Simulate.gd
+# runs are unaffected and gameplay never depends on this actually rendering.
+signal area_fx_spawned(fx: Dictionary)
 @warning_ignore("unused_signal") # emitted by subclasses (Bruiser/Mage), not the base class itself
 signal screen_shake(intensity: float, duration: float)
 
@@ -948,6 +952,25 @@ func _place_trap(pos: Vector2, radius: float, arm_delay: float, lifetime: float,
 	trap.trap_color = col
 	trap_spawned.emit(trap)
 
+# A persistent glowing ground zone (e.g. Consecrate) — stays put at `pos`
+# for `duration`, completely decoupled from the caster's own position from
+# that point on. Fixes the class of bug where a ground effect visually drags
+# along behind whoever cast it because it was rendered relative to their
+# current position instead of where it was actually placed.
+func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color):
+	area_fx_spawned.emit({
+		"shape": "circle", "pos": pos, "facing": Vector2.RIGHT,
+		"size": Vector2(radius, 0.0), "duration": duration, "color": color,
+	})
+
+# A brief rectangular cast flash (e.g. Purify) so a skill-shot's true hit
+# area — and the fact that it actually connected — reads clearly on screen.
+func _spawn_rect_fx(pos: Vector2, facing_dir: Vector2, length: float, width: float, duration: float, color: Color):
+	area_fx_spawned.emit({
+		"shape": "rect", "pos": pos, "facing": facing_dir,
+		"size": Vector2(length, width), "duration": duration, "color": color,
+	})
+
 # ---- Drawing helpers ----
 func _draw_hud(now: int, accent: Color):
 	# hit flash
@@ -974,6 +997,19 @@ func _draw_hud(now: int, accent: Color):
 	draw_rect(Rect2(bx, by, bw, bh), Color(0.15, 0.15, 0.2))
 	var fill_col = accent if hp_pct > 0.35 else Color(0.9, 0.2, 0.15)
 	draw_rect(Rect2(bx, by, bw * hp_pct, bh), fill_col)
+
+	# Shield overlay (Barrier / Guardian Ward) — a bright segment tacked on
+	# past the HP fill, same px-per-hp scale, so an ally can see exactly how
+	# much absorb they were just given rather than only feeling it later.
+	if barrier_time_left > 0 and barrier_hp_left > 0:
+		var px_per_hp = bw / max_hp
+		var shield_w = min(barrier_hp_left * px_per_hp, bw * 0.6)
+		var shield_x = bx + bw * hp_pct
+		var pulse = 0.7 + 0.3 * sin(now * 0.012)
+		draw_rect(Rect2(shield_x, by - 1, shield_w, bh + 2),
+			Color(0.6, 0.9, 1.0, 0.55 * pulse))
+		draw_rect(Rect2(shield_x, by - 1, shield_w, 1.5),
+			Color(0.85, 0.97, 1.0, 0.9 * pulse))
 
 	# slow ring
 	if slowed_time_left > 0:
