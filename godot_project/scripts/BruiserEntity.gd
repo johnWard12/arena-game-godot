@@ -207,7 +207,9 @@ func _draw():
 	if use_3d_view:
 		if not alive:
 			return
+		draw_set_transform(_get_hud_screen_correction())
 		_draw_hud(now, get_status_accent(base_color))
+		draw_set_transform(Vector2.ZERO)
 		return
 
 	for p in trail:

@@ -2,6 +2,7 @@ extends Node2D
 class_name Entity
 
 const FX = preload("res://scripts/FX.gd")
+const CoordUtil = preload("res://scripts/CoordUtil.gd")
 
 # ---- Tunables ----
 const MAX_SPEED = 435.0
@@ -559,6 +560,22 @@ func get_knockup_draw_offset() -> float:
 	var t = (1.0 - knockup_time_left / KNOCKUP_DUR) * PI
 	return -sin(t) * 130.0
 
+# In use_3d_view mode, this Node2D's global_position is still raw
+# simulation coordinates (gameplay math depends on that — distances,
+# ranges, movement — so it must never change). But there's no Camera2D,
+# so without correction the 2D HUD draws at that raw position 1:1 in
+# screen pixels, while the 3D camera — tilted ~45 degrees, not top-down —
+# renders the character at a different screen position entirely. This
+# projects where the character's feet actually land on screen and returns
+# the delta, so _draw() can shift just the HUD drawing to match without
+# touching global_position itself.
+func _get_hud_screen_correction() -> Vector2:
+	var cam = get_tree().get_first_node_in_group("game_camera")
+	if cam == null:
+		return Vector2.ZERO
+	var screen_pos = cam.unproject_position(CoordUtil.to_world(global_position, 0.0))
+	return screen_pos - global_position
+
 # ---- Sword swing ----
 func start_swing(arc_span_deg: float, duration: float):
 	swing_total = duration
@@ -1030,7 +1047,9 @@ func _draw():
 	if use_3d_view:
 		if not alive:
 			return
+		draw_set_transform(_get_hud_screen_correction())
 		_draw_hud(now, get_status_accent(base_color))
+		draw_set_transform(Vector2.ZERO)
 		return
 
 	# trail

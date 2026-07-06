@@ -180,9 +180,11 @@ func _draw():
 		if not alive:
 			return
 		var accent = get_status_accent(base_color)
+		draw_set_transform(_get_hud_screen_correction())
 		_draw_rain_zone()
 		_draw_camo_ring(now)
 		_draw_hud(now, accent)
+		draw_set_transform(Vector2.ZERO)
 		return
 
 	for p in trail:

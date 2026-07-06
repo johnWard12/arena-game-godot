@@ -1,8 +1,6 @@
 extends "res://scripts/RangerEntity.gd"
 class_name RangerPlayerController
 
-const CoordUtil = preload("res://scripts/CoordUtil.gd")
-
 var dash_key_was_down := false
 
 func _ready():

@@ -13,6 +13,7 @@ class_name EntityView3D
 # read-only observer like the rest of the view layer.
 
 const CoordUtil = preload("res://scripts/CoordUtil.gd")
+const RangerEntity = preload("res://scripts/RangerEntity.gd")
 
 const KIT_PATH := "res://assets/RPG Characters - Nov 2020/glTF/"
 
@@ -45,6 +46,14 @@ const MODEL_CONFIG := {
 		"ground_offset": 0.337144,
 		"target_height": 1.76 * SIZE_BUMP,
 		"attack_anim": "Attack",
+		"cast_anim": "Idle_Attacking",
+	},
+	"ranger": {
+		"scene_path": KIT_PATH + "Ranger.gltf",
+		"measured_height": 2.980963,
+		"ground_offset": 0.000437,
+		"target_height": 1.62 * SIZE_BUMP,
+		"attack_anim": "Bow_Shoot",
 		"cast_anim": "Idle_Attacking",
 	},
 }
@@ -88,7 +97,7 @@ var _warcry_particles: GPUParticles3D
 
 func setup(e: Entity):
 	entity = e
-	var key = "bruiser" if e is BruiserEntity else ("mage" if e is RangedEntity else "duelist")
+	var key = "bruiser" if e is BruiserEntity else ("mage" if e is RangedEntity else ("ranger" if e is RangerEntity else "duelist"))
 	_cfg = MODEL_CONFIG[key]
 
 	var scene: PackedScene = load(_cfg["scene_path"])
