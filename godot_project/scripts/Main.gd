@@ -74,10 +74,12 @@ func _make_fighter(cls_key: String, is_human: bool) -> Entity:
 		match cls_key:
 			"ranged":  return RangedPlayerController.new()
 			"bruiser": return BruiserPlayerController.new()
+			"ranger":  return RangerPlayerController.new()
 			_:         return PlayerController.new()
 	match cls_key:
 		"ranged":  return RangedBotController.new()
 		"bruiser": return BruiserBotController.new()
+		"ranger":  return RangerBotController.new()
 		_:         return BotController.new()
 
 func _spawn_fighter(e: Entity):
@@ -114,7 +116,9 @@ func _spawn_fighter(e: Entity):
 func _update_targeting():
 	for f in fighters:
 		if is_instance_valid(f) and f.alive:
-			f.opponent = f.get_nearest_enemy(fighters)
+			# A human player is expected to manually track a camouflaged
+			# enemy; only AI-controlled fighters actually lose the trail.
+			f.opponent = f.get_nearest_enemy(fighters, not f.is_player)
 			f.all_fighters = fighters
 
 func build_3d_world():
@@ -295,6 +299,17 @@ func _get_ability_defs() -> Array:
 			{"key": "Shift", "name": "Barrier", "cd": player.cd_shift, "max": RangedEntity.BARRIER_CD,      "col": Color(0.3, 0.7, 1.0)},
 			{"key": "R",     "name": "VoidColl","cd": 0.0,             "max": 1.0, "charge": true,
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(1.0, 0.3, 0.85)},
+			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
+		]
+	elif player is RangerEntity:
+		return [
+			{"key": "LMB",   "name": "QckShot", "cd": player.cd_auto,  "max": RangerEntity.QUICKSHOT_CD,    "col": Color(0.6, 1.0, 0.4)},
+			{"key": "E",     "name": "Pierce",  "cd": player.cd_a1,    "max": RangerEntity.PIERCE_CD,       "col": Color(0.85, 1.0, 0.5)},
+			{"key": "Q",     "name": "Snare",   "cd": player.cd_a2,    "max": RangerEntity.SNARE_CD,        "col": Color(0.4, 0.9, 0.3)},
+			{"key": "F",     "name": "Disngge", "cd": player.cd_a3,    "max": RangerEntity.DISENGAGE_CD,    "col": Color(0.3, 0.85, 0.55)},
+			{"key": "Shift", "name": "Camo",    "cd": player.cd_shift, "max": RangerEntity.CAMO_CD,         "col": Color(0.4, 0.9, 0.4)},
+			{"key": "R",     "name": "Rain",    "cd": 0.0,             "max": 1.0, "charge": true,
+				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(0.5, 0.9, 0.3)},
 			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
 		]
 	else:

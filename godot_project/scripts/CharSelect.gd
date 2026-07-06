@@ -8,20 +8,12 @@ const CARD_H = 360.0
 const CARD_Y = 180.0
 const GAP    = 18.0
 
-# left section (player): three cards centered in left half (0..960)
-# right section (bot): three cards centered in right half (960..1920)
-const _TOTAL_W = CARD_W * 3 + GAP * 2   # 210*3 + 18*2 = 666
-
-var player_cards_x := [
-	W * 0.25 - _TOTAL_W * 0.5,
-	W * 0.25 - _TOTAL_W * 0.5 + CARD_W + GAP,
-	W * 0.25 - _TOTAL_W * 0.5 + (CARD_W + GAP) * 2,
-]
-var bot_cards_x := [
-	W * 0.75 - _TOTAL_W * 0.5,
-	W * 0.75 - _TOTAL_W * 0.5 + CARD_W + GAP,
-	W * 0.75 - _TOTAL_W * 0.5 + (CARD_W + GAP) * 2,
-]
+# left section (player): N cards centered in left half (0..960)
+# right section (bot): N cards centered in right half (960..1920)
+# N is derived from CLASSES.size() so adding a class just means adding an
+# entry below — no layout constants to hand-update.
+var player_cards_x: Array = []
+var bot_cards_x: Array = []
 
 # 0=Duelist 1=Mage 2=Bruiser; default: player=Duelist, bot=Mage
 var player_sel := 0
@@ -38,6 +30,7 @@ const MELEE_COLOR  = Color(0.37, 0.88, 0.75)
 const RANGED_COLOR = Color(0.72, 0.4,  1.0)
 
 const BRUISER_COLOR = Color(0.95, 0.55, 0.15)
+const RANGER_COLOR  = Color(0.45, 0.75, 0.35)
 
 const CLASSES = [
 	{
@@ -85,9 +78,29 @@ const CLASSES = [
 			"Lunge in (up to 280) and slam for 55 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
 		]
 	},
+	{
+		"label": "RANGER",
+		"color": RANGER_COLOR,
+		"key":   "ranger",
+		"hp":    "HP  130",
+		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "RainArrows R"],
+		"ability_descs": [
+			"5 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
+			"16 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
+			"Throws a trap 110 out that arms in 0.6s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
+			"10 dmg shot that also recoils you backward — damage and distance in one button. 6s cooldown.",
+			"Vanish from AI targeting for 2.5s (a human player tracking you can still hit you). 10s cooldown.",
+			"Targets a zone that rains arrows for 2s, ticking 9 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
+		]
+	},
 ]
 
 func _ready():
+	var n = CLASSES.size()
+	var total_w = CARD_W * n + GAP * (n - 1)
+	for i in n:
+		player_cards_x.append(W * 0.25 - total_w * 0.5 + i * (CARD_W + GAP))
+		bot_cards_x.append(W * 0.75 - total_w * 0.5 + i * (CARD_W + GAP))
 	queue_redraw()
 
 var tooltip_text := ""
@@ -126,11 +139,11 @@ func _team_size_btn_rect(i: int) -> Rect2:
 	return Rect2(start_x + i * (w + gap), 108, w, h)
 
 func _card_under(pos: Vector2) -> Vector2i:
-	for i in 3:
+	for i in CLASSES.size():
 		var r = Rect2(player_cards_x[i], CARD_Y, CARD_W, CARD_H)
 		if r.has_point(pos):
 			return Vector2i(0, i)
-	for i in 3:
+	for i in CLASSES.size():
 		var r = Rect2(bot_cards_x[i], CARD_Y, CARD_W, CARD_H)
 		if r.has_point(pos):
 			return Vector2i(1, i)
@@ -173,12 +186,12 @@ func _draw():
 		Color(1, 1, 1, 0.08), 1.0)
 	_draw_text("VS", Vector2(mid, CARD_Y + CARD_H * 0.5), 26, Color(0.5, 0.5, 0.6, 0.4), true)
 
-	# draw all six cards
+	# draw all cards
 	tooltip_text = ""
 	var mouse_pos = get_viewport().get_mouse_position()
-	for i in 3:
+	for i in CLASSES.size():
 		_draw_card(player_cards_x[i], i, player_sel == i, hovered == Vector2i(0, i), mouse_pos)
-	for i in 3:
+	for i in CLASSES.size():
 		_draw_card(bot_cards_x[i], i, bot_sel == i, hovered == Vector2i(1, i), mouse_pos)
 
 	# fight button

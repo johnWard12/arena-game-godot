@@ -1,0 +1,65 @@
+extends "res://scripts/RangerEntity.gd"
+class_name RangerPlayerController
+
+const CoordUtil = preload("res://scripts/CoordUtil.gd")
+
+var dash_key_was_down := false
+
+func _ready():
+	super._ready()
+	is_player = true
+
+func get_movement_input() -> Vector2:
+	var v := Vector2.ZERO
+	if Input.is_physical_key_pressed(KEY_A): v.x -= 1
+	if Input.is_physical_key_pressed(KEY_D): v.x += 1
+	if Input.is_physical_key_pressed(KEY_W): v.y -= 1
+	if Input.is_physical_key_pressed(KEY_S): v.y += 1
+	return v
+
+func get_aim_dir(_opp: Entity) -> Vector2:
+	var cam = get_tree().get_first_node_in_group("game_camera")
+	if cam != null:
+		var mouse_pos = get_viewport().get_mouse_position()
+		var ray_origin = cam.project_ray_origin(mouse_pos)
+		var ray_dir = cam.project_ray_normal(mouse_pos)
+		var hit = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_dir)
+		if hit != null:
+			var dir = CoordUtil.to_sim(hit) - global_position
+			if dir.length() > 0.01:
+				return dir.normalized()
+		return facing
+	# Fallback if no 3D camera is present in the scene.
+	var dir = get_global_mouse_position() - global_position
+	if dir.length() < 0.01:
+		return facing
+	return dir.normalized()
+
+func _physics_process(delta):
+	super._physics_process(delta)
+	poll_dash()
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		try_auto(opponent)
+
+func poll_dash():
+	var held = Input.is_physical_key_pressed(KEY_SPACE)
+	if held and not dash_key_was_down:
+		var input_vec = get_movement_input()
+		var dir = input_vec if input_vec.length() > 0.01 else facing
+		try_dash(dir)
+	dash_key_was_down = held
+
+func _unhandled_input(event):
+	if not alive:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_E: try_a1(opponent)
+			KEY_Q: try_a2(opponent)
+			KEY_F: try_a3(opponent)
+			KEY_SHIFT: try_shift(opponent)
+			KEY_R: try_ult(opponent)
+			KEY_G: try_parry()
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			try_parry()

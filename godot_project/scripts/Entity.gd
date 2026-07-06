@@ -143,6 +143,11 @@ var slow_pct          := 0.5
 # locks both. Introduced for Ranger's Snare Trap; nothing else uses it yet.
 var rooted_time_left  := 0.0
 
+# While > 0, this entity drops out of AI auto-targeting (see
+# get_nearest_enemy/get_enemies_in_range). Introduced for Ranger's
+# Camouflage; nothing else sets it yet.
+var invisible_time_left := 0.0
+
 # Cosmetic-only tag on top of stunned_time_left so the view layer can show a
 # distinct ice-crystal effect for freeze (Mage's Nova) instead of the generic
 # stun stars — set alongside stunned_time_left by apply_freeze(), never read
@@ -217,11 +222,18 @@ var team_id := 0
 # entity's team. Used by Main.gd to keep every fighter's `opponent`
 # pointed at a sensible target in 2v2/3v3, and works unchanged for 1v1
 # (a candidates list of exactly one enemy just returns that enemy).
-func get_nearest_enemy(candidates: Array) -> Entity:
+#
+# respect_invisibility=false lets a human player's own targeting see
+# through a camouflaged enemy (they're expected to manually track/aim),
+# while AI targeting (the only other caller) leaves it true so bots
+# genuinely lose the trail — see Ranger's Camouflage.
+func get_nearest_enemy(candidates: Array, respect_invisibility: bool = true) -> Entity:
 	var nearest: Entity = null
 	var nearest_d := INF
 	for c in candidates:
 		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
+			continue
+		if respect_invisibility and c.invisible_time_left > 0:
 			continue
 		var d = global_position.distance_to(c.global_position)
 		if d < nearest_d:
@@ -229,15 +241,19 @@ func get_nearest_enemy(candidates: Array) -> Entity:
 			nearest = c
 	return nearest
 
-# Every living enemy within `radius` of this entity, from the full roster —
-# what a real AoE ability should hit (as opposed to just `opponent`, which
-# is only the single nearest enemy).
-func get_enemies_in_range(radius: float) -> Array:
+# Every living enemy within `radius` of `center` (defaults to this entity's
+# own position) — what a real AoE ability should hit, as opposed to just
+# `opponent` (the single nearest enemy). Always respects invisibility: an
+# AoE hits what it can see, regardless of who cast it.
+func get_enemies_in_range(radius: float, center = null) -> Array:
+	var origin: Vector2 = global_position if center == null else center
 	var result := []
 	for c in all_fighters:
 		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
 			continue
-		if global_position.distance_to(c.global_position) <= radius:
+		if c.invisible_time_left > 0:
+			continue
+		if origin.distance_to(c.global_position) <= radius:
 			result.append(c)
 	return result
 
@@ -275,6 +291,7 @@ func _physics_process(delta):
 	hit_flash_left    = max(0.0, hit_flash_left - delta)
 	slowed_time_left  = max(0.0, slowed_time_left - delta)
 	rooted_time_left  = max(0.0, rooted_time_left - delta)
+	invisible_time_left = max(0.0, invisible_time_left - delta)
 	freeze_time_left  = max(0.0, freeze_time_left - delta)
 	knockup_time_left = max(0.0, knockup_time_left - delta)
 	if bladestorm_time_left > 0:
@@ -747,7 +764,7 @@ func resolve_a3(opp: Entity):
 	cd_a3 = SWORD_THROW_CD
 	recovering = {"type": "a3", "time_left": SWORD_THROW_RECOVERY, "total": SWORD_THROW_RECOVERY}
 
-func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_pct: float = 0.5, track: bool = false):
+func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_pct: float = 0.5, track: bool = false, pierce: bool = false):
 	var proj = load("res://scripts/Projectile.gd").new()
 	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
 	proj.velocity = dir * speed
@@ -760,6 +777,7 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	proj.apply_slow = slow
 	proj.apply_slow_pct = slow_pct
 	proj.report_result = track
+	proj.pierce = pierce
 	proj.obstacle_rects = obstacle_rects
 	projectile_spawned.emit(proj)
 
