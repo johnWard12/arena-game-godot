@@ -30,13 +30,15 @@ const HEALTH_PACK_RADIUS = 44.0
 const HEALTH_PACK_RESPAWN = 12.0
 
 func _ready():
-	build_map()
 	var player_class = get_tree().root.get_meta("player_class", "melee")
 	var bot_class    = get_tree().root.get_meta("bot_class",    "melee")
 	team_size = get_tree().root.get_meta("team_size", 1)
+	build_map()
 
-	var player_positions = _team_spawn_positions(team_size, 450.0)
-	var enemy_positions  = _team_spawn_positions(team_size, 1470.0)
+	var spawn_x = _scale_point(Vector2(450.0, 540.0)).x
+	var enemy_x = _scale_point(Vector2(1470.0, 540.0)).x
+	var player_positions = _team_spawn_positions(team_size, spawn_x)
+	var enemy_positions  = _team_spawn_positions(team_size, enemy_x)
 
 	for i in team_size:
 		var e = _make_fighter(player_class, i == 0)
@@ -215,19 +217,41 @@ func _fit_camera_to_arena():
 	camera3d.position += right * off_r + up * off_u
 	camera3d_base_pos = camera3d.position
 
+# Base (1v1) layout, all scaled around MAP_CENTER by _map_scale() so 2v2/3v3
+# get a genuinely bigger arena instead of the same cramped box with more
+# fighters stuffed into it — everyone just needs more room to kite/flank.
+const MAP_CENTER := Vector2(960, 540)
+const BASE_ARENA_RECT := Rect2(Vector2(30, 30), Vector2(1860, 1020))
+const BASE_OBSTACLES: Array[Rect2] = [
+	Rect2(Vector2(857, 227), Vector2(207, 74)),
+	Rect2(Vector2(857, 779), Vector2(207, 74)),
+	Rect2(Vector2(428, 450), Vector2(83, 181)),
+	Rect2(Vector2(1410, 450), Vector2(83, 181)),
+	Rect2(Vector2(728, 503), Vector2(114, 74)),
+	Rect2(Vector2(1079, 503), Vector2(114, 74)),
+]
+const BASE_HEALTH_PACKS := [Vector2(960, 397), Vector2(960, 683)]
+
+# 1.0 / 1.3 / 1.6 for 1v1 / 2v2 / 3v3.
+func _map_scale() -> float:
+	return 1.0 + (team_size - 1) * 0.3
+
+func _scale_point(p: Vector2) -> Vector2:
+	return MAP_CENTER + (p - MAP_CENTER) * _map_scale()
+
+func _scale_rect(r: Rect2) -> Rect2:
+	var a = _scale_point(r.position)
+	var b = _scale_point(r.position + r.size)
+	return Rect2(a, b - a)
+
 func build_map():
-	map_obstacles = [
-		Rect2(Vector2(857, 227), Vector2(207, 74)),
-		Rect2(Vector2(857, 779), Vector2(207, 74)),
-		Rect2(Vector2(428, 450), Vector2(83, 181)),
-		Rect2(Vector2(1410, 450), Vector2(83, 181)),
-		Rect2(Vector2(728, 503), Vector2(114, 74)),
-		Rect2(Vector2(1079, 503), Vector2(114, 74)),
-	]
-	health_packs = [
-		{"pos": Vector2(960, 397), "active": true, "respawn_left": 0.0},
-		{"pos": Vector2(960, 683), "active": true, "respawn_left": 0.0},
-	]
+	arena_rect = _scale_rect(BASE_ARENA_RECT)
+	map_obstacles = []
+	for r in BASE_OBSTACLES:
+		map_obstacles.append(_scale_rect(r))
+	health_packs = []
+	for p in BASE_HEALTH_PACKS:
+		health_packs.append({"pos": _scale_point(p), "active": true, "respawn_left": 0.0})
 
 func build_ui():
 	var canvas = CanvasLayer.new()
