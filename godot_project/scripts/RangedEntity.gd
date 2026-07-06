@@ -132,11 +132,14 @@ func resolve_a2(opp: Entity):
 	nova_fx_left = 0.35
 	FX.impact_burst(get_parent(), global_position, Color(0.72, 0.4, 1.0), 18, 260.0)
 	var landed := false
-	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= NOVA_RADIUS:
+	# True AoE: every enemy caught in the burst gets hit, not just the
+	# primary target — matters in 2v2/3v3 where more than one foe can be
+	# standing in the blast.
+	for target in get_enemies_in_range(NOVA_RADIUS):
 		var dmg = round(NOVA_DMG * combo_mult())
-		if deal_damage(opp, dmg):
+		if deal_damage(target, dmg):
 			landed = true
-			opp.apply_freeze(NOVA_FREEZE)
+			target.apply_freeze(NOVA_FREEZE)
 			add_combo_stack()
 	register_ability_result(landed)
 	cd_a2 = NOVA_CD
@@ -165,6 +168,12 @@ func _resolve_void_explosion():
 			add_combo_stack()
 			if dist <= VOIDCOLLAPSE_CLOSE_RANGE and opponent.alive:
 				opponent.apply_stun(VOIDCOLLAPSE_STUN_DUR)
+	# The pull only ever grabs one target, but in 2v2/3v3 anyone else who
+	# happened to be standing near the implosion still catches splash.
+	for other in get_enemies_in_range(VOIDCOLLAPSE_CLOSE_RANGE):
+		if other == opponent:
+			continue
+		deal_damage(other, VOIDCOLLAPSE_DMG_MIN * 0.6)
 	screen_shake.emit(10.0, 0.35)
 	recovering = {"type": "ult", "time_left": VOIDCOLLAPSE_RECOVERY, "total": VOIDCOLLAPSE_RECOVERY}
 

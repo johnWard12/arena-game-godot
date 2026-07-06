@@ -103,6 +103,7 @@ func _update_targeting():
 	for f in fighters:
 		if is_instance_valid(f) and f.alive:
 			f.opponent = f.get_nearest_enemy(fighters)
+			f.all_fighters = fighters
 
 func build_3d_world():
 	world_3d = Node3D.new()

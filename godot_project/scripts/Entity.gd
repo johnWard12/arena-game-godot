@@ -188,6 +188,12 @@ var arena_rect := Rect2(Vector2.ZERO, Vector2(1000, 600))
 var obstacle_rects: Array[Rect2] = []
 var trail := []
 
+# Full match roster (both teams), kept in sync by Main.gd alongside
+# `opponent`. AoE abilities use this to hit every enemy in range instead of
+# just the single primary `opponent` — in 1v1 it's the same one enemy
+# either way, so no ability behavior changes there.
+var all_fighters: Array = []
+
 # Which side this entity is on. 1v1 never needs to touch this (default 0
 # for everyone would make "nearest enemy" degenerate); Main.gd assigns 0
 # to the player's team and 1 to the opposing team for any match size.
@@ -208,6 +214,18 @@ func get_nearest_enemy(candidates: Array) -> Entity:
 			nearest_d = d
 			nearest = c
 	return nearest
+
+# Every living enemy within `radius` of this entity, from the full roster —
+# what a real AoE ability should hit (as opposed to just `opponent`, which
+# is only the single nearest enemy).
+func get_enemies_in_range(radius: float) -> Array:
+	var result := []
+	for c in all_fighters:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
+			continue
+		if global_position.distance_to(c.global_position) <= radius:
+			result.append(c)
+	return result
 
 signal died
 signal projectile_spawned(proj)
@@ -246,11 +264,16 @@ func _physics_process(delta):
 	if bladestorm_time_left > 0:
 		bladestorm_time_left  = max(0.0, bladestorm_time_left - delta)
 		bladestorm_hit_timer  = max(0.0, bladestorm_hit_timer - delta)
-		if stunned_time_left <= 0 and bladestorm_hit_timer <= 0 and opponent != null and opponent.alive:
-			if global_position.distance_to(opponent.global_position) <= BLADESTORM_RANGE:
-				start_swing(360.0, 0.25)
-				deal_damage(opponent, BLADESTORM_DMG)
+		if stunned_time_left <= 0 and bladestorm_hit_timer <= 0:
+			# Spinning hits everyone in range, not just the primary target —
+			# matters in 2v2/3v3 where more than one foe can be caught.
+			var hit_someone := false
+			for target in get_enemies_in_range(BLADESTORM_RANGE):
+				deal_damage(target, BLADESTORM_DMG)
 				add_combo_stack()
+				hit_someone = true
+			if hit_someone:
+				start_swing(360.0, 0.25)
 			bladestorm_hit_timer = BLADESTORM_HIT_INTERVAL
 	if barrier_time_left > 0:
 		barrier_time_left = max(0.0, barrier_time_left - delta)

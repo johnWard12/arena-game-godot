@@ -103,8 +103,12 @@ func run_matchup(a_key: String, b_key: String, n: int) -> Dictionary:
 		b.arena_rect = arena_rect
 		a.obstacle_rects = map_obstacles
 		b.obstacle_rects = map_obstacles
+		a.team_id = 0
+		b.team_id = 1
 		a.opponent = b
 		b.opponent = a
+		a.all_fighters = [a, b]
+		b.all_fighters = [a, b]
 
 		var projectiles := []
 		a.projectile_spawned.connect(func(p): p.obstacle_rects = map_obstacles; projectiles.append(p))
