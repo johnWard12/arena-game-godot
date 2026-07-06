@@ -41,7 +41,7 @@ const ULT_RANGE = 155.0
 const ULT_CHARGE_MAX = 14.0
 
 const COMBO_MAX = 3
-const COMBO_DECAY = 2.4
+const COMBO_DECAY = 2.9
 const COMBO_DMG_PER_STACK = 0.16
 
 const PARRY_DUR = 0.22

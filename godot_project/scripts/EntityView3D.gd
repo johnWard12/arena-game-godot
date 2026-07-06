@@ -104,6 +104,14 @@ var _warcry_ring: MeshInstance3D
 var _warcry_ring_mat: StandardMaterial3D
 var _warcry_particles: GPUParticles3D
 
+# Guardian's Bond (Cleric ultimate) — generic on every class, since the
+# linked partner can be any class. bond_time_left/bond_partner live on the
+# base Entity, not ClericEntity.
+var _bond_ring: MeshInstance3D
+var _bond_ring_mat: StandardMaterial3D
+var _bond_beam: MeshInstance3D
+var _bond_beam_mat: StandardMaterial3D
+
 func setup(e: Entity):
 	entity = e
 	var key = "bruiser" if e is BruiserEntity else ("mage" if e is RangedEntity else ("ranger" if e is RangerEntity else ("cleric" if e is ClericEntity else "duelist")))
@@ -154,6 +162,7 @@ func setup(e: Entity):
 	_build_shift_shield(key)
 	_build_slow_fx()
 	_build_weaken_fx()
+	_build_bond_fx()
 	if key == "bruiser":
 		_build_warcry_fx()
 
@@ -456,6 +465,47 @@ func _build_warcry_fx():
 	_warcry_particles.draw_pass_1 = quad
 	add_child(_warcry_particles)
 
+# Guardian's Bond — a rotating gold ring on each linked entity (so it's
+# visible even when there's no ally in range and the Cleric self-links),
+# plus a beam tying the pair together when there is a partner. The old
+# version had zero visual at all: the only tell was a stat change nobody
+# could actually see mid-fight.
+func _build_bond_fx():
+	_bond_ring = MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.5
+	ring_mesh.outer_radius = 0.58
+	_bond_ring.mesh = ring_mesh
+	_bond_ring.position = Vector3(0, 0.62, 0)
+	_bond_ring_mat = StandardMaterial3D.new()
+	_bond_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_bond_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_bond_ring_mat.albedo_color = Color(1.0, 0.9, 0.5, 0.6)
+	_bond_ring_mat.emission_enabled = true
+	_bond_ring_mat.emission = Color(1.0, 0.9, 0.5)
+	_bond_ring_mat.emission_energy_multiplier = 1.8
+	_bond_ring.material_override = _bond_ring_mat
+	_bond_ring.visible = false
+	add_child(_bond_ring)
+
+	# The beam connects two potentially distant entities, so it must live
+	# outside this node's own transform (which tracks — and rotates with —
+	# this character specifically). It's a sibling under world_3d instead.
+	_bond_beam = MeshInstance3D.new()
+	var beam_mesh := BoxMesh.new()
+	beam_mesh.size = Vector3(0.05, 0.05, 1.0)
+	_bond_beam.mesh = beam_mesh
+	_bond_beam_mat = StandardMaterial3D.new()
+	_bond_beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_bond_beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_bond_beam_mat.albedo_color = Color(1.0, 0.9, 0.5, 0.5)
+	_bond_beam_mat.emission_enabled = true
+	_bond_beam_mat.emission = Color(1.0, 0.9, 0.5)
+	_bond_beam_mat.emission_energy_multiplier = 1.6
+	_bond_beam.material_override = _bond_beam_mat
+	_bond_beam.visible = false
+	get_parent().add_child(_bond_beam)
+
 func _find_anim_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:
 		return node
@@ -553,6 +603,37 @@ func _update_status_fx(delta: float):
 			_warcry_ring_mat.emission_energy_multiplier = 1.2 + pulse * 1.2
 			_warcry_ring_mat.albedo_color.a = 0.4 + pulse * 0.35
 
+	_update_bond_fx(delta)
+
+# Guardian's Bond — ring shows on both linked entities; the beam is only
+# drawn once per pair (by whichever entity has the lower instance id) so
+# two overlapping full-length beams don't double up their brightness.
+func _update_bond_fx(delta: float):
+	var bonded = entity.bond_time_left > 0
+	_bond_ring.visible = bonded
+	if bonded:
+		_bond_ring.rotation.y += delta * 1.2
+		var pulse = 0.6 + 0.35 * sin(Time.get_ticks_msec() * 0.006)
+		_bond_ring_mat.emission_energy_multiplier = 1.4 + pulse
+		_bond_ring_mat.albedo_color.a = 0.45 + pulse * 0.3
+
+	var partner = entity.bond_partner
+	var show_beam = bonded and partner != null and is_instance_valid(partner) and partner.alive \
+		and entity.get_instance_id() < partner.get_instance_id()
+	_bond_beam.visible = show_beam
+	if show_beam:
+		var a = CoordUtil.to_world(entity.global_position, 0.9)
+		var b = CoordUtil.to_world(partner.global_position, 0.9)
+		var dist = a.distance_to(b)
+		_bond_beam.global_position = (a + b) * 0.5
+		if dist > 0.02:
+			_bond_beam.look_at(b, Vector3.UP)
+		var beam_mesh: BoxMesh = _bond_beam.mesh
+		beam_mesh.size = Vector3(0.05, 0.05, dist)
+		var pulse2 = 0.6 + 0.35 * sin(Time.get_ticks_msec() * 0.008)
+		_bond_beam_mat.emission_energy_multiplier = 1.2 + pulse2 * 0.8
+		_bond_beam_mat.albedo_color.a = 0.35 + pulse2 * 0.25
+
 # Iron Resolve — a gentle shimmer: alpha flicker + slow rotation, no pop.
 func _animate_iron_resolve_fx():
 	_shift_ring.rotation.y += 0.015
@@ -627,6 +708,11 @@ func _animate_death(delta: float):
 		_was_alive = false
 		_death_timer = 0.0
 		_force_play("Death", 0.1)
+		# _update_bond_fx() stops running once dead — the beam is a sibling
+		# under world_3d, not a child, so it wouldn't otherwise disappear
+		# with the rest of this view.
+		_bond_ring.visible = false
+		_bond_beam.visible = false
 	visible = true
 	position = CoordUtil.to_world(entity.global_position)
 	_death_timer += delta

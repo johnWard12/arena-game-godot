@@ -6,8 +6,8 @@ const H = 1080
 # CARD_W/GAP shrink automatically if there isn't room for CLASSES.size()
 # cards side by side (see _ready()) — these are the "up to 4 cards" sizes.
 var CARD_W := 210.0
-const CARD_H = 360.0
-const CARD_Y = 180.0
+const CARD_H = 250.0
+const CARD_Y = 220.0
 var GAP := 18.0
 const MAX_SIDE_WIDTH := 900.0
 
@@ -102,12 +102,12 @@ const CLASSES = [
 		"color": CLERIC_COLOR,
 		"key":   "cleric",
 		"hp":    "HP  130",
-		"lines": ["Team support/healer.", "Protects & empowers allies.", "", "Smite      LMB", "Mending    E", "Consecrate Q", "Purify     F", "GuardianWard Shift", "GuardBond  R"],
+		"lines": ["Team support/healer.", "Protects & empowers allies.", "", "Smite      LMB", "Mending    E", "Consecrate Q", "Purify     F", "Guardian Ward Shift", "Guardian's Bond R"],
 		"ability_descs": [
 			"7 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
 			"Skill-shot heal toward your lowest-HP ally within 400 range (self if none). Heals 24 (+10% per combo stack). 3s cooldown, 0.2s wind-up.",
 			"Instant zone at your feet: damages enemies and heals allies standing in it, ticking every 1s for 3s. 150 radius. 8s cooldown.",
-			"Rectangle cast (240 long, 150 wide) — cleanses CC/debuffs from every ally it hits (including you) and adds a small heal-over-time. 10s cooldown.",
+			"Rectangle cast (300 long, 180 wide) — cleanses CC/debuffs from every ally it hits (including you) and adds a small heal-over-time. 10s cooldown.",
 			"Shields your lowest-HP ally within 400 range (self if none): 30 HP + 8 per banked combo stack, consuming them. 9s cooldown.",
 			"Links you with your lowest-HP ally in range for 4s: damage either takes splits 50/50, both take 20% less damage and heal over time. No ally in range -> self-only (still get the reduction + healing). Usable even while stunned.",
 		]
@@ -241,22 +241,28 @@ func _draw():
 func _draw_tooltip():
 	var font    = ThemeDB.fallback_font
 	var size    = 13
-	var padding = 10.0
-	var max_w   = 320.0
+	var padding = 12.0
+	var max_w   = 340.0
 
-	# wrap the description into lines that fit max_w
-	var words = tooltip_text.split(" ")
+	# Word-wrap each "\n"-separated paragraph independently, so forced
+	# breaks (between abilities) survive alongside natural wrapping within
+	# a single ability's description.
 	var wrapped: Array[String] = []
-	var cur = ""
-	for w in words:
-		var trial = w if cur == "" else cur + " " + w
-		if font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > max_w and cur != "":
+	for para in tooltip_text.split("\n"):
+		if para == "":
+			wrapped.append("")
+			continue
+		var words = para.split(" ")
+		var cur = ""
+		for w in words:
+			var trial = w if cur == "" else cur + " " + w
+			if font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > max_w and cur != "":
+				wrapped.append(cur)
+				cur = w
+			else:
+				cur = trial
+		if cur != "":
 			wrapped.append(cur)
-			cur = w
-		else:
-			cur = trial
-	if cur != "":
-		wrapped.append(cur)
 
 	var line_h = 17.0
 	var box_w  = max_w + padding * 2
@@ -268,13 +274,14 @@ func _draw_tooltip():
 	if pos.y + box_h > H - 10:
 		pos.y = H - 10 - box_h
 
-	draw_rect(Rect2(pos, Vector2(box_w, box_h)), Color(0.05, 0.06, 0.09, 0.96))
+	draw_rect(Rect2(pos, Vector2(box_w, box_h)), Color(0.05, 0.06, 0.09, 0.97))
 	draw_rect(Rect2(pos, Vector2(box_w, box_h)), Color(tooltip_col.r, tooltip_col.g, tooltip_col.b, 0.6), false, 1.5)
 
 	var ty = pos.y + padding
 	for line in wrapped:
-		draw_string(font, Vector2(pos.x + padding, ty + size * 0.85), line,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0.9, 0.9, 0.95, 0.95))
+		if line != "":
+			draw_string(font, Vector2(pos.x + padding, ty + size * 0.85), line,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0.9, 0.9, 0.95, 0.95))
 		ty += line_h
 
 func _draw_card(cx: float, class_idx: int, selected: bool, hot: bool, mouse_pos: Vector2):
@@ -292,47 +299,60 @@ func _draw_card(cx: float, class_idx: int, selected: bool, hot: bool, mouse_pos:
 		# top highlight bar
 		draw_rect(Rect2(cx, CARD_Y, CARD_W, 3), Color(col.r, col.g, col.b, 0.9))
 
-	# character preview
+	# character preview — bigger now that the full ability list lives in
+	# the hover tooltip instead of being crammed onto the card itself.
 	var pcx = cx + CARD_W * 0.5
-	var pcy = CARD_Y + 72
-	var r = 30.0
+	var pcy = CARD_Y + CARD_H * 0.4
+	var r = 42.0
 	draw_circle(Vector2(pcx + 2, pcy + 3), r, Color(0, 0, 0, 0.2))
 	draw_circle(Vector2(pcx, pcy), r, col)
 	draw_circle(Vector2(pcx, pcy), r * 0.52, Color(col.r * 0.6, col.g * 0.6, col.b * 0.6, 0.7))
-	draw_arc(Vector2(pcx, pcy), r + 5, -PI/2, -PI/2 + TAU, 48, Color(col.r, col.g, col.b, 0.6), 2.0)
+	draw_arc(Vector2(pcx, pcy), r + 6, -PI/2, -PI/2 + TAU, 48, Color(col.r, col.g, col.b, 0.6), 2.0)
 
 	# name + hp
-	_draw_text(c["label"], Vector2(pcx, CARD_Y + 126), 22, col, true)
-	_draw_text(c["hp"],    Vector2(pcx, CARD_Y + 152), 14, Color(col.r, col.g, col.b, 0.65), true)
+	_draw_text(c["label"], Vector2(pcx, pcy + r + 28), 22, col, true)
+	_draw_text(c["hp"],    Vector2(pcx, pcy + r + 52), 14, Color(col.r, col.g, col.b, 0.65), true)
 
-	# ability lines — first 3 entries are flavor text/blank, the rest are
-	# abilities in order (aligned with ability_descs)
-	var ly = CARD_Y + 178.0
-	var ability_i = 0
-	var descs: Array = c.get("ability_descs", [])
-	for j in c["lines"].size():
-		var line: String = c["lines"][j]
-		if line == "":
-			ly += 6
-			continue
-		var is_ability = j >= 3
-		var line_rect = Rect2(cx + 10, ly - 3, CARD_W - 20, 17)
-		var line_hot = is_ability and line_rect.has_point(mouse_pos)
-		if line_hot:
-			draw_rect(line_rect, Color(col.r, col.g, col.b, 0.14))
-			if ability_i < descs.size():
-				tooltip_text = descs[ability_i]
-				tooltip_pos  = Vector2(cx + CARD_W + 6, ly - 6)
-				tooltip_col  = col
-		var txt_col = Color(1, 1, 1, 0.95) if line_hot else Color(0.78, 0.78, 0.85, 0.8)
-		_draw_text(line, Vector2(cx + 14, ly), 13, txt_col, false)
-		ly += 19
-		if is_ability:
-			ability_i += 1
+	var hint_col = Color(1, 1, 1, 0.6) if hot else Color(1, 1, 1, 0.3)
+	_draw_text("hover for full kit", Vector2(pcx, CARD_Y + CARD_H - 28), 12, hint_col, true)
 
 	# selected badge
 	if selected:
-		_draw_text("SELECTED", Vector2(pcx, CARD_Y + CARD_H - 18), 13, Color(col.r, col.g, col.b, 0.9), true)
+		_draw_text("SELECTED", Vector2(pcx, CARD_Y + CARD_H - 10), 12, Color(col.r, col.g, col.b, 0.9), true)
+
+	if hot:
+		tooltip_text = _build_kit_tooltip(c)
+		tooltip_pos  = Vector2(cx + CARD_W + 6, CARD_Y)
+		tooltip_col  = col
+
+# Consolidates a class's flavor text + full ability list (name/key + full
+# description) into one block for the hover tooltip — this used to be
+# drawn statically on every card at once (10 cards x 9 lines of tiny text
+# on screen simultaneously), which is what made the screen feel cluttered.
+func _build_kit_tooltip(c: Dictionary) -> String:
+	var parts: Array[String] = []
+	var lines: Array = c["lines"]
+	if lines.size() > 0 and lines[0] != "":
+		parts.append(lines[0])
+	if lines.size() > 1 and lines[1] != "":
+		parts.append(lines[1])
+
+	var descs: Array = c.get("ability_descs", [])
+	var ability_i = 0
+	for j in lines.size():
+		if j < 3:
+			continue
+		var line: String = lines[j]
+		if line == "":
+			continue
+		var tokens = line.split(" ", false)
+		var key = tokens[-1]
+		var name = " ".join(tokens.slice(0, tokens.size() - 1))
+		var desc = descs[ability_i] if ability_i < descs.size() else ""
+		parts.append("[%s] %s\n%s" % [key, name, desc])
+		ability_i += 1
+
+	return "\n\n".join(parts)
 
 func _draw_text(text: String, pos: Vector2, size: int, col: Color, centered: bool):
 	var font = ThemeDB.fallback_font
