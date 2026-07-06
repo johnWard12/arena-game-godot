@@ -812,11 +812,13 @@ func _draw_hud(now: int, accent: Color):
 		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48, 5)), Color(0.06, 0.06, 0.10))
 		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48 * pct, 5)), Color(1, 0.82, 0.4))
 
-	# combo pips — one small icon per stack, floating above the head
+	# combo pips — one small icon per stack, below the feet (everything
+	# above the head is already stacked with the HP bar/cast bar/status
+	# rings, so there's no room up there without overlapping them)
 	if combo_stacks > 0:
 		for i in combo_stacks:
 			var px = (i - (combo_stacks - 1) * 0.5) * 15.0
-			_draw_combo_pip(Vector2(px, -RADIUS - 28))
+			_draw_combo_pip(Vector2(px, RADIUS + 22))
 
 # Default combo pip: a tiny sword (blade + crossguard + pommel), point up.
 # Overridden per-class where a different icon fits better (e.g. Bruiser).
