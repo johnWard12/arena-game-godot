@@ -14,6 +14,18 @@ config/name="Arena Prototype"
 run/main_scene="res://scenes/CharSelect.tscn"
 config/features=PackedStringArray("4.7")
 
+[debug]
+
+; The FX/CoordUtil/etc "const X = preload(...)" pattern used throughout the
+; scripts is deliberate — it keeps fresh checkouts and headless/CI runs
+; compiling correctly before the editor has scanned the project and
+; populated the global class-name cache (without it, bare references like
+; "CoordUtil.to_world(...)" fail with "not declared in the current scope"
+; on a cold start). That pattern legitimately triggers this warning in the
+; editor once the cache *is* populated, so it's suppressed project-wide
+; rather than removing the safety net.
+gdscript/warnings/shadowed_global_identifier=false
+
 [display]
 
 window/size/viewport_width=1920

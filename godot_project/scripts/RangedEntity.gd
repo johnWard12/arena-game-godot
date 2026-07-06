@@ -106,7 +106,7 @@ func try_auto(opp: Entity):
 		return
 	cd_auto = RPROJ_CD
 	facing = get_aim_dir(opp)
-	_fire(facing, RPROJ_SPEED, RPROJ_RADIUS, RPROJ_DMG, opp, Color(1.0, 0.85, 0.3), 8.0)
+	_fire(facing, RPROJ_SPEED, RPROJ_RADIUS, RPROJ_DMG, opp, Color(1.0, 0.85, 0.3), 8.0, 0.0, 0.5, false, false, "icicle")
 
 func try_a1(opp: Entity):
 	if not can_start_ability() or cd_a1 > 0 or opp == null:
@@ -116,7 +116,7 @@ func try_a1(opp: Entity):
 func resolve_a1(opp: Entity):
 	facing = get_aim_dir(opp)
 	var dmg = round(BOLT_DMG * combo_mult())
-	_fire(facing, BOLT_SPEED, BOLT_RADIUS, dmg, opp, Color(0.4, 0.85, 1.0), 11.0, BOLT_SLOW_DUR, BOLT_SLOW_PCT, true)
+	_fire(facing, BOLT_SPEED, BOLT_RADIUS, dmg, opp, Color(0.4, 0.85, 1.0), 11.0, BOLT_SLOW_DUR, BOLT_SLOW_PCT, true, false, "icicle")
 	add_combo_stack()
 	cd_a1 = BOLT_CD
 	recovering = {"type": "a1", "time_left": BOLT_RECOVERY, "total": BOLT_RECOVERY}
@@ -132,11 +132,14 @@ func resolve_a2(opp: Entity):
 	nova_fx_left = 0.35
 	FX.impact_burst(get_parent(), global_position, Color(0.72, 0.4, 1.0), 18, 260.0)
 	var landed := false
-	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= NOVA_RADIUS:
+	# True AoE: every enemy caught in the burst gets hit, not just the
+	# primary target — matters in 2v2/3v3 where more than one foe can be
+	# standing in the blast.
+	for target in get_enemies_in_range(NOVA_RADIUS):
 		var dmg = round(NOVA_DMG * combo_mult())
-		if deal_damage(opp, dmg):
+		if deal_damage(target, dmg):
 			landed = true
-			opp.apply_freeze(NOVA_FREEZE)
+			target.apply_freeze(NOVA_FREEZE)
 			add_combo_stack()
 	register_ability_result(landed)
 	cd_a2 = NOVA_CD
@@ -165,6 +168,12 @@ func _resolve_void_explosion():
 			add_combo_stack()
 			if dist <= VOIDCOLLAPSE_CLOSE_RANGE and opponent.alive:
 				opponent.apply_stun(VOIDCOLLAPSE_STUN_DUR)
+	# The pull only ever grabs one target, but in 2v2/3v3 anyone else who
+	# happened to be standing near the implosion still catches splash.
+	for other in get_enemies_in_range(VOIDCOLLAPSE_CLOSE_RANGE):
+		if other == opponent:
+			continue
+		deal_damage(other, VOIDCOLLAPSE_DMG_MIN * 0.6)
 	screen_shake.emit(10.0, 0.35)
 	recovering = {"type": "ult", "time_left": VOIDCOLLAPSE_RECOVERY, "total": VOIDCOLLAPSE_RECOVERY}
 
@@ -186,7 +195,7 @@ func try_a3(opp: Entity):
 	for i in 3:
 		var offset = (i - 1) * half
 		var dir = facing.rotated(offset)
-		_fire(dir, ARCANE_FAN_SPEED, ARCANE_FAN_RADIUS, ARCANE_FAN_DMG, opp, Color(0.6, 0.3, 1.0), 9.0, 0.0, 0.5, true)
+		_fire(dir, ARCANE_FAN_SPEED, ARCANE_FAN_RADIUS, ARCANE_FAN_DMG, opp, Color(0.6, 0.3, 1.0), 9.0, 0.0, 0.5, true, false, "icicle")
 	FX.impact_burst(get_parent(), global_position + facing * (RADIUS + 20), Color(0.6, 0.3, 1.0), 10, 160.0)
 	cd_a3 = ARCANE_FAN_CD
 	recovering = {"type": "a3", "time_left": ARCANE_FAN_RECOVERY, "total": ARCANE_FAN_RECOVERY}
@@ -197,6 +206,14 @@ func resolve_a3(_opp: Entity):
 # ---- Drawing override ----
 func _draw():
 	var now = Time.get_ticks_msec()
+
+	if use_3d_view:
+		if not alive:
+			return
+		draw_set_transform(_get_hud_screen_correction())
+		_draw_hud(now, get_status_accent(base_color))
+		draw_set_transform(Vector2.ZERO)
+		return
 
 	for p in trail:
 		var age = (now - p["time"]) / 200.0
@@ -216,7 +233,6 @@ func _draw():
 
 	var perp     = Vector2(-facing.y, facing.x)
 	var robe_col = _col_dark(accent, 0.6)
-	var trim_col = Color(accent.r, accent.g, accent.b, 0.85)
 	var skin_col = Color(0.88, 0.72, 0.56)
 
 	# hover bob

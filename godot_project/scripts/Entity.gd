@@ -2,6 +2,7 @@ extends Node2D
 class_name Entity
 
 const FX = preload("res://scripts/FX.gd")
+const CoordUtil = preload("res://scripts/CoordUtil.gd")
 
 # ---- Tunables ----
 const MAX_SPEED = 435.0
@@ -90,6 +91,16 @@ const IRON_RESOLVE_PER_STACK = 0.10
 
 # ---- State ----
 var is_player := false
+
+# When true, Main.gd is presenting this entity via EntityView3D instead of
+# this node's own procedural 2D art, so _draw() skips the character-art
+# pass entirely. It must NOT skip _draw_hud(): the entity node itself stays
+# visible (only the body art is suppressed) specifically so the overhead
+# HUD — HP bar, cast bar, combo pips, status rings, stun stars, knockup
+# arrows — keeps rendering. None of that has a 3D equivalent; setting the
+# whole node invisible (the original approach) silently killed all of it.
+var use_3d_view := false
+
 var base_color := Color(0.37, 0.88, 0.75)
 var velocity := Vector2.ZERO
 var facing := Vector2.RIGHT
@@ -118,6 +129,14 @@ var cd_a2 := 0.0
 var cd_shift := 0.0
 var ult_charge := 0.0
 
+# Ult charges faster while "engaged" — landing damage or a heal refreshes
+# this window. Passive fill takes ULT_CHARGE_PASSIVE_TIME seconds; staying
+# continuously engaged takes ULT_CHARGE_ACTIVE_TIME instead.
+var ult_active_time_left := 0.0
+const ULT_ACTIVE_WINDOW := 3.0
+const ULT_CHARGE_PASSIVE_TIME := 30.0
+const ULT_CHARGE_ACTIVE_TIME := 20.0
+
 var combo_stacks := 0
 var combo_time_left := 0.0
 
@@ -128,6 +147,52 @@ var parry_cd_left := 0.0
 var stunned_time_left := 0.0
 var slowed_time_left  := 0.0
 var slow_pct          := 0.5
+
+# A root locks movement but NOT abilities — distinct from a stun, which
+# locks both. Introduced for Ranger's Snare Trap; nothing else uses it yet.
+var rooted_time_left  := 0.0
+
+# While > 0, this entity drops out of AI auto-targeting (see
+# get_nearest_enemy/get_enemies_in_range). Introduced for Ranger's
+# Camouflage; nothing else sets it yet.
+var invisible_time_left := 0.0
+
+# Heal-over-time — generic, so any future ability can use it the same way
+# attacks all route through deal_damage(). Introduced for Cleric.
+var hot_time_left := 0.0
+var hot_tick_timer := 0.0
+var hot_per_tick := 0.0
+const HOT_TICK_INTERVAL := 1.0
+
+func apply_heal_over_time(duration: float, per_tick: float):
+	hot_time_left = max(hot_time_left, duration)
+	hot_per_tick = max(hot_per_tick, per_tick)
+
+# Resets every CC/debuff timer at once — Cleric's Purify uses this, but
+# it's generically reusable for any future cleanse-type ability.
+func cleanse_status():
+	stunned_time_left = 0.0
+	rooted_time_left = 0.0
+	slowed_time_left = 0.0
+	freeze_time_left = 0.0
+	outgoing_dmg_debuff_time_left = 0.0
+	outgoing_dmg_mult = 1.0
+
+# Damage-sharing link (Cleric's Guardian's Bond). Only bond_partner/
+# bond_time_left/bond_split_pct live here, for the split calculation in
+# deal_damage() below — any incoming damage-reduction from being bonded is
+# each class's own responsibility to fold into its own dmg_reduction
+# computation (same pattern Bruiser already uses to combine Unbreakable +
+# Warcry), so this can't accidentally clobber another class's other
+# damage-reduction sources.
+var bond_partner: Entity = null
+var bond_time_left := 0.0
+var bond_split_pct := 0.5
+
+func apply_damage_bond(partner: Entity, duration: float, split_pct: float):
+	bond_partner = partner
+	bond_time_left = max(bond_time_left, duration)
+	bond_split_pct = split_pct
 
 # Cosmetic-only tag on top of stunned_time_left so the view layer can show a
 # distinct ice-crystal effect for freeze (Mage's Nova) instead of the generic
@@ -188,8 +253,115 @@ var arena_rect := Rect2(Vector2.ZERO, Vector2(1000, 600))
 var obstacle_rects: Array[Rect2] = []
 var trail := []
 
+# Full match roster (both teams), kept in sync by Main.gd alongside
+# `opponent`. AoE abilities use this to hit every enemy in range instead of
+# just the single primary `opponent` — in 1v1 it's the same one enemy
+# either way, so no ability behavior changes there.
+var all_fighters: Array = []
+
+# Which side this entity is on. 1v1 never needs to touch this (default 0
+# for everyone would make "nearest enemy" degenerate); Main.gd assigns 0
+# to the player's team and 1 to the opposing team for any match size.
+var team_id := 0
+
+# Picks the closest living entity from `candidates` that isn't on this
+# entity's team. Used by Main.gd to keep every fighter's `opponent`
+# pointed at a sensible target in 2v2/3v3, and works unchanged for 1v1
+# (a candidates list of exactly one enemy just returns that enemy).
+#
+# respect_invisibility=false lets a human player's own targeting see
+# through a camouflaged enemy (they're expected to manually track/aim),
+# while AI targeting (the only other caller) leaves it true so bots
+# genuinely lose the trail — see Ranger's Camouflage.
+func get_nearest_enemy(candidates: Array, respect_invisibility: bool = true) -> Entity:
+	var nearest: Entity = null
+	var nearest_d := INF
+	for c in candidates:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
+			continue
+		if respect_invisibility and c.invisible_time_left > 0:
+			continue
+		var d = global_position.distance_to(c.global_position)
+		if d < nearest_d:
+			nearest_d = d
+			nearest = c
+	return nearest
+
+# Every living enemy within `radius` of `center` (defaults to this entity's
+# own position) — what a real AoE ability should hit, as opposed to just
+# `opponent` (the single nearest enemy). Always respects invisibility: an
+# AoE hits what it can see, regardless of who cast it.
+func get_enemies_in_range(radius: float, center = null) -> Array:
+	var origin: Vector2 = global_position if center == null else center
+	var result := []
+	for c in all_fighters:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
+			continue
+		if c.invisible_time_left > 0:
+			continue
+		if origin.distance_to(c.global_position) <= radius:
+			result.append(c)
+	return result
+
+# Whichever of (self, allies within radius) has the lower HP% — the
+# standard targeting rule for Cleric's single-target support abilities.
+# include_self=true means it always returns *something* (never null),
+# degrading gracefully to "always self" in 1v1 or when no ally is close.
+# Pass include_self=false when the caller specifically needs a separate
+# partner (e.g. Guardian's Bond, which can't "bond" with itself).
+func get_lowest_hp_ally(radius: float, include_self: bool = true) -> Entity:
+	var best: Entity = self if include_self else null
+	var best_pct = (hp / max_hp) if include_self else INF
+	for c in all_fighters:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id != team_id:
+			continue
+		if global_position.distance_to(c.global_position) > radius:
+			continue
+		var pct = c.hp / c.max_hp
+		if pct < best_pct:
+			best_pct = pct
+			best = c
+	return best
+
+# Every living ally within `radius` of `center` (self's position by
+# default), self included — mirrors get_enemies_in_range for the ally
+# side. Used by zone abilities that heal allies standing in them.
+func get_allies_in_range(radius: float, center = null) -> Array:
+	var origin: Vector2 = global_position if center == null else center
+	var result := []
+	for c in all_fighters:
+		if not is_instance_valid(c) or not c.alive or c.team_id != team_id:
+			continue
+		if origin.distance_to(c.global_position) <= radius:
+			result.append(c)
+	return result
+
+# Every living ally inside a rectangle extending `length` forward from
+# self in the facing direction, `width` wide — the first non-circular AoE
+# shape in the game. Self is included automatically (it's always at the
+# rectangle's own origin corner). Used by Purify's line skill-shot.
+func get_allies_in_rect(length: float, width: float) -> Array:
+	var result := []
+	var perp = Vector2(-facing.y, facing.x)
+	var half_w = width * 0.5
+	for c in all_fighters:
+		if not is_instance_valid(c) or not c.alive or c.team_id != team_id:
+			continue
+		var rel = c.global_position - global_position
+		var fwd_dist = rel.dot(facing)
+		var lat_dist = rel.dot(perp)
+		if fwd_dist >= 0.0 and fwd_dist <= length and abs(lat_dist) <= half_w:
+			result.append(c)
+	return result
+
 signal died
 signal projectile_spawned(proj)
+signal trap_spawned(trap)
+# Fire-and-forget ground-effect visual (a cast flash or a pulsing zone glow).
+# Purely cosmetic — Main.gd is the only listener, so headless Simulate.gd
+# runs are unaffected and gameplay never depends on this actually rendering.
+signal area_fx_spawned(fx: Dictionary)
+@warning_ignore("unused_signal") # emitted by subclasses (Bruiser/Mage), not the base class itself
 signal screen_shake(intensity: float, duration: float)
 
 func _physics_process(delta):
@@ -220,16 +392,33 @@ func _physics_process(delta):
 			dash_charges += 1
 	hit_flash_left    = max(0.0, hit_flash_left - delta)
 	slowed_time_left  = max(0.0, slowed_time_left - delta)
+	rooted_time_left  = max(0.0, rooted_time_left - delta)
+	invisible_time_left = max(0.0, invisible_time_left - delta)
 	freeze_time_left  = max(0.0, freeze_time_left - delta)
 	knockup_time_left = max(0.0, knockup_time_left - delta)
+	if hot_time_left > 0:
+		hot_time_left -= delta
+		hot_tick_timer -= delta
+		if hot_tick_timer <= 0:
+			hot_tick_timer = HOT_TICK_INTERVAL
+			hp = min(max_hp, hp + hot_per_tick)
+	if bond_time_left > 0:
+		bond_time_left = max(0.0, bond_time_left - delta)
+		if bond_time_left <= 0:
+			bond_partner = null
 	if bladestorm_time_left > 0:
 		bladestorm_time_left  = max(0.0, bladestorm_time_left - delta)
 		bladestorm_hit_timer  = max(0.0, bladestorm_hit_timer - delta)
-		if stunned_time_left <= 0 and bladestorm_hit_timer <= 0 and opponent != null and opponent.alive:
-			if global_position.distance_to(opponent.global_position) <= BLADESTORM_RANGE:
-				start_swing(360.0, 0.25)
-				deal_damage(opponent, BLADESTORM_DMG)
+		if stunned_time_left <= 0 and bladestorm_hit_timer <= 0:
+			# Spinning hits everyone in range, not just the primary target —
+			# matters in 2v2/3v3 where more than one foe can be caught.
+			var hit_someone := false
+			for target in get_enemies_in_range(BLADESTORM_RANGE):
+				deal_damage(target, BLADESTORM_DMG)
 				add_combo_stack()
+				hit_someone = true
+			if hit_someone:
+				start_swing(360.0, 0.25)
 			bladestorm_hit_timer = BLADESTORM_HIT_INTERVAL
 	if barrier_time_left > 0:
 		barrier_time_left = max(0.0, barrier_time_left - delta)
@@ -237,8 +426,10 @@ func _physics_process(delta):
 			barrier_hp_left = 0.0
 	if swing_time_left > 0:
 		swing_time_left = max(0.0, swing_time_left - delta)
+	ult_active_time_left = max(0.0, ult_active_time_left - delta)
 	if ult_charge < ULT_CHARGE_MAX:
-		ult_charge = min(ULT_CHARGE_MAX, ult_charge + delta)
+		var fill_time = ULT_CHARGE_ACTIVE_TIME if ult_active_time_left > 0 else ULT_CHARGE_PASSIVE_TIME
+		ult_charge = min(ULT_CHARGE_MAX, ult_charge + delta * (ULT_CHARGE_MAX / fill_time))
 	if combo_time_left > 0:
 		combo_time_left -= delta
 		if combo_time_left <= 0:
@@ -292,7 +483,6 @@ func _physics_process(delta):
 	var locked = casting != null
 	var recovering_slow = recovering != null and recovery_slows_movement
 	var debuffed_slow = slowed_time_left > 0
-	var slowed = recovering_slow or debuffed_slow
 
 	if lunging:
 		lunge_time_left -= delta
@@ -313,7 +503,7 @@ func _physics_process(delta):
 		if dash_time_left <= 0:
 			dashing = false
 			velocity *= CARRY
-	elif locked:
+	elif locked or rooted_time_left > 0:
 		var spd = velocity.length()
 		if spd > 0:
 			var dec = FRICTION * delta * 2.0
@@ -482,6 +672,22 @@ func get_knockup_draw_offset() -> float:
 	var t = (1.0 - knockup_time_left / KNOCKUP_DUR) * PI
 	return -sin(t) * 130.0
 
+# In use_3d_view mode, this Node2D's global_position is still raw
+# simulation coordinates (gameplay math depends on that — distances,
+# ranges, movement — so it must never change). But there's no Camera2D,
+# so without correction the 2D HUD draws at that raw position 1:1 in
+# screen pixels, while the 3D camera — tilted ~45 degrees, not top-down —
+# renders the character at a different screen position entirely. This
+# projects where the character's feet actually land on screen and returns
+# the delta, so _draw() can shift just the HUD drawing to match without
+# touching global_position itself.
+func _get_hud_screen_correction() -> Vector2:
+	var cam = get_tree().get_first_node_in_group("game_camera")
+	if cam == null:
+		return Vector2.ZERO
+	var screen_pos = cam.unproject_position(CoordUtil.to_world(global_position, 0.0))
+	return screen_pos - global_position
+
 # ---- Sword swing ----
 func start_swing(arc_span_deg: float, duration: float):
 	swing_total = duration
@@ -516,6 +722,12 @@ func apply_slow(duration: float, pct: float = 0.5):
 	slowed_time_left = max(slowed_time_left, duration)
 	slow_pct = max(slow_pct, pct)
 
+# Locks movement only — abilities/attacks still work. Used by traps.
+func apply_root(duration: float):
+	if cc_immune:
+		return
+	rooted_time_left = max(rooted_time_left, duration)
+
 # Same lockup as apply_stun, but tagged as a freeze so the view layer can
 # render ice shards instead of stun stars — used by Mage's Nova.
 func apply_freeze(duration: float):
@@ -526,10 +738,12 @@ func apply_freeze(duration: float):
 
 # Whether this entity's Shift ability is currently in its active-buff window.
 # Each class parks its Shift payoff in a different field (Iron Resolve,
-# Barrier, Unbreakable), so the view layer asks this instead of knowing the
-# per-class field names.
+# Barrier, Unbreakable, Camouflage...), so the view layer asks this instead
+# of knowing the per-class field names. Also true whenever an ally-granted
+# Guardian Ward barrier is active, regardless of whose Shift field this is,
+# since that's a real, class-agnostic buff a player needs to see.
 func get_shift_active() -> bool:
-	return iron_resolve_time_left > 0
+	return iron_resolve_time_left > 0 or barrier_time_left > 0
 
 # Weakens THIS entity's own outgoing damage for a duration — e.g. Bruiser's
 # Warcry debuffing the opponent. Not blocked by cc_immune since it isn't CC.
@@ -557,11 +771,26 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		barrier_hit = true
 		if amount <= 0:
 			FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0))
+			ult_active_time_left = ULT_ACTIVE_WINDOW
 			return true
 	if target.casting != null:
 		target.casting = null
 		target.apply_stun(STUN_DUR)
 	amount *= outgoing_dmg_mult * (1.0 - target.dmg_reduction)
+	# Guardian's Bond — split the hit with the linked partner before it
+	# lands, each side reduced by their own dmg_reduction independently.
+	if target.bond_time_left > 0 and target.bond_partner != null and is_instance_valid(target.bond_partner) and target.bond_partner.alive:
+		var partner = target.bond_partner
+		var shared = amount * target.bond_split_pct
+		amount -= shared
+		shared *= (1.0 - partner.dmg_reduction)
+		partner.hp = max(0.0, partner.hp - shared)
+		partner.hit_flash_left = 0.25
+		FX.hit_spark(get_parent(), partner.global_position, partner.base_color)
+		if partner.hp <= 0 and partner.alive:
+			partner.alive = false
+			FX.death_shatter(get_parent(), partner.global_position, partner.base_color)
+			partner.died.emit()
 	target.hp = max(0.0, target.hp - amount)
 	target.hit_flash_left = 0.25
 	FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0) if barrier_hit else target.base_color)
@@ -569,7 +798,19 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		target.alive = false
 		FX.death_shatter(get_parent(), target.global_position, target.base_color)
 		target.died.emit()
+	ult_active_time_left = ULT_ACTIVE_WINDOW
 	return true
+
+# Symmetric to deal_damage() — heals `target` and, like landing a hit,
+# refreshes the CASTER's (self's) ult-charge active window. Used by
+# Cleric's kit; any future healer-flavored ability should route through
+# this instead of poking target.hp directly, for the same reason attacks
+# route through deal_damage() instead of poking target.hp directly.
+func heal(target: Entity, amount: float) -> void:
+	if target == null or not is_instance_valid(target) or not target.alive:
+		return
+	target.hp = min(target.max_hp, target.hp + amount)
+	ult_active_time_left = ULT_ACTIVE_WINDOW
 
 func try_auto(opp: Entity):
 	if not can_start_ability() or cd_auto > 0 or opp == null:
@@ -681,7 +922,7 @@ func resolve_a3(opp: Entity):
 	cd_a3 = SWORD_THROW_CD
 	recovering = {"type": "a3", "time_left": SWORD_THROW_RECOVERY, "total": SWORD_THROW_RECOVERY}
 
-func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_pct: float = 0.5, track: bool = false):
+func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false, kind: String = "orb", is_heal: bool = false):
 	var proj = load("res://scripts/Projectile.gd").new()
 	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
 	proj.velocity = dir * speed
@@ -692,10 +933,43 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	proj.proj_color = col
 	proj.proj_radius_visual = vis_r
 	proj.apply_slow = slow
-	proj.apply_slow_pct = slow_pct
+	proj.apply_slow_pct = slow_amount
 	proj.report_result = track
+	proj.pierce = pierce
+	proj.visual_kind = kind
+	proj.is_heal = is_heal
 	proj.obstacle_rects = obstacle_rects
 	projectile_spawned.emit(proj)
+
+func _place_trap(pos: Vector2, radius: float, arm_delay: float, lifetime: float, root_duration: float, col: Color):
+	var trap = load("res://scripts/Trap.gd").new()
+	trap.global_position = pos
+	trap.owner_entity = self
+	trap.radius = radius
+	trap.arm_delay = arm_delay
+	trap.lifetime = lifetime
+	trap.root_duration = root_duration
+	trap.trap_color = col
+	trap_spawned.emit(trap)
+
+# A persistent glowing ground zone (e.g. Consecrate) — stays put at `pos`
+# for `duration`, completely decoupled from the caster's own position from
+# that point on. Fixes the class of bug where a ground effect visually drags
+# along behind whoever cast it because it was rendered relative to their
+# current position instead of where it was actually placed.
+func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color):
+	area_fx_spawned.emit({
+		"shape": "circle", "pos": pos, "facing": Vector2.RIGHT,
+		"size": Vector2(radius, 0.0), "duration": duration, "color": color,
+	})
+
+# A brief rectangular cast flash (e.g. Purify) so a skill-shot's true hit
+# area — and the fact that it actually connected — reads clearly on screen.
+func _spawn_rect_fx(pos: Vector2, facing_dir: Vector2, length: float, width: float, duration: float, color: Color):
+	area_fx_spawned.emit({
+		"shape": "rect", "pos": pos, "facing": facing_dir,
+		"size": Vector2(length, width), "duration": duration, "color": color,
+	})
 
 # ---- Drawing helpers ----
 func _draw_hud(now: int, accent: Color):
@@ -724,10 +998,32 @@ func _draw_hud(now: int, accent: Color):
 	var fill_col = accent if hp_pct > 0.35 else Color(0.9, 0.2, 0.15)
 	draw_rect(Rect2(bx, by, bw * hp_pct, bh), fill_col)
 
+	# Shield overlay (Barrier / Guardian Ward) — a bright segment tacked on
+	# past the HP fill, same px-per-hp scale, so an ally can see exactly how
+	# much absorb they were just given rather than only feeling it later.
+	if barrier_time_left > 0 and barrier_hp_left > 0:
+		var px_per_hp = bw / max_hp
+		var shield_w = min(barrier_hp_left * px_per_hp, bw * 0.6)
+		var shield_x = bx + bw * hp_pct
+		var pulse = 0.7 + 0.3 * sin(now * 0.012)
+		draw_rect(Rect2(shield_x, by - 1, shield_w, bh + 2),
+			Color(0.6, 0.9, 1.0, 0.55 * pulse))
+		draw_rect(Rect2(shield_x, by - 1, shield_w, 1.5),
+			Color(0.85, 0.97, 1.0, 0.9 * pulse))
+
 	# slow ring
 	if slowed_time_left > 0:
 		var pulse = 0.5 + 0.3 * sin(now * 0.015)
 		draw_arc(Vector2.ZERO, RADIUS + 11, 0, TAU, 40, Color(0.3, 0.6, 1.0, pulse), 2.5)
+
+	# root — small stakes/vines pinning the feet, distinct from the slow ring
+	if rooted_time_left > 0:
+		var pulse = 0.55 + 0.35 * sin(now * 0.018)
+		for i in 4:
+			var a = i * TAU / 4.0 + 0.4
+			var p0 = Vector2(cos(a), sin(a)) * (RADIUS - 2)
+			var p1 = Vector2(cos(a), sin(a)) * (RADIUS + 10)
+			draw_line(p0, p1, Color(0.45, 0.3, 0.15, pulse), 2.5)
 
 	# parry ring
 	if parrying:
@@ -758,11 +1054,20 @@ func _draw_hud(now: int, accent: Color):
 		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48, 5)), Color(0.06, 0.06, 0.10))
 		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48 * pct, 5)), Color(1, 0.82, 0.4))
 
-	# combo pips
+	# combo pips — one small icon per stack, below the feet (everything
+	# above the head is already stacked with the HP bar/cast bar/status
+	# rings, so there's no room up there without overlapping them)
 	if combo_stacks > 0:
 		for i in combo_stacks:
-			var px = (i - (combo_stacks - 1) * 0.5) * 11.0
-			draw_circle(Vector2(px, -RADIUS - 26), 4.0, Color(1, 0.85, 0.3))
+			var px = (i - (combo_stacks - 1) * 0.5) * 15.0
+			_draw_combo_pip(Vector2(px, RADIUS + 22))
+
+# Default combo pip: a tiny sword (blade + crossguard + pommel), point up.
+# Overridden per-class where a different icon fits better (e.g. Bruiser).
+func _draw_combo_pip(pos: Vector2):
+	draw_line(pos + Vector2(0, 6), pos + Vector2(0, -6), Color(0.92, 0.94, 1.0, 0.95), 2.2)
+	draw_line(pos + Vector2(-3.2, 2.2), pos + Vector2(3.2, 2.2), Color(1, 0.85, 0.3, 0.95), 1.8)
+	draw_circle(pos + Vector2(0, 5.5), 1.4, Color(1, 0.85, 0.3, 0.9))
 
 func _col_dark(c: Color, f: float) -> Color:
 	return Color(c.r * f, c.g * f, c.b * f)
@@ -770,7 +1075,6 @@ func _col_dark(c: Color, f: float) -> Color:
 func _draw_duelist(now: int, accent: Color):
 	var perp    = Vector2(-facing.y, facing.x)
 	var armor   = _col_dark(accent, 0.55)
-	var dark    = Color(0.10, 0.11, 0.14)
 	var skin    = Color(0.88, 0.72, 0.56)
 	var boot    = Color(0.20, 0.16, 0.12)
 
@@ -913,6 +1217,14 @@ func _draw_duelist(now: int, accent: Color):
 # ---- Drawing ----
 func _draw():
 	var now = Time.get_ticks_msec()
+
+	if use_3d_view:
+		if not alive:
+			return
+		draw_set_transform(_get_hud_screen_correction())
+		_draw_hud(now, get_status_accent(base_color))
+		draw_set_transform(Vector2.ZERO)
+		return
 
 	# trail
 	for p in trail:

@@ -1,9 +1,16 @@
 extends Node2D
 
 const FX = preload("res://scripts/FX.gd")
+const Arena3D = preload("res://scripts/Arena3D.gd")
+const EntityView3D = preload("res://scripts/EntityView3D.gd")
+const ProjectileView3D = preload("res://scripts/ProjectileView3D.gd")
+const TrapView3D = preload("res://scripts/TrapView3D.gd")
+const AreaFxView3D = preload("res://scripts/AreaFxView3D.gd")
+const CoordUtil = preload("res://scripts/CoordUtil.gd")
 
-var player: Entity
-var bot: Entity
+var player: Entity  # the human-controlled fighter specifically
+var fighters: Array[Entity] = []  # every fighter, both teams — team 0 is the player's
+var team_size := 1
 var arena_rect := Rect2(Vector2(30, 30), Vector2(1860, 1020))
 var map_obstacles: Array[Rect2] = []
 var health_packs := []
@@ -11,8 +18,7 @@ var health_packs := []
 var shake_time_left  := 0.0
 var shake_intensity  := 0.0
 
-var hp_me: ProgressBar
-var hp_bot: ProgressBar
+var hp_bars: Array[ProgressBar] = []  # parallel to `fighters`
 var win_label: Label
 var cd_hud: Node2D   # custom-drawn cooldown panel
 
@@ -25,57 +31,105 @@ const HEALTH_PACK_RADIUS = 44.0
 const HEALTH_PACK_RESPAWN = 12.0
 
 func _ready():
-	build_map()
 	var player_class = get_tree().root.get_meta("player_class", "melee")
 	var bot_class    = get_tree().root.get_meta("bot_class",    "melee")
+	team_size = get_tree().root.get_meta("team_size", 1)
+	build_map()
 
-	match player_class:
-		"ranged":  player = RangedPlayerController.new()
-		"bruiser": player = BruiserPlayerController.new()
-		_:         player = PlayerController.new()
-	add_child(player)
-	player.global_position = Vector2(450, 540)
-	player.arena_rect = arena_rect
-	player.obstacle_rects = map_obstacles
-	player.visible = false  # 2D vector art replaced by EntityView3D
-	player.projectile_spawned.connect(func(p):
-		p.obstacle_rects = map_obstacles
-		p.visible = false  # 2D vector art replaced by ProjectileView3D
-		add_child(p)
-		var pv = ProjectileView3D.new()
-		world_3d.add_child(pv)
-		pv.setup(p)
-	)
+	var spawn_x = _scale_point(Vector2(450.0, 540.0)).x
+	var enemy_x = _scale_point(Vector2(1470.0, 540.0)).x
+	var player_positions = _team_spawn_positions(team_size, spawn_x)
+	var enemy_positions  = _team_spawn_positions(team_size, enemy_x)
 
-	match bot_class:
-		"ranged":  bot = RangedBotController.new()
-		"bruiser": bot = BruiserBotController.new()
-		_:         bot = BotController.new()
-	add_child(bot)
-	bot.global_position = Vector2(1470, 540)
-	bot.arena_rect = arena_rect
-	bot.obstacle_rects = map_obstacles
-	bot.visible = false  # 2D vector art replaced by EntityView3D
-	bot.projectile_spawned.connect(func(p):
-		p.obstacle_rects = map_obstacles
-		p.visible = false  # 2D vector art replaced by ProjectileView3D
-		add_child(p)
-		var pv = ProjectileView3D.new()
-		world_3d.add_child(pv)
-		pv.setup(p)
-	)
+	for i in team_size:
+		var e = _make_fighter(player_class, i == 0)
+		e.team_id = 0
+		e.global_position = player_positions[i]
+		_spawn_fighter(e)
+		if i == 0:
+			player = e
 
-	player.opponent = bot
-	bot.opponent = player
-	player.screen_shake.connect(start_shake)
-	bot.screen_shake.connect(start_shake)
+	for i in team_size:
+		var e = _make_fighter(bot_class, false)
+		e.team_id = 1
+		e.global_position = enemy_positions[i]
+		_spawn_fighter(e)
 
-	player.died.connect(func(): _on_died(player))
-	bot.died.connect(func(): _on_died(bot))
+	_update_targeting()
 
 	build_3d_world()
 	build_ui()
 	queue_redraw()
+
+# Team 0 fighters are indices [0, count); team 1 fighters (built from the
+# same helper with a different base x) fill [count, 2*count). Spreads each
+# team vertically around the arena's mid-height so 1v1/2v2/3v3 all just work.
+func _team_spawn_positions(count: int, x: float) -> Array:
+	var positions := []
+	var spacing = 220.0
+	var start_y = 540.0 - spacing * (count - 1) * 0.5
+	for i in count:
+		positions.append(Vector2(x, start_y + i * spacing))
+	return positions
+
+func _make_fighter(cls_key: String, is_human: bool) -> Entity:
+	if is_human:
+		match cls_key:
+			"ranged":  return RangedPlayerController.new()
+			"bruiser": return BruiserPlayerController.new()
+			"ranger":  return RangerPlayerController.new()
+			"cleric":  return ClericPlayerController.new()
+			_:         return PlayerController.new()
+	match cls_key:
+		"ranged":  return RangedBotController.new()
+		"bruiser": return BruiserBotController.new()
+		"ranger":  return RangerBotController.new()
+		"cleric":  return ClericBotController.new()
+		_:         return BotController.new()
+
+func _spawn_fighter(e: Entity):
+	add_child(e)
+	e.arena_rect = arena_rect
+	e.obstacle_rects = map_obstacles
+	# Stays visible — use_3d_view only skips the character-art pass inside
+	# _draw(), not the whole node. It draws the overhead HUD overlay (HP
+	# bar, cast bar, combo pips, status rings) that has no 3D equivalent;
+	# hiding the whole node would silently kill that too.
+	e.use_3d_view = true
+	e.projectile_spawned.connect(func(p):
+		p.obstacle_rects = map_obstacles
+		p.visible = false  # 2D vector art replaced by ProjectileView3D
+		add_child(p)
+		var pv = ProjectileView3D.new()
+		world_3d.add_child(pv)
+		pv.setup(p)
+	)
+	e.trap_spawned.connect(func(t):
+		t.visible = false  # 2D vector art replaced by TrapView3D
+		add_child(t)
+		var tv = TrapView3D.new()
+		world_3d.add_child(tv)
+		tv.setup(t)
+	)
+	e.area_fx_spawned.connect(func(fx):
+		var av = AreaFxView3D.new()
+		world_3d.add_child(av)
+		av.setup(fx)
+	)
+	e.screen_shake.connect(start_shake)
+	e.died.connect(func(): _on_fighter_died(e))
+	fighters.append(e)
+
+# Keeps every living fighter's `opponent` pointed at their nearest living
+# enemy. Called once at spawn and every frame thereafter (_process), so a
+# fighter whose target dies immediately reacquires instead of idling.
+func _update_targeting():
+	for f in fighters:
+		if is_instance_valid(f) and f.alive:
+			# A human player is expected to manually track a camouflaged
+			# enemy; only AI-controlled fighters actually lose the trail.
+			f.opponent = f.get_nearest_enemy(fighters, not f.is_player)
+			f.all_fighters = fighters
 
 func build_3d_world():
 	world_3d = Node3D.new()
@@ -85,13 +139,10 @@ func build_3d_world():
 	world_3d.add_child(arena3d)
 	arena3d.setup(arena_rect, map_obstacles, health_packs)
 
-	var player_view = EntityView3D.new()
-	world_3d.add_child(player_view)
-	player_view.setup(player)
-
-	var bot_view = EntityView3D.new()
-	world_3d.add_child(bot_view)
-	bot_view.setup(bot)
+	for f in fighters:
+		var view = EntityView3D.new()
+		world_3d.add_child(view)
+		view.setup(f)
 
 	camera3d = Camera3D.new()
 	camera3d.projection = Camera3D.PROJECTION_ORTHOGONAL
@@ -174,55 +225,72 @@ func _fit_camera_to_arena():
 	camera3d.position += right * off_r + up * off_u
 	camera3d_base_pos = camera3d.position
 
+# Base (1v1) layout, all scaled around MAP_CENTER by _map_scale() so 2v2/3v3
+# get a genuinely bigger arena instead of the same cramped box with more
+# fighters stuffed into it — everyone just needs more room to kite/flank.
+const MAP_CENTER := Vector2(960, 540)
+const BASE_ARENA_RECT := Rect2(Vector2(30, 30), Vector2(1860, 1020))
+const BASE_OBSTACLES: Array[Rect2] = [
+	Rect2(Vector2(857, 227), Vector2(207, 74)),
+	Rect2(Vector2(857, 779), Vector2(207, 74)),
+	Rect2(Vector2(428, 450), Vector2(83, 181)),
+	Rect2(Vector2(1410, 450), Vector2(83, 181)),
+	Rect2(Vector2(728, 503), Vector2(114, 74)),
+	Rect2(Vector2(1079, 503), Vector2(114, 74)),
+]
+const BASE_HEALTH_PACKS := [Vector2(960, 397), Vector2(960, 683)]
+
+# 1.0 / 1.3 / 1.6 for 1v1 / 2v2 / 3v3.
+func _map_scale() -> float:
+	return 1.0 + (team_size - 1) * 0.3
+
+func _scale_point(p: Vector2) -> Vector2:
+	return MAP_CENTER + (p - MAP_CENTER) * _map_scale()
+
+func _scale_rect(r: Rect2) -> Rect2:
+	var a = _scale_point(r.position)
+	var b = _scale_point(r.position + r.size)
+	return Rect2(a, b - a)
+
 func build_map():
-	map_obstacles = [
-		Rect2(Vector2(857, 227), Vector2(207, 74)),
-		Rect2(Vector2(857, 779), Vector2(207, 74)),
-		Rect2(Vector2(428, 450), Vector2(83, 181)),
-		Rect2(Vector2(1410, 450), Vector2(83, 181)),
-		Rect2(Vector2(728, 503), Vector2(114, 74)),
-		Rect2(Vector2(1079, 503), Vector2(114, 74)),
-	]
-	health_packs = [
-		{"pos": Vector2(960, 397), "active": true, "respawn_left": 0.0},
-		{"pos": Vector2(960, 683), "active": true, "respawn_left": 0.0},
-	]
+	arena_rect = _scale_rect(BASE_ARENA_RECT)
+	map_obstacles = []
+	for r in BASE_OBSTACLES:
+		map_obstacles.append(_scale_rect(r))
+	health_packs = []
+	for p in BASE_HEALTH_PACKS:
+		health_packs.append({"pos": _scale_point(p), "active": true, "respawn_left": 0.0})
 
 func build_ui():
 	var canvas = CanvasLayer.new()
 	add_child(canvas)
 
-	# HP bars (top corners)
-	hp_me = ProgressBar.new()
-	hp_me.min_value = 0
-	hp_me.max_value = player.max_hp
-	hp_me.value = player.hp
-	hp_me.position = Vector2(20, 20)
-	hp_me.size = Vector2(220, 22)
-	hp_me.show_percentage = false
-	canvas.add_child(hp_me)
+	# HP bars + class labels, one per fighter, stacked by team side
+	hp_bars.clear()
+	for i in fighters.size():
+		var f = fighters[i]
+		var side = f.team_id
+		var slot = i if side == 0 else i - team_size
+		var x = 20.0 if side == 0 else 1680.0
+		var y = 20.0 + slot * 56.0
 
-	hp_bot = ProgressBar.new()
-	hp_bot.min_value = 0
-	hp_bot.max_value = bot.max_hp
-	hp_bot.value = bot.hp
-	hp_bot.position = Vector2(1680, 20)
-	hp_bot.size = Vector2(220, 22)
-	hp_bot.show_percentage = false
-	canvas.add_child(hp_bot)
+		var bar = ProgressBar.new()
+		bar.min_value = 0
+		bar.max_value = f.max_hp
+		bar.value = f.hp
+		bar.position = Vector2(x, y)
+		bar.size = Vector2(220, 22)
+		bar.show_percentage = false
+		canvas.add_child(bar)
+		hp_bars.append(bar)
 
-	# class name labels
-	var p_label = Label.new()
-	p_label.text = "BRUISER" if player is BruiserEntity else ("MAGE" if player is RangedEntity else "DUELIST")
-	p_label.position = Vector2(20, 46)
-	p_label.add_theme_font_size_override("font_size", 13)
-	canvas.add_child(p_label)
-
-	var b_label = Label.new()
-	b_label.text = "BOT  " + ("BRUISER" if bot is BruiserEntity else ("MAGE" if bot is RangedEntity else "DUELIST"))
-	b_label.position = Vector2(1680, 46)
-	b_label.add_theme_font_size_override("font_size", 13)
-	canvas.add_child(b_label)
+		var label = Label.new()
+		var cls_name = "BRUISER" if f is BruiserEntity else ("MAGE" if f is RangedEntity else "DUELIST")
+		var prefix = "" if f == player else ("ALLY " if side == 0 else "BOT ")
+		label.text = prefix + cls_name
+		label.position = Vector2(x, y + 26)
+		label.add_theme_font_size_override("font_size", 13)
+		canvas.add_child(label)
 
 	# win label
 	win_label = Label.new()
@@ -265,6 +333,28 @@ func _get_ability_defs() -> Array:
 				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(1.0, 0.3, 0.85)},
 			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
 		]
+	elif player is RangerEntity:
+		return [
+			{"key": "LMB",   "name": "QckShot", "cd": player.cd_auto,  "max": RangerEntity.QUICKSHOT_CD,    "col": Color(0.6, 1.0, 0.4)},
+			{"key": "E",     "name": "Pierce",  "cd": player.cd_a1,    "max": RangerEntity.PIERCE_CD,       "col": Color(0.85, 1.0, 0.5)},
+			{"key": "Q",     "name": "Snare",   "cd": player.cd_a2,    "max": RangerEntity.SNARE_CD,        "col": Color(0.4, 0.9, 0.3)},
+			{"key": "F",     "name": "Disngge", "cd": player.cd_a3,    "max": RangerEntity.DISENGAGE_CD,    "col": Color(0.3, 0.85, 0.55)},
+			{"key": "Shift", "name": "Camo",    "cd": player.cd_shift, "max": RangerEntity.CAMO_CD,         "col": Color(0.4, 0.9, 0.4)},
+			{"key": "R",     "name": "Rain",    "cd": 0.0,             "max": 1.0, "charge": true,
+				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(0.5, 0.9, 0.3)},
+			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
+		]
+	elif player is ClericEntity:
+		return [
+			{"key": "LMB",   "name": "Smite",   "cd": player.cd_auto,  "max": ClericEntity.SMITE_CD,        "col": Color(0.95, 0.9, 0.6)},
+			{"key": "E",     "name": "Mending", "cd": player.cd_a1,    "max": ClericEntity.MENDING_CD,      "col": Color(0.95, 0.85, 0.5)},
+			{"key": "Q",     "name": "Consec",  "cd": player.cd_a2,    "max": ClericEntity.CONSECRATE_CD,   "col": Color(0.95, 0.9, 0.55)},
+			{"key": "F",     "name": "Purify",  "cd": player.cd_a3,    "max": ClericEntity.PURIFY_CD,       "col": Color(0.95, 0.92, 0.7)},
+			{"key": "Shift", "name": "Ward",    "cd": player.cd_shift, "max": ClericEntity.WARD_CD,         "col": Color(0.95, 0.9, 0.6)},
+			{"key": "R",     "name": "Bond",    "cd": 0.0,             "max": 1.0, "charge": true,
+				"pct": player.ult_charge / Entity.ULT_CHARGE_MAX,                                            "col": Color(0.95, 0.9, 0.5)},
+			{"key": "RMB",   "name": "Parry",   "cd": player.parry_cd_left, "max": Entity.PARRY_CD,         "col": Color(0.3, 0.7, 1.0)},
+		]
 	else:
 		return [
 			{"key": "LMB",   "name": "Auto",    "cd": player.cd_auto,  "max": Entity.AUTO_CD,               "col": Color(0.37, 0.88, 0.75)},
@@ -283,10 +373,10 @@ func start_shake(intensity: float, duration: float):
 
 func _process(delta):
 	update_health_packs(delta)
-	if is_instance_valid(player):
-		hp_me.value = player.hp
-	if is_instance_valid(bot):
-		hp_bot.value = bot.hp
+	_update_targeting()
+	for i in fighters.size():
+		if is_instance_valid(fighters[i]):
+			hp_bars[i].value = fighters[i].hp
 	if shake_time_left > 0:
 		shake_time_left -= delta
 		if camera3d != null:
@@ -308,9 +398,9 @@ func update_health_packs(delta: float):
 			if pack["respawn_left"] <= 0.0:
 				pack["active"] = true
 		else:
-			if try_pickup_health_pack(pack, player):
-				continue
-			try_pickup_health_pack(pack, bot)
+			for f in fighters:
+				if try_pickup_health_pack(pack, f):
+					break
 
 func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 	if entity == null or not is_instance_valid(entity) or not entity.alive or entity.hp >= entity.max_hp:
@@ -324,388 +414,39 @@ func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 	pack["respawn_left"] = HEALTH_PACK_RESPAWN
 	return true
 
-func _on_died(who):
+func _on_fighter_died(_who: Entity):
+	# Re-target immediately so nobody spends a frame aiming at a corpse.
+	_update_targeting()
+
+	var team0_alive := false
+	var team1_alive := false
+	for f in fighters:
+		if is_instance_valid(f) and f.alive:
+			if f.team_id == 0: team0_alive = true
+			else: team1_alive = true
+	if team0_alive and team1_alive:
+		return  # match continues
+
 	win_label.visible = true
-	win_label.text = "BOT WINS" if who == player else "YOU WIN"
-	win_label.add_theme_color_override("font_color",
-		Color(1, 0.36, 0.48) if who == player else Color(0.37, 0.88, 0.75))
+	if team0_alive and not team1_alive:
+		win_label.text = "YOU WIN" if team_size == 1 else "YOUR TEAM WINS"
+		win_label.add_theme_color_override("font_color", Color(0.37, 0.88, 0.75))
+	elif team1_alive and not team0_alive:
+		win_label.text = "BOT WINS" if team_size == 1 else "ENEMY TEAM WINS"
+		win_label.add_theme_color_override("font_color", Color(1, 0.36, 0.48))
+	else:
+		win_label.text = "DRAW"
+		win_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 
 func _unhandled_input(event):
 	if event is InputEventKey and event.pressed and event.keycode == KEY_BACKSPACE:
 		get_tree().change_scene_to_file("res://scenes/CharSelect.tscn")
 
 func _draw():
-	# Arena is now rendered by Arena3D (see build_3d_world()); the old
-	# draw_map() and its helpers below are unused but left in place for
-	# reference during the 3D migration.
+	# Arena is rendered by Arena3D (see build_3d_world()); this remaining
+	# 2D draw pass only handles the cooldown HUD overlay.
 	if is_instance_valid(player) and player.alive:
 		_draw_cooldown_hud()
-
-func draw_map():
-	draw_rect(arena_rect, Color(0.46, 0.38, 0.26), true)
-	draw_soft_floor_washes()
-	draw_stone_mosaic()
-	draw_magic_paths()
-	draw_spawn_pad(Vector2(510, 540), Color(0.37, 0.88, 0.75))
-	draw_spawn_pad(Vector2(1350, 540), Color(1.0, 0.54, 0.36))
-
-	var center = arena_rect.position + arena_rect.size * 0.5
-	draw_center_emblem(center)
-	draw_arena_runes(center)
-
-	var cx = arena_rect.position.x + arena_rect.size.x * 0.5
-	draw_line(Vector2(cx, arena_rect.position.y), Vector2(cx, arena_rect.position.y + arena_rect.size.y),
-		Color(0.30, 0.24, 0.16, 0.09), 1.0)
-	draw_corner_props()
-	for obstacle in map_obstacles:
-		draw_obstacle(obstacle)
-	for pack in health_packs:
-		draw_health_pack(pack)
-	draw_arena_border()
-
-func draw_soft_floor_washes():
-	var center = arena_rect.position + arena_rect.size * 0.5
-	# Central worn sand patch
-	draw_filled_ellipse(center, Vector2(640, 400), Color(0.52, 0.44, 0.30, 0.28), 72)
-	# Spawn zone wear marks
-	draw_filled_ellipse(Vector2(510, 540), Vector2(270, 185), Color(0.56, 0.48, 0.34, 0.20), 56)
-	draw_filled_ellipse(Vector2(1350, 540), Vector2(270, 185), Color(0.56, 0.48, 0.34, 0.20), 56)
-	# Subtle battle stains
-	draw_filled_ellipse(center + Vector2(-85, 65), Vector2(95, 58), Color(0.28, 0.14, 0.12, 0.11), 32)
-	draw_filled_ellipse(center + Vector2(145, -85), Vector2(72, 44), Color(0.28, 0.14, 0.12, 0.09), 28)
-	draw_filled_ellipse(center + Vector2(-210, 160), Vector2(58, 38), Color(0.28, 0.14, 0.12, 0.08), 24)
-	# Corner sand drifts
-	draw_filled_ellipse(arena_rect.position + Vector2(220, 170), Vector2(190, 120), Color(0.55, 0.48, 0.34, 0.13), 40)
-	draw_filled_ellipse(arena_rect.position + Vector2(arena_rect.size.x - 220, 170), Vector2(190, 120), Color(0.55, 0.48, 0.34, 0.13), 40)
-	draw_filled_ellipse(arena_rect.position + Vector2(220, arena_rect.size.y - 170), Vector2(190, 120), Color(0.55, 0.48, 0.34, 0.13), 40)
-	draw_filled_ellipse(arena_rect.position + Vector2(arena_rect.size.x - 220, arena_rect.size.y - 170), Vector2(190, 120), Color(0.55, 0.48, 0.34, 0.13), 40)
-
-func draw_stone_mosaic():
-	# Grout lines for stone tile grid
-	var tile_w = 120.0
-	var tile_h = 100.0
-	var grout = Color(0.34, 0.27, 0.18, 0.55)
-	var y = arena_rect.position.y + tile_h
-	while y < arena_rect.position.y + arena_rect.size.y - 60:
-		draw_line(Vector2(arena_rect.position.x + 62, y),
-			Vector2(arena_rect.position.x + arena_rect.size.x - 62, y), grout, 1.5)
-		y += tile_h
-	var x = arena_rect.position.x + tile_w
-	while x < arena_rect.position.x + arena_rect.size.x - 60:
-		draw_line(Vector2(x, arena_rect.position.y + 62),
-			Vector2(x, arena_rect.position.y + arena_rect.size.y - 62), grout, 1.5)
-		x += tile_w
-
-	# Stone chip texture scattered across the floor
-	var center = arena_rect.position + arena_rect.size * 0.5
-	for ring in 4:
-		var radius = 185.0 + ring * 145.0
-		var pieces = 10 + ring * 3
-		for i in pieces:
-			var a = i * TAU / pieces + ring * 0.21
-			var p = center + Vector2(cos(a), sin(a)) * radius
-			var sc = 11.0 + ring * 2.0 + float(i % 3) * 1.5
-			var alpha = 0.055 + ring * 0.010
-			draw_stone_chip(p, sc, a + PI * 0.15, Color(0.38, 0.30, 0.20, alpha))
-
-func draw_magic_paths():
-	# Worn sand grooves between spawn points and health packs
-	var top_pack = Vector2(960, 405)
-	var bottom_pack = Vector2(960, 675)
-	draw_energy_curve(Vector2(510, 540), top_pack, Vector2(725, 345), Color(0.60, 0.52, 0.36, 0.13), 7.0)
-	draw_energy_curve(Vector2(510, 540), bottom_pack, Vector2(725, 735), Color(0.58, 0.50, 0.34, 0.10), 5.5)
-	draw_energy_curve(Vector2(1350, 540), top_pack, Vector2(1195, 345), Color(0.58, 0.50, 0.34, 0.10), 5.5)
-	draw_energy_curve(Vector2(1350, 540), bottom_pack, Vector2(1195, 735), Color(0.60, 0.52, 0.36, 0.13), 7.0)
-	draw_energy_curve(top_pack, bottom_pack, Vector2(1002, 540), Color(0.56, 0.48, 0.33, 0.14), 6.0)
-
-func draw_spawn_pad(pos: Vector2, col: Color):
-	# Stone gate circle
-	draw_filled_ellipse(pos + Vector2(0, 10), Vector2(120, 66), Color(0, 0, 0, 0.22), 48)
-	draw_filled_ellipse(pos, Vector2(112, 74), Color(0.36, 0.28, 0.18, 0.55), 48)
-	draw_filled_ellipse(pos, Vector2(88, 58), Color(0.42, 0.34, 0.22, 0.40), 48)
-	# Stone ring grooves
-	draw_arc(pos, 84, 0, TAU, 72, Color(0.26, 0.20, 0.13, 0.65), 3.5)
-	draw_arc(pos, 48, 0, TAU, 52, Color(0.26, 0.20, 0.13, 0.45), 2.0)
-	# Class color accent ring
-	draw_arc(pos, 78, 0.20, TAU - 0.20, 72, Color(col.r, col.g, col.b, 0.42), 3.5)
-	draw_arc(pos, 42, PI + 0.35, TAU * 1.5 - 0.35, 52, Color(col.r, col.g, col.b, 0.25), 2.0)
-	# Radial column marks (8 pillars around gate)
-	for i in 8:
-		var a = i * TAU / 8.0
-		var dir = Vector2(cos(a), sin(a))
-		var p0 = pos + dir * 86
-		var p1 = pos + dir * 100
-		draw_line(p0, p1, Color(0.26, 0.20, 0.13, 0.70), 5.0)
-		draw_line(p0, p1, Color(col.r, col.g, col.b, 0.30), 2.5)
-
-func draw_center_emblem(center: Vector2):
-	# Carved gladiatorial sun emblem in stone
-	draw_filled_ellipse(center + Vector2(0, 12), Vector2(188, 122), Color(0, 0, 0, 0.18), 72)
-	draw_circle(center, 155, Color(0.36, 0.28, 0.18, 0.35))
-	# Outer carved ring
-	draw_arc(center, 155, 0, TAU, 96, Color(0.28, 0.21, 0.13, 0.80), 4.0)
-	draw_arc(center, 110, 0, TAU, 80, Color(0.28, 0.21, 0.13, 0.60), 2.5)
-	draw_arc(center, 68, 0, TAU, 60, Color(0.28, 0.21, 0.13, 0.50), 2.0)
-	# Radial sun rays carved into stone
-	for i in 16:
-		var a = i * TAU / 16.0
-		var dir = Vector2(cos(a), sin(a))
-		var inner_r = 76.0 if i % 2 == 0 else 94.0
-		draw_line(center + dir * inner_r, center + dir * 151,
-			Color(0.26, 0.19, 0.12, 0.50), 2.0)
-	# Center carved disc
-	draw_circle(center, 34, Color(0.34, 0.26, 0.17, 0.65))
-	draw_arc(center, 34, 0, TAU, 36, Color(0.24, 0.18, 0.11, 0.85), 3.0)
-	# Inner cross marks
-	for i in 4:
-		var a = i * PI * 0.5
-		var dir = Vector2(cos(a), sin(a))
-		draw_line(center + dir * 14, center + dir * 30, Color(0.24, 0.18, 0.11, 0.70), 2.0)
-
-func draw_arena_runes(center: Vector2):
-	# Roman-style architectural markers around the emblem
-	for i in 12:
-		var a = i * TAU / 12.0
-		var dir = Vector2(cos(a), sin(a))
-		var tangent = Vector2(-dir.y, dir.x)
-		var p = center + dir * 124
-		draw_line(p - tangent * 11, p + tangent * 11, Color(0.25, 0.19, 0.12, 0.62), 3.5)
-		draw_line(p - tangent * 11, p + tangent * 11, Color(0.50, 0.40, 0.26, 0.30), 1.5)
-		draw_line(p, p - dir * 15, Color(0.25, 0.19, 0.12, 0.45), 2.0)
-		# Extra notch at cardinal points (N/S/E/W)
-		if i % 3 == 0:
-			draw_line(p - tangent * 5, p + tangent * 5, Color(0.22, 0.16, 0.10, 0.70), 5.0)
-
-func draw_corner_props():
-	var points = [
-		arena_rect.position + Vector2(112, 112),
-		arena_rect.position + Vector2(arena_rect.size.x - 112, 112),
-		arena_rect.position + Vector2(112, arena_rect.size.y - 112),
-		arena_rect.position + Vector2(arena_rect.size.x - 112, arena_rect.size.y - 112),
-	]
-	for p in points:
-		_draw_torch_column(p)
-
-func _draw_torch_column(pos: Vector2):
-	# Shadow
-	draw_filled_ellipse(pos + Vector2(5, 9), Vector2(32, 20), Color(0, 0, 0, 0.25), 32)
-	# Column base
-	draw_circle(pos, 24.0, Color(0.38, 0.30, 0.20, 0.95))
-	draw_arc(pos, 24, 0, TAU, 32, Color(0.22, 0.16, 0.10, 0.90), 3.0)
-	# Column shaft ridges
-	draw_line(pos + Vector2(-9, -24), pos + Vector2(-9, 18), Color(0.44, 0.36, 0.24, 0.40), 2.0)
-	draw_line(pos + Vector2( 9, -24), pos + Vector2( 9, 18), Color(0.44, 0.36, 0.24, 0.40), 2.0)
-	# Bowl
-	var bowl = PackedVector2Array([
-		pos + Vector2(-15, -22),
-		pos + Vector2( 15, -22),
-		pos + Vector2( 11, -13),
-		pos + Vector2(-11, -13),
-	])
-	draw_colored_polygon(bowl, Color(0.28, 0.22, 0.14, 0.95))
-	draw_polyline(PackedVector2Array([bowl[0], bowl[1], bowl[2], bowl[3], bowl[0]]),
-		Color(0.18, 0.13, 0.08, 0.85), 1.5)
-	# Animated fire
-	var t   = Time.get_ticks_msec() * 0.004
-	var ff  = sin(t * 3.8 + pos.x * 0.01) * 3.0
-	var fy  = pos.y - 22
-	draw_circle(Vector2(pos.x, fy), 15.0, Color(1.0, 0.50, 0.10, 0.10))
-	var flame = PackedVector2Array([
-		Vector2(pos.x - 7, fy),
-		Vector2(pos.x + 7, fy),
-		Vector2(pos.x + 3.5 + ff, fy - 17),
-		Vector2(pos.x + ff * 0.5, fy - 24),
-		Vector2(pos.x - 3.5 + ff, fy - 17),
-	])
-	draw_colored_polygon(flame, Color(1.0, 0.52, 0.08, 0.82))
-	var inner_flame = PackedVector2Array([
-		Vector2(pos.x - 4, fy),
-		Vector2(pos.x + 4, fy),
-		Vector2(pos.x + ff * 0.3, fy - 13),
-	])
-	draw_colored_polygon(inner_flame, Color(1.0, 0.92, 0.45, 0.92))
-
-func draw_obstacle(rect: Rect2):
-	var center = rect.position + rect.size * 0.5
-	var half   = rect.size * 0.5
-	# Shadow
-	draw_filled_ellipse(center + Vector2(10, 14), rect.size * 0.80, Color(0, 0, 0, 0.28), 36)
-	# Main stone block face
-	var stone = Color(0.44, 0.35, 0.23, 0.97)
-	var edge  = Color(0.22, 0.16, 0.10, 0.90)
-	var highlight = Color(0.58, 0.48, 0.32, 0.65)
-	var verts = PackedVector2Array([
-		center + Vector2(-half.x * 0.97, -half.y * 0.94),
-		center + Vector2( half.x * 0.96, -half.y * 0.97),
-		center + Vector2( half.x * 0.98,  half.y * 0.95),
-		center + Vector2(-half.x * 0.95,  half.y * 0.98),
-	])
-	draw_colored_polygon(verts, stone)
-	draw_polyline(PackedVector2Array([verts[0], verts[1], verts[2], verts[3], verts[0]]), edge, 2.5)
-	# Top highlight edge (3D illusion)
-	draw_line(verts[0], verts[1], highlight, 2.5)
-	draw_line(verts[0], verts[3], Color(0.52, 0.42, 0.28, 0.40), 1.5)
-	# Stone crack
-	draw_line(center + Vector2(-half.x * 0.32, -half.y * 0.45),
-		center + Vector2( half.x * 0.22,  half.y * 0.55), Color(0.28, 0.21, 0.13, 0.55), 1.5)
-	# Chiseled edge inset lines
-	draw_line(center + Vector2(-half.x * 0.82, -half.y * 0.75),
-		center + Vector2(-half.x * 0.82,  half.y * 0.75), Color(0.28, 0.21, 0.13, 0.35), 1.5)
-	draw_line(center + Vector2( half.x * 0.82, -half.y * 0.75),
-		center + Vector2( half.x * 0.82,  half.y * 0.75), highlight * Color(1,1,1,0.5), 1.5)
-
-func draw_health_pack(pack: Dictionary):
-	var pos: Vector2 = pack["pos"]
-	draw_health_station(pos)
-	if pack["active"]:
-		var t       = Time.get_ticks_msec() * 0.005
-		var pulse   = sin(t * 2.2) * 0.5 + 0.5
-		var orb_r   = 16.0 + pulse * 3.0
-		# Outer glow ring (bright green, hard to miss)
-		draw_circle(pos, orb_r + 18.0, Color(0.15, 1.0, 0.45, 0.10 + pulse * 0.08))
-		draw_circle(pos, orb_r + 8.0,  Color(0.15, 1.0, 0.45, 0.20 + pulse * 0.10))
-		# Orb body
-		draw_circle(pos, orb_r, Color(0.08, 0.72, 0.30, 0.95))
-		draw_circle(pos, orb_r * 0.55, Color(0.35, 1.0, 0.60, 0.90))
-		draw_circle(pos, orb_r * 0.22, Color(0.85, 1.0, 0.90, 0.95))
-		# Bright green cross / plus symbol
-		var cs = orb_r * 0.55
-		var cw = orb_r * 0.22
-		draw_rect(Rect2(pos + Vector2(-cw, -cs), Vector2(cw * 2, cs * 2)), Color(0.9, 1.0, 0.92, 0.95), true)
-		draw_rect(Rect2(pos + Vector2(-cs, -cw), Vector2(cs * 2, cw * 2)), Color(0.9, 1.0, 0.92, 0.95), true)
-		# Pulsing arc outline
-		draw_arc(pos, orb_r + 2, 0, TAU, 48, Color(0.25, 1.0, 0.55, 0.55 + pulse * 0.35), 2.5)
-	else:
-		var pct = 1.0 - (pack["respawn_left"] / HEALTH_PACK_RESPAWN)
-		draw_circle(pos, 14, Color(0.10, 0.16, 0.12, 0.85))
-		draw_arc(pos, 22, -PI * 0.5, -PI * 0.5 + TAU * pct, 40, Color(0.25, 1.0, 0.55, 0.55), 3.0)
-
-func draw_health_station(pos: Vector2):
-	# Stone pedestal base
-	draw_filled_ellipse(pos + Vector2(4, 10), Vector2(44, 26), Color(0, 0, 0, 0.25), 36)
-	draw_filled_ellipse(pos + Vector2(0, 6), Vector2(36, 20), Color(0.32, 0.25, 0.16, 0.90), 36)
-	draw_arc(pos + Vector2(0, 6), 24, PI * 0.08, PI * 0.92, 32, Color(0.48, 0.38, 0.24, 0.70), 3.0)
-	# Pedestal column
-	draw_rect(Rect2(pos + Vector2(-7, -12), Vector2(14, 18)), Color(0.36, 0.28, 0.18, 0.92), true)
-	draw_rect(Rect2(pos + Vector2(-7, -12), Vector2(14, 18)), Color(0.22, 0.16, 0.10, 0.70), false, 1.5)
-	# Cap stone
-	draw_rect(Rect2(pos + Vector2(-10, -14), Vector2(20, 5)), Color(0.42, 0.34, 0.22, 0.95), true)
-	draw_rect(Rect2(pos + Vector2(-10, -14), Vector2(20, 5)), Color(0.22, 0.16, 0.10, 0.70), false, 1.5)
-
-func draw_arena_border():
-	var WALL  = Color(0.40, 0.32, 0.21)
-	var DARK  = Color(0.22, 0.16, 0.10)
-	var W     = 1920.0
-	var H     = 1080.0
-	var ax    = arena_rect.position.x   # 60
-	var ay    = arena_rect.position.y   # 60
-	var aw    = arena_rect.size.x       # 1800
-	var ah    = arena_rect.size.y       # 960
-
-	# Fill all four margin strips with stone wall
-	draw_rect(Rect2(0,      0,      W,  ay),      WALL, true)
-	draw_rect(Rect2(0,      ay+ah,  W,  H-ay-ah), WALL, true)
-	draw_rect(Rect2(0,      ay,     ax, ah),       WALL, true)
-	draw_rect(Rect2(ax+aw,  ay,     W-ax-aw, ah),  WALL, true)
-
-	# Horizontal stone courses on top/bottom margins
-	for i in range(1, 4):
-		var cy_t = ay * float(i) / 4.0
-		var cy_b = ay + ah + ay * float(i) / 4.0
-		draw_line(Vector2(0, cy_t), Vector2(W, cy_t), Color(0.28, 0.21, 0.13, 0.55), 1.5)
-		draw_line(Vector2(0, cy_b), Vector2(W, cy_b), Color(0.28, 0.21, 0.13, 0.55), 1.5)
-	# Vertical courses on side margins
-	for i in range(1, 4):
-		var cx_l = ax * float(i) / 4.0
-		var cx_r = ax + aw + ax * float(i) / 4.0
-		draw_line(Vector2(cx_l, 0), Vector2(cx_l, H), Color(0.28, 0.21, 0.13, 0.45), 1.5)
-		draw_line(Vector2(cx_r, 0), Vector2(cx_r, H), Color(0.28, 0.21, 0.13, 0.45), 1.5)
-
-	# Crenellations (battlements) along the inner wall edge
-	var bw = 28.0
-	var bh = 20.0
-	var gap = 20.0
-	var xc = ax + 14.0
-	while xc + bw < ax + aw - 14:
-		draw_rect(Rect2(xc, ay - bh, bw, bh), Color(0.46, 0.36, 0.23, 0.95), true)
-		draw_rect(Rect2(xc, ay - bh, bw, bh), DARK, false, 1.5)
-		draw_rect(Rect2(xc, ay + ah, bw, bh), Color(0.46, 0.36, 0.23, 0.95), true)
-		draw_rect(Rect2(xc, ay + ah, bw, bh), DARK, false, 1.5)
-		xc += bw + gap
-	var yc = ay + 14.0
-	while yc + bw < ay + ah - 14:
-		draw_rect(Rect2(ax - bh, yc, bh, bw), Color(0.46, 0.36, 0.23, 0.95), true)
-		draw_rect(Rect2(ax - bh, yc, bh, bw), DARK, false, 1.5)
-		draw_rect(Rect2(ax + aw, yc, bh, bw), Color(0.46, 0.36, 0.23, 0.95), true)
-		draw_rect(Rect2(ax + aw, yc, bh, bw), DARK, false, 1.5)
-		yc += bw + gap
-
-	# Inner wall edge: dark shadow then bright highlight
-	draw_rect(arena_rect, DARK,                   false, 5.0)
-	draw_rect(arena_rect, Color(0.60, 0.50, 0.34, 0.45), false, 2.0)
-
-	# Arch openings on side walls (decorative)
-	for i in 4:
-		var t = (i + 1) * 0.2
-		draw_arc(Vector2(ax + 30, ay + ah * t),    20, PI * 0.5, PI * 1.5, 24, Color(0.18, 0.13, 0.08, 0.55), 3.0)
-		draw_arc(Vector2(ax + aw - 30, ay + ah * t), 20, -PI * 0.5, PI * 0.5, 24, Color(0.18, 0.13, 0.08, 0.55), 3.0)
-	for i in 7:
-		var t = (i + 1) / 8.0
-		draw_arc(Vector2(ax + aw * t, ay + 30),      20, PI, TAU, 24, Color(0.18, 0.13, 0.08, 0.55), 3.0)
-		draw_arc(Vector2(ax + aw * t, ay + ah - 30), 20, 0,  PI,  24, Color(0.18, 0.13, 0.08, 0.55), 3.0)
-
-func draw_stone_chip(center: Vector2, radius: float, rot: float, col: Color):
-	var points := PackedVector2Array()
-	for i in 6:
-		var a = rot + i * TAU / 6.0
-		var r = radius * (0.72 + 0.18 * float((i * 5) % 4))
-		points.append(center + Vector2(cos(a), sin(a)) * r)
-	draw_colored_polygon(points, col)
-
-func draw_obelisk(center: Vector2, size: float, col: Color, glow: Color):
-	var points = PackedVector2Array([
-		center + Vector2(0, -size),
-		center + Vector2(size * 0.48, -size * 0.2),
-		center + Vector2(size * 0.35, size * 0.65),
-		center + Vector2(-size * 0.35, size * 0.65),
-		center + Vector2(-size * 0.48, -size * 0.2),
-	])
-	draw_colored_polygon(points, col)
-	draw_line(center + Vector2(0, -size * 0.72), center + Vector2(0, size * 0.48), glow, 2.0)
-	draw_arc(center + Vector2(0, -size * 0.1), size * 0.55, 0, TAU, 24, glow, 1.5)
-
-func draw_crystal_slab(center: Vector2, size: Vector2, rot: float, col: Color, edge: Color, glow: Color):
-	var half = size * 0.5
-	var local = [
-		Vector2(-half.x * 0.92, -half.y * 0.28),
-		Vector2(-half.x * 0.55, -half.y * 0.82),
-		Vector2(half.x * 0.62, -half.y * 0.72),
-		Vector2(half.x * 0.96, -half.y * 0.18),
-		Vector2(half.x * 0.72, half.y * 0.7),
-		Vector2(-half.x * 0.68, half.y * 0.82),
-	]
-	var points := PackedVector2Array()
-	for p in local:
-		points.append(center + p.rotated(rot))
-	draw_colored_polygon(points, col)
-	for i in points.size():
-		draw_line(points[i], points[(i + 1) % points.size()], edge, 1.5)
-	draw_line(center + Vector2(-half.x * 0.55, 0).rotated(rot), center + Vector2(half.x * 0.55, 0).rotated(rot), glow, 2.0)
-
-func draw_energy_curve(start: Vector2, end: Vector2, control: Vector2, col: Color, width: float):
-	var points := PackedVector2Array()
-	for i in 25:
-		var t = float(i) / 24.0
-		var inv = 1.0 - t
-		points.append(start * inv * inv + control * 2.0 * inv * t + end * t * t)
-	draw_polyline(points, col, width, true)
-
-func draw_filled_ellipse(center: Vector2, radii: Vector2, col: Color, segments: int = 48):
-	var points := PackedVector2Array()
-	for i in segments:
-		var a = float(i) * TAU / float(segments)
-		points.append(center + Vector2(cos(a) * radii.x, sin(a) * radii.y))
-	draw_colored_polygon(points, col)
 
 func _draw_cooldown_hud():
 	var font    = ThemeDB.fallback_font

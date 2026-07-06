@@ -7,8 +7,8 @@ const FIXED_DT := 1.0 / 60.0
 const MAX_MATCH_SECONDS := 90.0
 const MAX_MATCH_TICKS := int(MAX_MATCH_SECONDS / FIXED_DT)
 
-const CLASS_KEYS = ["melee", "ranged", "bruiser"]
-const CLASS_LABELS = {"melee": "Duelist", "ranged": "Mage", "bruiser": "Bruiser"}
+const CLASS_KEYS = ["melee", "ranged", "bruiser", "ranger", "cleric"]
+const CLASS_LABELS = {"melee": "Duelist", "ranged": "Mage", "bruiser": "Bruiser", "ranger": "Ranger", "cleric": "Cleric"}
 
 const HEALTH_PACK_HEAL = 28.0
 const HEALTH_PACK_RADIUS = 44.0
@@ -55,6 +55,8 @@ func make_bot(key: String) -> Entity:
 	match key:
 		"ranged":  bot = RangedBotController.new()
 		"bruiser": bot = BruiserBotController.new()
+		"ranger":  bot = RangerBotController.new()
+		"cleric":  bot = ClericBotController.new()
 		_:         bot = BotController.new()
 	bot._ready()
 	return bot
@@ -103,8 +105,12 @@ func run_matchup(a_key: String, b_key: String, n: int) -> Dictionary:
 		b.arena_rect = arena_rect
 		a.obstacle_rects = map_obstacles
 		b.obstacle_rects = map_obstacles
+		a.team_id = 0
+		b.team_id = 1
 		a.opponent = b
 		b.opponent = a
+		a.all_fighters = [a, b]
+		b.all_fighters = [a, b]
 
 		var projectiles := []
 		a.projectile_spawned.connect(func(p): p.obstacle_rects = map_obstacles; projectiles.append(p))

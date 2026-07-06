@@ -3,35 +3,38 @@ extends Node2D
 const W = 1920
 const H = 1080
 
-const CARD_W = 210.0
+# CARD_W/GAP shrink automatically if there isn't room for CLASSES.size()
+# cards side by side (see _ready()) — these are the "up to 4 cards" sizes.
+var CARD_W := 210.0
 const CARD_H = 360.0
 const CARD_Y = 180.0
-const GAP    = 18.0
+var GAP := 18.0
+const MAX_SIDE_WIDTH := 900.0
 
-# left section (player): three cards centered in left half (0..960)
-# right section (bot): three cards centered in right half (960..1920)
-const _TOTAL_W = CARD_W * 3 + GAP * 2   # 210*3 + 18*2 = 666
-
-var player_cards_x := [
-	W * 0.25 - _TOTAL_W * 0.5,
-	W * 0.25 - _TOTAL_W * 0.5 + CARD_W + GAP,
-	W * 0.25 - _TOTAL_W * 0.5 + (CARD_W + GAP) * 2,
-]
-var bot_cards_x := [
-	W * 0.75 - _TOTAL_W * 0.5,
-	W * 0.75 - _TOTAL_W * 0.5 + CARD_W + GAP,
-	W * 0.75 - _TOTAL_W * 0.5 + (CARD_W + GAP) * 2,
-]
+# left section (player): N cards centered in left half (0..960)
+# right section (bot): N cards centered in right half (960..1920)
+# N is derived from CLASSES.size() so adding a class just means adding an
+# entry below — no layout constants to hand-update.
+var player_cards_x: Array = []
+var bot_cards_x: Array = []
 
 # 0=Duelist 1=Mage 2=Bruiser; default: player=Duelist, bot=Mage
 var player_sel := 0
 var bot_sel    := 1
 var hovered    := Vector2i(-1, -1)  # x=side (0=player,1=bot), y=card idx
 
+# Team size (1v1/2v2/3v3). The chosen class fills every slot on a side for
+# now — teammates/enemies beyond the human player are AI-controlled copies
+# of that same class. A per-slot class picker is a natural follow-up.
+const TEAM_SIZES = [1, 2, 3]
+var team_size := 1
+
 const MELEE_COLOR  = Color(0.37, 0.88, 0.75)
 const RANGED_COLOR = Color(0.72, 0.4,  1.0)
 
 const BRUISER_COLOR = Color(0.95, 0.55, 0.15)
+const RANGER_COLOR  = Color(0.45, 0.75, 0.35)
+const CLERIC_COLOR  = Color(0.95, 0.88, 0.6)
 
 const CLASSES = [
 	{
@@ -79,9 +82,49 @@ const CLASSES = [
 			"Lunge in (up to 280) and slam for 55 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
 		]
 	},
+	{
+		"label": "RANGER",
+		"color": RANGER_COLOR,
+		"key":   "ranger",
+		"hp":    "HP  130",
+		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "RainArrows R"],
+		"ability_descs": [
+			"8 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
+			"24 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
+			"Throws a trap 110 out that arms in 0.6s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
+			"16 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
+			"Vanish from AI targeting for 3s (a human player tracking you can still hit you). 10s cooldown.",
+			"Targets a zone that rains arrows for 2s, ticking 9 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
+		]
+	},
+	{
+		"label": "CLERIC",
+		"color": CLERIC_COLOR,
+		"key":   "cleric",
+		"hp":    "HP  130",
+		"lines": ["Team support/healer.", "Protects & empowers allies.", "", "Smite      LMB", "Mending    E", "Consecrate Q", "Purify     F", "GuardianWard Shift", "GuardBond  R"],
+		"ability_descs": [
+			"7 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
+			"Skill-shot heal toward your lowest-HP ally within 400 range (self if none). Heals 24 (+10% per combo stack). 3s cooldown, 0.2s wind-up.",
+			"Instant zone at your feet: damages enemies and heals allies standing in it, ticking every 1s for 3s. 150 radius. 8s cooldown.",
+			"Rectangle cast (240 long, 150 wide) — cleanses CC/debuffs from every ally it hits (including you) and adds a small heal-over-time. 10s cooldown.",
+			"Shields your lowest-HP ally within 400 range (self if none): 30 HP + 8 per banked combo stack, consuming them. 9s cooldown.",
+			"Links you with your lowest-HP ally in range for 4s: damage either takes splits 50/50, both take 20% less damage and heal over time. No ally in range -> self-only (still get the reduction + healing). Usable even while stunned.",
+		]
+	},
 ]
 
 func _ready():
+	var n = CLASSES.size()
+	var total_w = CARD_W * n + GAP * (n - 1)
+	if total_w > MAX_SIDE_WIDTH:
+		var s = MAX_SIDE_WIDTH / total_w
+		CARD_W *= s
+		GAP *= s
+		total_w = MAX_SIDE_WIDTH
+	for i in n:
+		player_cards_x.append(W * 0.25 - total_w * 0.5 + i * (CARD_W + GAP))
+		bot_cards_x.append(W * 0.75 - total_w * 0.5 + i * (CARD_W + GAP))
 	queue_redraw()
 
 var tooltip_text := ""
@@ -103,16 +146,28 @@ func _input(event):
 		elif c.x == 1:
 			bot_sel = c.y
 			queue_redraw()
+		for i in TEAM_SIZES.size():
+			if _team_size_btn_rect(i).has_point(event.position):
+				team_size = TEAM_SIZES[i]
+				queue_redraw()
 		# fight button
 		if _fight_btn_rect().has_point(event.position):
 			_start()
 
+func _team_size_btn_rect(i: int) -> Rect2:
+	var w = 64.0
+	var h = 32.0
+	var gap = 10.0
+	var total_w = w * TEAM_SIZES.size() + gap * (TEAM_SIZES.size() - 1)
+	var start_x = W * 0.5 - total_w * 0.5
+	return Rect2(start_x + i * (w + gap), 108, w, h)
+
 func _card_under(pos: Vector2) -> Vector2i:
-	for i in 3:
+	for i in CLASSES.size():
 		var r = Rect2(player_cards_x[i], CARD_Y, CARD_W, CARD_H)
 		if r.has_point(pos):
 			return Vector2i(0, i)
-	for i in 3:
+	for i in CLASSES.size():
 		var r = Rect2(bot_cards_x[i], CARD_Y, CARD_W, CARD_H)
 		if r.has_point(pos):
 			return Vector2i(1, i)
@@ -124,6 +179,7 @@ func _fight_btn_rect() -> Rect2:
 func _start():
 	get_tree().root.set_meta("player_class", CLASSES[player_sel]["key"])
 	get_tree().root.set_meta("bot_class",    CLASSES[bot_sel]["key"])
+	get_tree().root.set_meta("team_size",    team_size)
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
 func _draw():
@@ -131,6 +187,18 @@ func _draw():
 
 	_draw_text("ARENA PROTOTYPE", Vector2(W * 0.5, 48), 22, Color(1, 1, 1, 0.5), true)
 	_draw_text("CHOOSE YOUR FIGHTERS", Vector2(W * 0.5, 82), 34, Color(1, 1, 1, 0.92), true)
+
+	# team size selector
+	for i in TEAM_SIZES.size():
+		var size_val = TEAM_SIZES[i]
+		var r = _team_size_btn_rect(i)
+		var is_sel = team_size == size_val
+		var is_hot = r.has_point(get_viewport().get_mouse_position())
+		var bg_a = 0.30 if is_sel else (0.16 if is_hot else 0.08)
+		draw_rect(r, Color(1, 1, 1, bg_a))
+		draw_rect(r, Color(1, 1, 1, 0.9 if is_sel else 0.3), false, 1.5)
+		_draw_text("%dv%d" % [size_val, size_val], r.position + r.size * 0.5,
+			14, Color(1, 1, 1, 0.95 if is_sel else 0.6), true)
 
 	# section headers
 	_draw_text("YOU", Vector2(W * 0.25, 148), 18, Color(0.8, 0.8, 0.9, 0.7), true)
@@ -142,12 +210,12 @@ func _draw():
 		Color(1, 1, 1, 0.08), 1.0)
 	_draw_text("VS", Vector2(mid, CARD_Y + CARD_H * 0.5), 26, Color(0.5, 0.5, 0.6, 0.4), true)
 
-	# draw all six cards
+	# draw all cards
 	tooltip_text = ""
 	var mouse_pos = get_viewport().get_mouse_position()
-	for i in 3:
+	for i in CLASSES.size():
 		_draw_card(player_cards_x[i], i, player_sel == i, hovered == Vector2i(0, i), mouse_pos)
-	for i in 3:
+	for i in CLASSES.size():
 		_draw_card(bot_cards_x[i], i, bot_sel == i, hovered == Vector2i(1, i), mouse_pos)
 
 	# fight button
@@ -162,7 +230,9 @@ func _draw():
 	# matchup summary below button
 	var p_name = CLASSES[player_sel]["label"]
 	var b_name = CLASSES[bot_sel]["label"]
-	_draw_text("%s  vs  %s (bot)" % [p_name, b_name],
+	var summary = ("%s  vs  %s (bot)" % [p_name, b_name]) if team_size == 1 \
+		else ("%s x%d  vs  %s x%d (bot)" % [p_name, team_size, b_name, team_size])
+	_draw_text(summary,
 		Vector2(W * 0.5, btn.position.y + btn.size.y + 28), 15, Color(0.55, 0.55, 0.65, 0.7), true)
 
 	if tooltip_text != "":

@@ -81,6 +81,11 @@ func _physics_process(delta):
 func on_landed_parry():
 	pass
 
+# Combo pip: a tiny hammer instead of the base sword, to match his weapon.
+func _draw_combo_pip(pos: Vector2):
+	draw_line(pos + Vector2(0, 6), pos + Vector2(0, -4), Color(0.55, 0.4, 0.28, 0.95), 2.0)
+	draw_rect(Rect2(pos + Vector2(-3.5, -6.5), Vector2(7, 4)), Color(0.75, 0.76, 0.82, 0.95))
+
 # ---- Ability overrides ----
 
 func try_auto(opp: Entity):
@@ -111,16 +116,18 @@ func try_a1(opp: Entity):
 func resolve_a1(_opp: Entity):
 	pass
 
-func try_a2(opp: Entity):
-	if not alive or cd_a2 > 0 or recovering != null or lunging or opp == null:
+func try_a2(_opp: Entity):
+	if not alive or cd_a2 > 0 or recovering != null or lunging:
 		return
 	tremor_fx_left = 0.4
 	FX.impact_burst(get_parent(), global_position, Color(0.85, 0.6, 0.3), 22, 220.0)
-	if opp.alive and global_position.distance_to(opp.global_position) <= TREMOR_RADIUS:
+	# True AoE: hits every enemy in range, not just the primary target —
+	# matters in 2v2/3v3 where more than one foe can be caught in the stomp.
+	for target in get_enemies_in_range(TREMOR_RADIUS):
 		var dmg = round(TREMOR_DMG * combo_mult())
-		deal_damage(opp, dmg)
-		if opp.alive:
-			opp.apply_slow(TREMOR_SLOW, 0.5)
+		deal_damage(target, dmg)
+		if target.alive:
+			target.apply_slow(TREMOR_SLOW, 0.5)
 		add_combo_stack()
 	cd_a2 = TREMOR_CD
 	recovering = {"type": "a2", "time_left": TREMOR_RECOVERY, "total": TREMOR_RECOVERY}
@@ -178,14 +185,15 @@ func try_shift(_opp: Entity):
 	cd_shift = UNBREAKABLE_CD
 
 func get_shift_active() -> bool:
-	return unbreakable_time_left > 0
+	return unbreakable_time_left > 0 or barrier_time_left > 0
 
-func try_a3(opp: Entity):
+func try_a3(_opp: Entity):
 	if not alive or cd_a3 > 0:
 		return
 	warcry_time_left = WARCRY_DUR
-	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= WARCRY_RADIUS:
-		opp.apply_outgoing_dmg_debuff(WARCRY_DUR, WARCRY_ENEMY_DMG_MULT)
+	# AoE debuff — weakens every enemy in range, not just the primary target.
+	for target in get_enemies_in_range(WARCRY_RADIUS):
+		target.apply_outgoing_dmg_debuff(WARCRY_DUR, WARCRY_ENEMY_DMG_MULT)
 	FX.impact_burst(get_parent(), global_position, Color(0.9, 0.25, 0.1), 20, 220.0)
 	cd_a3 = WARCRY_CD
 
@@ -195,6 +203,14 @@ func resolve_a3(_opp: Entity):
 # ---- Drawing ----
 func _draw():
 	var now = Time.get_ticks_msec()
+
+	if use_3d_view:
+		if not alive:
+			return
+		draw_set_transform(_get_hud_screen_correction())
+		_draw_hud(now, get_status_accent(base_color))
+		draw_set_transform(Vector2.ZERO)
+		return
 
 	for p in trail:
 		var age = (now - p["time"]) / 200.0
@@ -223,7 +239,6 @@ func _draw():
 func _draw_bruiser(now: int, accent: Color):
 	var perp   = Vector2(-facing.y, facing.x)
 	var armor  = _col_dark(accent, 0.5)
-	var dark   = Color(0.10, 0.11, 0.14)
 	var skin   = Color(0.88, 0.72, 0.56)
 	var boot   = Color(0.18, 0.14, 0.10)
 
