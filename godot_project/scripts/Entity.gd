@@ -802,11 +802,18 @@ func _draw_hud(now: int, accent: Color):
 		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48, 5)), Color(0.06, 0.06, 0.10))
 		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48 * pct, 5)), Color(1, 0.82, 0.4))
 
-	# combo pips
+	# combo pips — one small icon per stack, floating above the head
 	if combo_stacks > 0:
 		for i in combo_stacks:
-			var px = (i - (combo_stacks - 1) * 0.5) * 11.0
-			draw_circle(Vector2(px, -RADIUS - 26), 4.0, Color(1, 0.85, 0.3))
+			var px = (i - (combo_stacks - 1) * 0.5) * 15.0
+			_draw_combo_pip(Vector2(px, -RADIUS - 28))
+
+# Default combo pip: a tiny sword (blade + crossguard + pommel), point up.
+# Overridden per-class where a different icon fits better (e.g. Bruiser).
+func _draw_combo_pip(pos: Vector2):
+	draw_line(pos + Vector2(0, 6), pos + Vector2(0, -6), Color(0.92, 0.94, 1.0, 0.95), 2.2)
+	draw_line(pos + Vector2(-3.2, 2.2), pos + Vector2(3.2, 2.2), Color(1, 0.85, 0.3, 0.95), 1.8)
+	draw_circle(pos + Vector2(0, 5.5), 1.4, Color(1, 0.85, 0.3, 0.9))
 
 func _col_dark(c: Color, f: float) -> Color:
 	return Color(c.r * f, c.g * f, c.b * f)

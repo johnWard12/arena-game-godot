@@ -81,6 +81,11 @@ func _physics_process(delta):
 func on_landed_parry():
 	pass
 
+# Combo pip: a tiny hammer instead of the base sword, to match his weapon.
+func _draw_combo_pip(pos: Vector2):
+	draw_line(pos + Vector2(0, 6), pos + Vector2(0, -4), Color(0.55, 0.4, 0.28, 0.95), 2.0)
+	draw_rect(Rect2(pos + Vector2(-3.5, -6.5), Vector2(7, 4)), Color(0.75, 0.76, 0.82, 0.95))
+
 # ---- Ability overrides ----
 
 func try_auto(opp: Entity):
