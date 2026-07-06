@@ -6,6 +6,8 @@ class_name ProjectileView3D
 # projectiles read as "energy bolts" instead of plain dots even without any
 # custom shaders or textures.
 
+const CoordUtil = preload("res://scripts/CoordUtil.gd")
+
 var projectile: Projectile = null
 
 var _core: MeshInstance3D

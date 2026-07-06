@@ -11,6 +11,8 @@ class_name Arena3D
 # over the near (bottom) edge, so any wall tall enough to matter there would
 # occlude characters standing near it. Gameplay boundaries are the
 # arena_rect clamp, not these meshes — these are purely a visual rim.
+const CoordUtil = preload("res://scripts/CoordUtil.gd")
+
 const WALL_HEIGHT := 0.4
 const WALL_THICKNESS := 0.6
 

@@ -12,6 +12,8 @@ class_name EntityView3D
 # parrying, velocity) — no changes to gameplay code, this stays a
 # read-only observer like the rest of the view layer.
 
+const CoordUtil = preload("res://scripts/CoordUtil.gd")
+
 const KIT_PATH := "res://assets/RPG Characters - Nov 2020/glTF/"
 
 # Per-class model config. measured_height/ground_offset come from the

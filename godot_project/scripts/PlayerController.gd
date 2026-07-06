@@ -1,6 +1,8 @@
 extends "res://scripts/Entity.gd"
 class_name PlayerController
 
+const CoordUtil = preload("res://scripts/CoordUtil.gd")
+
 var dash_key_was_down := false
 
 func _ready():
