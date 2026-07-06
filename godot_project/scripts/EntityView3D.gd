@@ -17,12 +17,15 @@ const KIT_PATH := "res://assets/RPG Characters - Nov 2020/glTF/"
 # Per-class model config. measured_height/ground_offset come from the
 # model's actual rest-pose AABB (probed once via a debug scene) rather than
 # guessed — same approach used for the Castle Kit props.
+# target_height bumped 30% per user feedback (models read too small).
+const SIZE_BUMP := 1.3
+
 const MODEL_CONFIG := {
 	"duelist": {
 		"scene_path": KIT_PATH + "Warrior.gltf",
 		"measured_height": 2.974859,
 		"ground_offset": 0.087153,
-		"target_height": 1.6,
+		"target_height": 1.6 * SIZE_BUMP,
 		"attack_anim": "Sword_Attack",
 		"cast_anim": "Idle_Attacking",
 	},
@@ -30,7 +33,7 @@ const MODEL_CONFIG := {
 		"scene_path": KIT_PATH + "Wizard.gltf",
 		"measured_height": 3.123627,
 		"ground_offset": 0.129306,
-		"target_height": 1.68,
+		"target_height": 1.68 * SIZE_BUMP,
 		"attack_anim": "Staff_Attack",
 		"cast_anim": "Spell1",
 	},
@@ -38,7 +41,7 @@ const MODEL_CONFIG := {
 		"scene_path": KIT_PATH + "Monk.gltf",
 		"measured_height": 3.2853,
 		"ground_offset": 0.337144,
-		"target_height": 1.76,
+		"target_height": 1.76 * SIZE_BUMP,
 		"attack_anim": "Attack",
 		"cast_anim": "Idle_Attacking",
 	},
@@ -53,6 +56,9 @@ var _swing_was_active := false
 var _death_timer := 0.0
 var _was_alive := true
 
+var _ring: MeshInstance3D
+var _ring_mat: StandardMaterial3D
+
 func setup(e: Entity):
 	entity = e
 	var key = "bruiser" if e is BruiserEntity else ("mage" if e is RangedEntity else "duelist")
@@ -64,11 +70,39 @@ func setup(e: Entity):
 	var s = _cfg["target_height"] / _cfg["measured_height"]
 	_model.scale = Vector3.ONE * s
 	_model.position = Vector3(0, _cfg["ground_offset"] * s, 0)
+	# These models are authored facing the opposite convention from what the
+	# root's look_at() assumes (root's -Z faces movement direction), so
+	# every character appeared to walk/turn backwards. Correct with a fixed
+	# 180-degree yaw on the model itself rather than touching look_at, since
+	# look_at's convention is standard and used elsewhere (ProjectileView3D
+	# has no facing concept, so this correction is local to the character
+	# model only).
+	_model.rotation.y = PI
 
 	_anim = _find_anim_player(_model)
 	if _anim != null:
 		_anim.play("Idle")
 		_current_anim = "Idle"
+
+	# A colored ground ring under the character — the natural clothing
+	# colors on these textured models don't contrast enough against the
+	# warm-toned floor/obstacles, so characters were hard to spot. This
+	# also restores per-class/status color identity (stun/parry/bloodlust
+	# etc, via get_status_accent) that the old tinted-capsule placeholder
+	# had and the real textured models can't be simply recolored for
+	# without destroying their painted textures.
+	_ring = MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.42
+	ring_mesh.outer_radius = 0.56
+	_ring.mesh = ring_mesh
+	_ring.position = Vector3(0, 0.02, 0)
+	_ring_mat = StandardMaterial3D.new()
+	_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_ring_mat.emission_enabled = true
+	_ring.material_override = _ring_mat
+	add_child(_ring)
 
 func _find_anim_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:
@@ -109,6 +143,11 @@ func _process(delta):
 	var look_dir = Vector3(entity.facing.x, 0.0, entity.facing.y)
 	if look_dir.length() > 0.001:
 		look_at(position + look_dir, Vector3.UP)
+
+	var accent = entity.get_status_accent(entity.base_color)
+	_ring_mat.albedo_color = Color(accent.r, accent.g, accent.b, 0.7)
+	_ring_mat.emission = accent
+	_ring_mat.emission_energy_multiplier = 1.8 if entity.hit_flash_left > 0 else 0.9
 
 	_update_animation()
 
