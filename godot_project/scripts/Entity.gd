@@ -129,6 +129,14 @@ var cd_a2 := 0.0
 var cd_shift := 0.0
 var ult_charge := 0.0
 
+# Ult charges faster while "engaged" — landing damage or a heal refreshes
+# this window. Passive fill takes ULT_CHARGE_PASSIVE_TIME seconds; staying
+# continuously engaged takes ULT_CHARGE_ACTIVE_TIME instead.
+var ult_active_time_left := 0.0
+const ULT_ACTIVE_WINDOW := 3.0
+const ULT_CHARGE_PASSIVE_TIME := 30.0
+const ULT_CHARGE_ACTIVE_TIME := 20.0
+
 var combo_stacks := 0
 var combo_time_left := 0.0
 
@@ -316,8 +324,10 @@ func _physics_process(delta):
 			barrier_hp_left = 0.0
 	if swing_time_left > 0:
 		swing_time_left = max(0.0, swing_time_left - delta)
+	ult_active_time_left = max(0.0, ult_active_time_left - delta)
 	if ult_charge < ULT_CHARGE_MAX:
-		ult_charge = min(ULT_CHARGE_MAX, ult_charge + delta)
+		var fill_time = ULT_CHARGE_ACTIVE_TIME if ult_active_time_left > 0 else ULT_CHARGE_PASSIVE_TIME
+		ult_charge = min(ULT_CHARGE_MAX, ult_charge + delta * (ULT_CHARGE_MAX / fill_time))
 	if combo_time_left > 0:
 		combo_time_left -= delta
 		if combo_time_left <= 0:
@@ -657,6 +667,7 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		barrier_hit = true
 		if amount <= 0:
 			FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0))
+			ult_active_time_left = ULT_ACTIVE_WINDOW
 			return true
 	if target.casting != null:
 		target.casting = null
@@ -669,7 +680,19 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		target.alive = false
 		FX.death_shatter(get_parent(), target.global_position, target.base_color)
 		target.died.emit()
+	ult_active_time_left = ULT_ACTIVE_WINDOW
 	return true
+
+# Symmetric to deal_damage() — heals `target` and, like landing a hit,
+# refreshes the CASTER's (self's) ult-charge active window. Used by
+# Cleric's kit; any future healer-flavored ability should route through
+# this instead of poking target.hp directly, for the same reason attacks
+# route through deal_damage() instead of poking target.hp directly.
+func heal(target: Entity, amount: float) -> void:
+	if target == null or not is_instance_valid(target) or not target.alive:
+		return
+	target.hp = min(target.max_hp, target.hp + amount)
+	ult_active_time_left = ULT_ACTIVE_WINDOW
 
 func try_auto(opp: Entity):
 	if not can_start_ability() or cd_auto > 0 or opp == null:
