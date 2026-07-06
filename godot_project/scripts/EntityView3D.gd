@@ -59,6 +59,31 @@ var _was_alive := true
 var _ring: MeshInstance3D
 var _ring_mat: StandardMaterial3D
 
+var _freeze_pivot: Node3D
+var _freeze_shards: Array[MeshInstance3D] = []
+
+var _bloodlust_particles: GPUParticles3D
+
+var _shift_style := ""
+var _shift_dome: MeshInstance3D
+var _shift_dome_mat: StandardMaterial3D
+var _shift_ring: MeshInstance3D
+var _shift_ring_mat: StandardMaterial3D
+var _shift_ring2: MeshInstance3D
+var _shift_ring2_mat: StandardMaterial3D
+var _shift_was_active := false
+
+var _slow_ring: MeshInstance3D
+var _slow_ring_mat: StandardMaterial3D
+
+var _weaken_pivot: Node3D
+var _weaken_shards: Array[MeshInstance3D] = []
+
+# Bruiser-only Warcry self-buff aura — built only for the Monk model.
+var _warcry_ring: MeshInstance3D
+var _warcry_ring_mat: StandardMaterial3D
+var _warcry_particles: GPUParticles3D
+
 func setup(e: Entity):
 	entity = e
 	var key = "bruiser" if e is BruiserEntity else ("mage" if e is RangedEntity else "duelist")
@@ -103,6 +128,290 @@ func setup(e: Entity):
 	_ring_mat.emission_enabled = true
 	_ring.material_override = _ring_mat
 	add_child(_ring)
+
+	_build_freeze_shards()
+	_build_bloodlust_particles()
+	_build_shift_shield(key)
+	_build_slow_fx()
+	_build_weaken_fx()
+	if key == "bruiser":
+		_build_warcry_fx()
+
+# Freeze (Mage's Nova) — a slowly-spinning ring of little ice shards around
+# the waist, distinct from the generic yellow stun-star read so a frozen
+# target is unmistakable at a glance.
+func _build_freeze_shards():
+	_freeze_pivot = Node3D.new()
+	_freeze_pivot.position = Vector3(0, 0.9, 0)
+	_freeze_pivot.visible = false
+	add_child(_freeze_pivot)
+
+	var shard_mat := StandardMaterial3D.new()
+	shard_mat.albedo_color = Color(0.65, 0.92, 1.0, 0.9)
+	shard_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	shard_mat.emission_enabled = true
+	shard_mat.emission = Color(0.6, 0.9, 1.0)
+	shard_mat.emission_energy_multiplier = 1.6
+	shard_mat.metallic = 0.1
+	shard_mat.roughness = 0.05
+
+	const SHARD_COUNT := 5
+	for i in SHARD_COUNT:
+		var shard := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = 0.06
+		cone.height = 0.24
+		shard.mesh = cone
+		var a = i * TAU / SHARD_COUNT
+		shard.position = Vector3(cos(a) * 0.34, sin(a * 2.0) * 0.06, sin(a) * 0.34)
+		shard.rotation.x = PI
+		shard.material_override = shard_mat
+		_freeze_pivot.add_child(shard)
+		_freeze_shards.append(shard)
+
+# Bloodlust (Duelist, granted on a landed parry) — rising red embers, since
+# a ring-color tint alone was too subtle to read as a buff mid-fight.
+func _build_bloodlust_particles():
+	_bloodlust_particles = GPUParticles3D.new()
+	_bloodlust_particles.position = Vector3(0, 0.1, 0)
+	_bloodlust_particles.amount = 10
+	_bloodlust_particles.lifetime = 0.6
+	_bloodlust_particles.emitting = false
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 25.0
+	pm.initial_velocity_min = 0.3
+	pm.initial_velocity_max = 0.65
+	pm.gravity = Vector3(0, 0.35, 0)
+	pm.scale_min = 0.5
+	pm.scale_max = 1.0
+	pm.color = Color(0.9, 0.1, 0.15)
+	_bloodlust_particles.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.09, 0.09)
+	var pmat := StandardMaterial3D.new()
+	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	pmat.albedo_color = Color(0.95, 0.15, 0.2)
+	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pmat.emission_enabled = true
+	pmat.emission = Color(0.95, 0.15, 0.2)
+	pmat.emission_energy_multiplier = 2.5
+	quad.material = pmat
+	_bloodlust_particles.draw_pass_1 = quad
+	add_child(_bloodlust_particles)
+
+# Shift (Iron Resolve / Barrier / Unbreakable) — one shared "shield up"
+# Each class's Shift payoff is mechanically different (a defensive buff, an
+# absorb shield, a CC-cleanse), and the old 2D art already gave each one its
+# own distinct look (icy guard shimmer / barrier bubble / white flash rings)
+# — so rather than one shared "shield's up" effect, mirror that per-class
+# identity here.
+func _build_shift_shield(key: String):
+	_shift_style = key
+	match key:
+		"duelist": _build_iron_resolve_fx()
+		"mage": _build_barrier_fx()
+		"bruiser": _build_unbreakable_fx()
+
+# Duelist — Iron Resolve: a slim shimmering ring at chest height, cool blue,
+# matching the old 2D "icy blue guard shimmer" flavor. No dome — this is a
+# guard stance, not a shield bubble.
+func _build_iron_resolve_fx():
+	_shift_ring = MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.46
+	ring_mesh.outer_radius = 0.50
+	_shift_ring.mesh = ring_mesh
+	_shift_ring.position = Vector3(0, 0.95, 0)
+	_shift_ring_mat = StandardMaterial3D.new()
+	_shift_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_shift_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_shift_ring_mat.albedo_color = Color(0.55, 0.75, 1.0, 0.55)
+	_shift_ring_mat.emission_enabled = true
+	_shift_ring_mat.emission = Color(0.55, 0.75, 1.0)
+	_shift_ring_mat.emission_energy_multiplier = 1.6
+	_shift_ring.material_override = _shift_ring_mat
+	_shift_ring.visible = false
+	add_child(_shift_ring)
+
+# Mage — Barrier: a translucent shield bubble + bright equator ring, matching
+# the old 2D absorb-shield arcs. This is the one class whose Shift is
+# literally a shield, so it's the only one that gets a dome.
+func _build_barrier_fx():
+	_shift_dome = MeshInstance3D.new()
+	var dome_mesh := SphereMesh.new()
+	dome_mesh.radius = 0.62
+	dome_mesh.height = 0.62
+	dome_mesh.is_hemisphere = true
+	_shift_dome.mesh = dome_mesh
+	_shift_dome.position = Vector3(0, 0.05, 0)
+	_shift_dome_mat = StandardMaterial3D.new()
+	_shift_dome_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_shift_dome_mat.albedo_color = Color(0.3, 0.7, 1.0, 0.16)
+	_shift_dome_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_shift_dome_mat.emission_enabled = true
+	_shift_dome_mat.emission = Color(0.3, 0.7, 1.0)
+	_shift_dome_mat.emission_energy_multiplier = 0.8
+	_shift_dome.material_override = _shift_dome_mat
+	_shift_dome.visible = false
+	add_child(_shift_dome)
+
+	_shift_ring = MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.58
+	ring_mesh.outer_radius = 0.66
+	_shift_ring.mesh = ring_mesh
+	_shift_ring.position = Vector3(0, 0.05, 0)
+	_shift_ring_mat = StandardMaterial3D.new()
+	_shift_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_shift_ring_mat.albedo_color = Color(0.5, 0.85, 1.0, 0.85)
+	_shift_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_shift_ring_mat.emission_enabled = true
+	_shift_ring_mat.emission = Color(0.5, 0.85, 1.0)
+	_shift_ring_mat.emission_energy_multiplier = 1.8
+	_shift_ring.material_override = _shift_ring_mat
+	_shift_ring.visible = false
+	add_child(_shift_ring)
+
+# Bruiser — Unbreakable: two concentric white rings around the feet that
+# strobe fast, matching the old 2D "white flash rings" (CC-cleanse should
+# feel like a hard, aggressive pulse, not a calm shield glow). No dome.
+func _build_unbreakable_fx():
+	_shift_ring = MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.5
+	ring_mesh.outer_radius = 0.56
+	_shift_ring.mesh = ring_mesh
+	_shift_ring.position = Vector3(0, 0.05, 0)
+	_shift_ring_mat = StandardMaterial3D.new()
+	_shift_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_shift_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_shift_ring_mat.albedo_color = Color(1, 1, 1, 0.85)
+	_shift_ring_mat.emission_enabled = true
+	_shift_ring_mat.emission = Color(1, 1, 1)
+	_shift_ring_mat.emission_energy_multiplier = 2.2
+	_shift_ring.material_override = _shift_ring_mat
+	_shift_ring.visible = false
+	add_child(_shift_ring)
+
+	_shift_ring2 = MeshInstance3D.new()
+	var ring_mesh2 := TorusMesh.new()
+	ring_mesh2.inner_radius = 0.7
+	ring_mesh2.outer_radius = 0.74
+	_shift_ring2.mesh = ring_mesh2
+	_shift_ring2.position = Vector3(0, 0.05, 0)
+	_shift_ring2_mat = StandardMaterial3D.new()
+	_shift_ring2_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_shift_ring2_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_shift_ring2_mat.albedo_color = Color(1, 1, 1, 0.45)
+	_shift_ring2_mat.emission_enabled = true
+	_shift_ring2_mat.emission = Color(1, 1, 1)
+	_shift_ring2_mat.emission_energy_multiplier = 1.4
+	_shift_ring2.material_override = _shift_ring2_mat
+	_shift_ring2.visible = false
+	add_child(_shift_ring2)
+
+# Slow — generic debuff shared by several abilities (Duelist's A1/Sword
+# Throw, Mage's Bolt, Bruiser's Tremor). A dull frost ring at the feet so a
+# slowed target is never just "moving weirdly for no visible reason".
+func _build_slow_fx():
+	_slow_ring = MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.40
+	ring_mesh.outer_radius = 0.46
+	_slow_ring.mesh = ring_mesh
+	_slow_ring.position = Vector3(0, 0.03, 0)
+	_slow_ring_mat = StandardMaterial3D.new()
+	_slow_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_slow_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_slow_ring_mat.albedo_color = Color(0.55, 0.65, 0.75, 0.55)
+	_slow_ring_mat.emission_enabled = true
+	_slow_ring_mat.emission = Color(0.5, 0.7, 0.85)
+	_slow_ring_mat.emission_energy_multiplier = 0.8
+	_slow_ring.material_override = _slow_ring_mat
+	_slow_ring.visible = false
+	add_child(_slow_ring)
+
+# Weakened — generic outgoing-damage debuff (currently only Bruiser's
+# Warcry inflicts this, on the opponent). Small dark-red spikes drooping
+# around the waist, reading as "this hit will do less than normal".
+func _build_weaken_fx():
+	_weaken_pivot = Node3D.new()
+	_weaken_pivot.position = Vector3(0, 0.85, 0)
+	_weaken_pivot.visible = false
+	add_child(_weaken_pivot)
+
+	var shard_mat := StandardMaterial3D.new()
+	shard_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	shard_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	shard_mat.albedo_color = Color(0.55, 0.08, 0.08, 0.85)
+	shard_mat.emission_enabled = true
+	shard_mat.emission = Color(0.6, 0.1, 0.08)
+	shard_mat.emission_energy_multiplier = 1.2
+
+	const SHARD_COUNT := 4
+	for i in SHARD_COUNT:
+		var shard := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.05
+		cone.bottom_radius = 0.0
+		cone.height = 0.2
+		shard.mesh = cone
+		var a = i * TAU / SHARD_COUNT
+		shard.position = Vector3(cos(a) * 0.32, 0.0, sin(a) * 0.32)
+		shard.material_override = shard_mat
+		_weaken_pivot.add_child(shard)
+		_weaken_shards.append(shard)
+
+# Warcry (Bruiser only) — a deep-red war-drum pulse around the chest plus
+# rising embers, so the self-buff window is as visible to the Bruiser as
+# the enemy debuff marker is to their target.
+func _build_warcry_fx():
+	_warcry_ring = MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.46
+	ring_mesh.outer_radius = 0.52
+	_warcry_ring.mesh = ring_mesh
+	_warcry_ring.position = Vector3(0, 0.95, 0)
+	_warcry_ring_mat = StandardMaterial3D.new()
+	_warcry_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_warcry_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_warcry_ring_mat.albedo_color = Color(0.9, 0.2, 0.1, 0.6)
+	_warcry_ring_mat.emission_enabled = true
+	_warcry_ring_mat.emission = Color(0.9, 0.25, 0.1)
+	_warcry_ring_mat.emission_energy_multiplier = 1.6
+	_warcry_ring.material_override = _warcry_ring_mat
+	_warcry_ring.visible = false
+	add_child(_warcry_ring)
+
+	_warcry_particles = GPUParticles3D.new()
+	_warcry_particles.position = Vector3(0, 0.1, 0)
+	_warcry_particles.amount = 12
+	_warcry_particles.lifetime = 0.55
+	_warcry_particles.emitting = false
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 30.0
+	pm.initial_velocity_min = 0.35
+	pm.initial_velocity_max = 0.7
+	pm.gravity = Vector3(0, 0.3, 0)
+	pm.scale_min = 0.5
+	pm.scale_max = 1.0
+	pm.color = Color(0.9, 0.3, 0.05)
+	_warcry_particles.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.09, 0.09)
+	var pmat := StandardMaterial3D.new()
+	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	pmat.albedo_color = Color(0.95, 0.35, 0.05)
+	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pmat.emission_enabled = true
+	pmat.emission = Color(0.95, 0.35, 0.05)
+	pmat.emission_energy_multiplier = 2.2
+	quad.material = pmat
+	_warcry_particles.draw_pass_1 = quad
+	add_child(_warcry_particles)
 
 func _find_anim_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:
@@ -149,7 +458,85 @@ func _process(delta):
 	_ring_mat.emission = accent
 	_ring_mat.emission_energy_multiplier = 1.8 if entity.hit_flash_left > 0 else 0.9
 
+	_update_status_fx(delta)
 	_update_animation()
+
+func _update_status_fx(delta: float):
+	_freeze_pivot.visible = entity.freeze_time_left > 0
+	if entity.freeze_time_left > 0:
+		_freeze_pivot.rotation.y += delta * 0.8
+		var chill = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+		for shard in _freeze_shards:
+			shard.scale = Vector3.ONE * (0.85 + chill * 0.25)
+
+	_bloodlust_particles.emitting = entity.bloodlust_time_left > 0
+
+	var shift_active = entity.get_shift_active()
+	_shift_ring.visible = shift_active
+	if _shift_dome != null:
+		_shift_dome.visible = shift_active
+	if _shift_ring2 != null:
+		_shift_ring2.visible = shift_active
+	if shift_active:
+		match _shift_style:
+			"duelist": _animate_iron_resolve_fx()
+			"mage": _animate_barrier_fx(delta)
+			"bruiser": _animate_unbreakable_fx()
+	_shift_was_active = shift_active
+
+	_slow_ring.visible = entity.slowed_time_left > 0
+	if entity.slowed_time_left > 0:
+		_slow_ring.rotation.y += delta * 0.5
+		var drag = 0.6 + 0.3 * sin(Time.get_ticks_msec() * 0.004)
+		_slow_ring_mat.albedo_color.a = 0.35 + drag * 0.2
+
+	_weaken_pivot.visible = entity.outgoing_dmg_debuff_time_left > 0
+	if entity.outgoing_dmg_debuff_time_left > 0:
+		_weaken_pivot.rotation.y -= delta * 0.6
+		var sag = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.007)
+		for shard in _weaken_shards:
+			shard.position.y = -sag * 0.08
+
+	if _warcry_ring != null:
+		var bruiser := entity as BruiserEntity
+		var warcry_active = bruiser != null and bruiser.warcry_time_left > 0
+		_warcry_ring.visible = warcry_active
+		_warcry_particles.emitting = warcry_active
+		if warcry_active:
+			var t = Time.get_ticks_msec() * 0.005
+			var pulse = 0.5 + 0.4 * sin(t * 4.0)
+			_warcry_ring_mat.emission_energy_multiplier = 1.2 + pulse * 1.2
+			_warcry_ring_mat.albedo_color.a = 0.4 + pulse * 0.35
+
+# Iron Resolve — a gentle shimmer: alpha flicker + slow rotation, no pop.
+func _animate_iron_resolve_fx():
+	_shift_ring.rotation.y += 0.015
+	var shimmer = 0.7 + 0.3 * sin(Time.get_ticks_msec() * 0.012)
+	_shift_ring_mat.emission_energy_multiplier = 1.2 + shimmer * 0.8
+	_shift_ring_mat.albedo_color.a = 0.4 + shimmer * 0.25
+
+# Barrier — the bubble breathes: soft scale/opacity pulse, like an absorb
+# shield holding steady rather than reacting to anything.
+func _animate_barrier_fx(delta: float):
+	if not _shift_was_active:
+		_shift_ring.scale = Vector3.ONE * 0.6
+		_shift_dome.scale = Vector3.ONE * 0.6
+	_shift_ring.scale = _shift_ring.scale.lerp(Vector3.ONE, delta * 6.0)
+	_shift_dome.scale = _shift_dome.scale.lerp(Vector3.ONE, delta * 6.0)
+	var pulse = 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.005)
+	_shift_dome_mat.albedo_color.a = 0.10 + pulse * 0.10
+	_shift_ring_mat.emission_energy_multiplier = 1.4 + pulse * 1.0
+
+# Unbreakable — a hard, fast double-ring strobe (matches the old 2D "white
+# flash rings"), with the outer ring lagging the inner for a shockwave read.
+func _animate_unbreakable_fx():
+	var t = Time.get_ticks_msec() * 0.006
+	var flash = 0.55 + 0.45 * sin(t * 5.0)
+	_shift_ring_mat.emission_energy_multiplier = 1.6 + flash * 1.6
+	_shift_ring_mat.albedo_color.a = 0.6 + flash * 0.35
+	var flash2 = 0.5 + 0.5 * sin(t * 5.0 - 0.6)
+	_shift_ring2_mat.emission_energy_multiplier = 0.8 + flash2 * 1.2
+	_shift_ring2_mat.albedo_color.a = 0.25 + flash2 * 0.3
 
 func _update_animation():
 	# Priority: attack swing > just got hit > cast wind-up > parry guard >
