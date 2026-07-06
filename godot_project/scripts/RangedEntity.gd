@@ -136,7 +136,7 @@ func resolve_a2(opp: Entity):
 		var dmg = round(NOVA_DMG * combo_mult())
 		if deal_damage(opp, dmg):
 			landed = true
-			opp.apply_stun(NOVA_FREEZE)
+			opp.apply_freeze(NOVA_FREEZE)
 			add_combo_stack()
 	register_ability_result(landed)
 	cd_a2 = NOVA_CD
@@ -174,6 +174,9 @@ func try_shift(_opp: Entity):
 	barrier_hp_left   = BARRIER_HP
 	barrier_time_left = BARRIER_DUR
 	cd_shift = BARRIER_CD
+
+func get_shift_active() -> bool:
+	return barrier_time_left > 0
 
 func try_a3(opp: Entity):
 	if not can_start_ability() or cd_a3 > 0 or opp == null:

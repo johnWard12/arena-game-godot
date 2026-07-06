@@ -129,6 +129,12 @@ var stunned_time_left := 0.0
 var slowed_time_left  := 0.0
 var slow_pct          := 0.5
 
+# Cosmetic-only tag on top of stunned_time_left so the view layer can show a
+# distinct ice-crystal effect for freeze (Mage's Nova) instead of the generic
+# stun stars — set alongside stunned_time_left by apply_freeze(), never read
+# by gameplay logic.
+var freeze_time_left := 0.0
+
 # Multiplier applied to any incoming stun/freeze duration (1.0 = no resistance).
 # Subclasses override this in _ready() to grant CC resistance.
 var stun_resist_mult  := 1.0
@@ -214,6 +220,7 @@ func _physics_process(delta):
 			dash_charges += 1
 	hit_flash_left    = max(0.0, hit_flash_left - delta)
 	slowed_time_left  = max(0.0, slowed_time_left - delta)
+	freeze_time_left  = max(0.0, freeze_time_left - delta)
 	knockup_time_left = max(0.0, knockup_time_left - delta)
 	if bladestorm_time_left > 0:
 		bladestorm_time_left  = max(0.0, bladestorm_time_left - delta)
@@ -508,6 +515,21 @@ func apply_slow(duration: float, pct: float = 0.5):
 		return
 	slowed_time_left = max(slowed_time_left, duration)
 	slow_pct = max(slow_pct, pct)
+
+# Same lockup as apply_stun, but tagged as a freeze so the view layer can
+# render ice shards instead of stun stars — used by Mage's Nova.
+func apply_freeze(duration: float):
+	if cc_immune:
+		return
+	apply_stun(duration)
+	freeze_time_left = max(freeze_time_left, duration * stun_resist_mult)
+
+# Whether this entity's Shift ability is currently in its active-buff window.
+# Each class parks its Shift payoff in a different field (Iron Resolve,
+# Barrier, Unbreakable), so the view layer asks this instead of knowing the
+# per-class field names.
+func get_shift_active() -> bool:
+	return iron_resolve_time_left > 0
 
 # Weakens THIS entity's own outgoing damage for a duration — e.g. Bruiser's
 # Warcry debuffing the opponent. Not blocked by cc_immune since it isn't CC.

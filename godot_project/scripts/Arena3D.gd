@@ -23,7 +23,7 @@ const BACK_WALL_HEIGHT := 3.2
 # far side from the camera) still shows head and shoulders.
 const OBSTACLE_HEIGHT := 1.0
 
-const FLOOR_COLOR     := Color(0.38, 0.30, 0.19)
+const FLOOR_COLOR     := Color(0.22, 0.19, 0.16)
 const WALL_COLOR      := Color(0.14, 0.11, 0.09)
 const KIT_STONE_COLOR := Color(0.62, 0.58, 0.52)
 const HEALTH_COLOR    := Color(0.15, 1.0, 0.45)
@@ -50,6 +50,8 @@ var obstacle_rects: Array[Rect2] = []
 var health_packs: Array = []
 var _pack_meshes: Array[MeshInstance3D] = []
 var _pack_glows: Array[MeshInstance3D] = []
+var _pack_pivots: Array[Node3D] = []
+var _pack_base_y: Array[float] = []
 var _torch_lights: Array[OmniLight3D] = []
 var _time := 0.0
 
@@ -231,36 +233,64 @@ func _build_health_packs():
 
 		var ped := MeshInstance3D.new()
 		var ped_mesh := CylinderMesh.new()
-		ped_mesh.top_radius = 0.32
-		ped_mesh.bottom_radius = 0.4
-		ped_mesh.height = 0.5
+		ped_mesh.top_radius = 0.24
+		ped_mesh.bottom_radius = 0.3
+		ped_mesh.height = 0.4
 		ped.mesh = ped_mesh
-		ped.position = base_pos + Vector3(0, 0.25, 0)
+		ped.position = base_pos + Vector3(0, 0.2, 0)
 		ped.material_override = ped_mat
 		add_child(ped)
 
+		# Spinning pivot holding a low-poly faceted gem (reads as a crystal,
+		# not a plain ball) plus a crossed-box "+" symbol matching the old
+		# 2D orb's plus icon — this is what actually animates/bobs. The
+		# cross is sized to poke out past the gem's silhouette (rather than
+		# sit flush with it) so it reads as a health-cross badge at a
+		# glance instead of blending into the glowing sphere.
+		var pivot := Node3D.new()
+		pivot.position = base_pos + Vector3(0, 0.68, 0)
+		add_child(pivot)
+		_pack_pivots.append(pivot)
+		_pack_base_y.append(pivot.position.y)
+
 		var mi := MeshInstance3D.new()
-		var sphere := SphereMesh.new()
-		sphere.radius = 0.4
-		sphere.height = 0.8
-		mi.mesh = sphere
-		mi.position = base_pos + Vector3(0, 0.9, 0)
+		var gem := SphereMesh.new()
+		gem.radius = 0.26
+		gem.height = 0.52
+		gem.radial_segments = 7
+		gem.rings = 3
+		mi.mesh = gem
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = HEALTH_COLOR
 		mat.emission_enabled = true
 		mat.emission = HEALTH_COLOR
-		mat.emission_energy_multiplier = 3.0
+		mat.emission_energy_multiplier = 2.2
+		mat.metallic = 0.2
+		mat.roughness = 0.15
 		mi.material_override = mat
-		add_child(mi)
+		pivot.add_child(mi)
 		_pack_meshes.append(mi)
+
+		var cross_mat := StandardMaterial3D.new()
+		cross_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		cross_mat.albedo_color = Color(0.95, 1.0, 0.97)
+		cross_mat.emission_enabled = true
+		cross_mat.emission = Color(0.95, 1.0, 0.97)
+		cross_mat.emission_energy_multiplier = 3.2
+		for axis in [Vector3(1, 0, 0), Vector3(0, 0, 1)]:
+			var bar := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = Vector3(0.46, 0.13, 0.13) if axis.x > 0 else Vector3(0.13, 0.46, 0.13)
+			bar.mesh = box
+			bar.material_override = cross_mat
+			pivot.add_child(bar)
 
 		# soft additive glow halo so it reads as "hard to miss" like the old 2D orb
 		var glow := MeshInstance3D.new()
 		var glow_sphere := SphereMesh.new()
-		glow_sphere.radius = 0.78
-		glow_sphere.height = 1.56
+		glow_sphere.radius = 0.55
+		glow_sphere.height = 1.1
 		glow.mesh = glow_sphere
-		glow.position = mi.position
 		var glow_mat := StandardMaterial3D.new()
 		glow_mat.albedo_color = Color(HEALTH_COLOR.r, HEALTH_COLOR.g, HEALTH_COLOR.b, 0.18)
 		glow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -269,7 +299,7 @@ func _build_health_packs():
 		glow_mat.emission_energy_multiplier = 1.0
 		glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		glow.material_override = glow_mat
-		add_child(glow)
+		pivot.add_child(glow)
 		_pack_glows.append(glow)
 
 func _build_torches():
@@ -409,10 +439,19 @@ func _build_floor_rocks():
 func _process(delta):
 	_time += delta
 	for i in health_packs.size():
-		if i < _pack_meshes.size():
+		if i < _pack_pivots.size():
 			var active = health_packs[i]["active"]
-			_pack_meshes[i].visible = active
-			_pack_glows[i].visible = active
+			var pivot = _pack_pivots[i]
+			pivot.visible = active
+			if active:
+				pivot.rotation.y += delta * 1.4
+				var bob = sin(_time * 2.2 + i * 1.7) * 0.08
+				pivot.position.y = _pack_base_y[i] + bob
+				var pulse = 0.5 + 0.5 * sin(_time * 2.2 + i * 1.7)
+				var glow_mat: StandardMaterial3D = _pack_glows[i].material_override
+				glow_mat.albedo_color.a = 0.14 + pulse * 0.10
+				var gem_mat: StandardMaterial3D = _pack_meshes[i].material_override
+				gem_mat.emission_energy_multiplier = 1.8 + pulse * 1.0
 	for i in _torch_lights.size():
 		var flicker = 1.6 + sin(_time * 9.0 + i * 2.1) * 0.15 + sin(_time * 23.0 + i) * 0.08
 		_torch_lights[i].light_energy = flicker
