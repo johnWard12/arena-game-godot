@@ -108,7 +108,7 @@ func try_auto(opp: Entity):
 		add_combo_stack()
 
 func try_a1(opp: Entity):
-	if not alive or cd_a1 > 0 or recovering != null or lunging or opp == null:
+	if not alive or cd_a1 > 0 or recovering != null or lunging or ability_commit_time_left > 0 or opp == null:
 		return
 	facing = get_aim_dir(opp)
 	start_swing(100.0, 0.22)
@@ -122,12 +122,13 @@ func try_a1(opp: Entity):
 		add_combo_stack()
 	cd_a1 = SHATTER_CD
 	recovering = {"type": "a1", "time_left": SHATTER_RECOVERY, "total": SHATTER_RECOVERY}
+	commit_ability()
 
 func resolve_a1(_opp: Entity):
 	pass
 
 func try_a2(_opp: Entity):
-	if not alive or cd_a2 > 0 or recovering != null or lunging:
+	if not alive or cd_a2 > 0 or recovering != null or lunging or ability_commit_time_left > 0:
 		return
 	tremor_fx_left = 0.4
 	FX.impact_burst(get_parent(), global_position, Color(0.85, 0.6, 0.3), 22, 220.0)
@@ -141,12 +142,13 @@ func try_a2(_opp: Entity):
 		add_combo_stack()
 	cd_a2 = TREMOR_CD
 	recovering = {"type": "a2", "time_left": TREMOR_RECOVERY, "total": TREMOR_RECOVERY}
+	commit_ability()
 
 func resolve_a2(_opp: Entity):
 	pass
 
 func try_ult(opp: Entity):
-	if not alive or ult_charge < ULT_CHARGE_MAX or recovering != null or lunging or opp == null:
+	if not alive or ult_charge < ULT_CHARGE_MAX or recovering != null or lunging or ability_commit_time_left > 0 or opp == null:
 		return
 	ult_charge = 0.0
 	# Always lunge straight at the opponent's actual position — this is a
@@ -182,9 +184,12 @@ func _do_seismic_slam(opp: Entity):
 				opp.knockup_time_left = SEISMIC_KNOCKUP
 	screen_shake.emit(14.0, 0.45)
 	recovering = {"type": "ult", "time_left": SEISMIC_RECOVERY, "total": SEISMIC_RECOVERY}
+	commit_ability()
 
 func try_shift(_opp: Entity):
-	# Usable even while stunned — that's the point
+	# Usable even while stunned — that's the point. Not gated on
+	# ability_commit_time_left either, for the same reason: this is a panic
+	# button that has to fire the instant it's pressed, not after a beat.
 	if not alive or cd_shift > 0 or unbreakable_time_left > 0:
 		return
 	stunned_time_left = 0.0
@@ -193,17 +198,19 @@ func try_shift(_opp: Entity):
 	speed_override    = BRUISER_MAX_SPEED * UNBREAKABLE_MOVE_MULT
 	unbreakable_time_left = UNBREAKABLE_DUR
 	cd_shift = UNBREAKABLE_CD
+	commit_ability()
 
 func get_shift_active() -> bool:
 	return unbreakable_time_left > 0 or barrier_time_left > 0
 
 func try_a3(_opp: Entity):
-	if not alive or cd_a3 > 0:
+	if not alive or cd_a3 > 0 or ability_commit_time_left > 0:
 		return
 	warcry_time_left = WARCRY_DUR
 	# AoE debuff — weakens every enemy in range, not just the primary target.
 	for target in get_enemies_in_range(WARCRY_RADIUS):
 		target.apply_outgoing_dmg_debuff(WARCRY_DUR, WARCRY_ENEMY_DMG_MULT)
+	commit_ability()
 	FX.impact_burst(get_parent(), global_position, Color(0.9, 0.25, 0.1), 20, 220.0)
 	cd_a3 = WARCRY_CD
 

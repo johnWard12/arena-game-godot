@@ -133,6 +133,7 @@ func resolve_a1(opp: Entity):
 		PIERCE_SLOW_DUR, PIERCE_SLOW_PCT, false, true, "arrow")
 	cd_a1 = PIERCE_CD
 	recovering = {"type": "a1", "time_left": PIERCE_RECOVERY, "total": PIERCE_RECOVERY}
+	commit_ability()
 
 func try_a2(opp: Entity):
 	if not can_start_ability() or cd_a2 > 0 or opp == null:
@@ -141,6 +142,7 @@ func try_a2(opp: Entity):
 	var pos = global_position + facing * SNARE_PLACE_DIST
 	_place_trap(pos, SNARE_RADIUS, SNARE_ARM_DELAY, SNARE_LIFETIME, SNARE_ROOT_DUR, Color(0.4, 0.9, 0.3))
 	cd_a2 = SNARE_CD
+	commit_ability()
 
 func resolve_a2(_opp: Entity):
 	pass
@@ -162,6 +164,7 @@ func try_a3(opp: Entity):
 	lunge_reach = 0.0
 	lunge_opponent = null
 	cd_a3 = DISENGAGE_CD
+	commit_ability()
 
 # The recoil already did its job via try_a3's forced lunge; the ranged
 # damage already landed via the projectile fired there too, so arriving
@@ -177,6 +180,7 @@ func try_shift(_opp: Entity):
 		return
 	invisible_time_left = CAMO_DUR
 	cd_shift = CAMO_CD
+	commit_ability()
 
 func get_shift_active() -> bool:
 	return invisible_time_left > 0 or barrier_time_left > 0
@@ -194,6 +198,7 @@ func resolve_ult(opp: Entity):
 	rain_fx_left = RAIN_DUR + 0.3
 	_spawn_zone_fx(rain_pos, RAIN_RADIUS, RAIN_DUR, Color(0.5, 0.9, 0.3), "pulse", "fall")
 	recovering = {"type": "ult", "time_left": RAIN_RECOVERY, "total": RAIN_RECOVERY}
+	commit_ability()
 
 # ---- Drawing ----
 # Rain's zone telegraph is NOT drawn here in 3D-view mode — it used to be,

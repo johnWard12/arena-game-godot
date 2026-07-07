@@ -50,7 +50,7 @@ const CLASSES = [
 		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Iron Resolve Shift", "Bladestorm R"],
 		"ability_descs": [
 			"6.5 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
-			"15 dmg stab. Slows 30% for 2s. 1.8s cooldown, 145 range, 0.09s wind-up.",
+			"15 dmg stab. Slows 30% for 2s and reduces their healing received 30% for 3s. 1.8s cooldown, 145 range, 0.09s wind-up.",
 			"Dash up to 270, strike for 25.5 dmg and stun 0.5s. 6.5s cooldown, 150 range.",
 			"7.5 dmg (up to 17.5 vs a low-HP target). Slows 30% for 2s. 4s cooldown.",
 			"Converts current combo stacks into damage reduction (10% per stack, up to 30%) for 2s, consuming them. 7s cooldown.",

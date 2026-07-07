@@ -23,6 +23,8 @@ const A1_DMG = 15.0
 const A1_RANGE = 145.0
 const A1_SLOW_DUR = 2.0
 const A1_SLOW_PCT = 0.30
+const A1_HEAL_REDUCE_DUR = 3.0
+const A1_HEAL_REDUCE_PCT = 0.30
 
 const A2_CAST = 0.14
 const A2_RECOVERY = 0.22
@@ -241,6 +243,23 @@ var dmg_reduction := 0.0
 # 0.9 = deals 10% less). Set on an entity by a debuff like Bruiser's Warcry.
 var outgoing_dmg_mult := 1.0
 var outgoing_dmg_debuff_time_left := 0.0
+
+# Grievous-Wounds-style debuff: while active, healing THIS entity receives
+# (from any source — routes through heal(), same as heal_dampen_mult())
+# is reduced by healing_reduction_pct. Set by Duelist's Strike.
+var healing_reduction_time_left := 0.0
+var healing_reduction_pct := 0.0
+
+# Universal micro-lockout after using any non-auto ability (E/Q/F/Shift/R),
+# briefly blocking the next action of any kind so abilities can't be
+# chained instantly back-to-back just because each is individually off
+# cooldown. Never set by auto-attack itself, so holding LMB stays fully
+# fluid — only using a "real" ability introduces the beat.
+var ability_commit_time_left := 0.0
+const ABILITY_COMMIT_DUR := 0.135
+
+func commit_ability():
+	ability_commit_time_left = ABILITY_COMMIT_DUR
 
 # Iron Resolve (Duelist Shift) active-buff timer
 var iron_resolve_time_left := 0.0
@@ -495,6 +514,8 @@ func _physics_process(delta):
 	cd_a3 = max(0.0, cd_a3 - delta * atkspd_mult)
 	cd_shift = max(0.0, cd_shift - delta)
 	parry_cd_left = max(0.0, parry_cd_left - delta)
+	ability_commit_time_left = max(0.0, ability_commit_time_left - delta)
+	healing_reduction_time_left = max(0.0, healing_reduction_time_left - delta)
 	if outgoing_dmg_debuff_time_left > 0:
 		outgoing_dmg_debuff_time_left = max(0.0, outgoing_dmg_debuff_time_left - delta)
 		if outgoing_dmg_debuff_time_left <= 0:
@@ -754,7 +775,8 @@ func prune_trail(now: int):
 		trail.pop_front()
 
 func can_start_ability() -> bool:
-	return alive and casting == null and recovering == null and not dashing and not lunging and not parrying and stunned_time_left <= 0
+	return alive and casting == null and recovering == null and not dashing and not lunging and not parrying \
+		and stunned_time_left <= 0 and ability_commit_time_left <= 0
 
 func can_dash(dir: Vector2) -> bool:
 	return alive and casting == null and not dashing and not lunging and not parrying and stunned_time_left <= 0 \
@@ -869,6 +891,16 @@ func apply_outgoing_dmg_debuff(duration: float, mult: float):
 	outgoing_dmg_debuff_time_left = max(outgoing_dmg_debuff_time_left, duration)
 	outgoing_dmg_mult = min(outgoing_dmg_mult, mult)
 
+# Grievous-Wounds-style debuff: reduces healing THIS entity RECEIVES for a
+# duration — e.g. Duelist's Strike. Stacks multiplicatively with
+# heal_dampen_mult() inside heal(), not blocked by cc_immune (not CC).
+func apply_healing_reduction(duration: float, pct: float):
+	healing_reduction_time_left = max(healing_reduction_time_left, duration)
+	healing_reduction_pct = max(healing_reduction_pct, pct)
+
+func healing_reduction_mult() -> float:
+	return (1.0 - healing_reduction_pct) if healing_reduction_time_left > 0 else 1.0
+
 func deal_damage(target: Entity, amount: float) -> bool:
 	if target == null or not target.alive:
 		return false
@@ -930,11 +962,13 @@ func deal_damage(target: Entity, amount: float) -> bool:
 # should route through this instead of poking target.hp directly, for the
 # same reason attacks route through deal_damage() instead of poking
 # target.hp directly — it's also the single choke point the anti-stall
-# heal_dampen_mult() below needs to apply to every healing source.
+# heal_dampen_mult() and Grievous-Wounds-style healing_reduction_mult()
+# below need to apply to every healing source, and they stack
+# multiplicatively.
 func heal(target: Entity, amount: float) -> void:
 	if target == null or not is_instance_valid(target) or not target.alive:
 		return
-	target.hp = min(target.max_hp, target.hp + amount * target.heal_dampen_mult())
+	target.hp = min(target.max_hp, target.hp + amount * target.heal_dampen_mult() * target.healing_reduction_mult())
 	ult_active_time_left = ULT_ACTIVE_WINDOW
 
 # Anti-stall: once a match has run long, healing gradually loses
@@ -984,9 +1018,11 @@ func resolve_a1(opp: Entity):
 		var dmg = round(A1_DMG * combo_mult())
 		if deal_damage(target, dmg):
 			target.apply_slow(A1_SLOW_DUR, A1_SLOW_PCT)
+			target.apply_healing_reduction(A1_HEAL_REDUCE_DUR, A1_HEAL_REDUCE_PCT)
 			add_combo_stack()
 	cd_a1 = A1_CD
 	recovering = {"type": "a1", "time_left": A1_RECOVERY, "total": A1_RECOVERY}
+	commit_ability()
 
 func try_a2(opp: Entity):
 	if not can_start_ability() or cd_a2 > 0 or opp == null:
@@ -1016,6 +1052,7 @@ func resolve_lunge_strike(opp: Entity):
 			add_combo_stack()
 	var recovery_time = A2_RECOVERY if landed else A2_MISS_RECOVERY
 	recovering = {"type": "a2", "time_left": recovery_time, "total": recovery_time}
+	commit_ability()
 
 func try_ult(opp: Entity):
 	if not can_start_ability() or ult_charge < ULT_CHARGE_MAX or opp == null:
@@ -1023,6 +1060,7 @@ func try_ult(opp: Entity):
 	ult_charge = 0.0
 	bladestorm_time_left = BLADESTORM_DUR
 	bladestorm_hit_timer = 0.0
+	commit_ability()
 
 func resolve_ult(_opp: Entity):
 	pass
@@ -1038,6 +1076,7 @@ func try_shift(_opp: Entity):
 	combo_time_left = 0.0
 	cd_shift = IRON_RESOLVE_CD
 	FX.impact_burst(get_parent(), global_position, Color(0.55, 0.75, 1.0), 14, 150.0)
+	commit_ability()
 
 func try_dash(dir: Vector2):
 	if not can_dash(dir):
@@ -1071,6 +1110,7 @@ func resolve_a3(opp: Entity):
 		Color(0.8, 0.85, 0.95), 10.0, SWORD_THROW_SLOW_DUR, SWORD_THROW_SLOW_PCT)
 	cd_a3 = SWORD_THROW_CD
 	recovering = {"type": "a3", "time_left": SWORD_THROW_RECOVERY, "total": SWORD_THROW_RECOVERY}
+	commit_ability()
 
 func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false, kind: String = "orb", is_heal: bool = false):
 	var proj = load("res://scripts/Projectile.gd").new()

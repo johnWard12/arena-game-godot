@@ -120,6 +120,7 @@ func resolve_a1(opp: Entity):
 	add_combo_stack()
 	cd_a1 = BOLT_CD
 	recovering = {"type": "a1", "time_left": BOLT_RECOVERY, "total": BOLT_RECOVERY}
+	commit_ability()
 
 func try_a2(opp: Entity):
 	if not can_start_ability() or cd_a2 > 0 or opp == null:
@@ -145,6 +146,7 @@ func resolve_a2(opp: Entity):
 	register_ability_result(landed)
 	cd_a2 = NOVA_CD
 	recovering = {"type": "a2", "time_left": NOVA_RECOVERY, "total": NOVA_RECOVERY}
+	commit_ability()
 
 func try_ult(opp: Entity):
 	if not can_start_ability() or ult_charge < ULT_CHARGE_MAX or opp == null:
@@ -179,6 +181,7 @@ func _resolve_void_explosion():
 		deal_damage(other, VOIDCOLLAPSE_DMG_MIN * 0.6)
 	screen_shake.emit(10.0, 0.35)
 	recovering = {"type": "ult", "time_left": VOIDCOLLAPSE_RECOVERY, "total": VOIDCOLLAPSE_RECOVERY}
+	commit_ability()
 
 func try_shift(_opp: Entity):
 	if not can_start_ability() or cd_shift > 0:
@@ -186,6 +189,7 @@ func try_shift(_opp: Entity):
 	barrier_hp_left   = BARRIER_HP
 	barrier_time_left = BARRIER_DUR
 	cd_shift = BARRIER_CD
+	commit_ability()
 
 func get_shift_active() -> bool:
 	return barrier_time_left > 0
@@ -202,6 +206,7 @@ func try_a3(opp: Entity):
 	FX.impact_burst(get_parent(), global_position + facing * (RADIUS + 20), Color(0.6, 0.3, 1.0), 10, 160.0)
 	cd_a3 = ARCANE_FAN_CD
 	recovering = {"type": "a3", "time_left": ARCANE_FAN_RECOVERY, "total": ARCANE_FAN_RECOVERY}
+	commit_ability()
 
 func resolve_a3(_opp: Entity):
 	pass

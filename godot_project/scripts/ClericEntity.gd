@@ -137,6 +137,7 @@ func resolve_a1(target: Entity):
 		devotion_time_left = DEVOTION_DUR
 	cd_a1 = MENDING_CD
 	recovering = {"type": "a1", "time_left": MENDING_RECOVERY, "total": MENDING_RECOVERY}
+	commit_ability()
 
 func try_a2(_opp: Entity):
 	if not can_start_ability() or cd_a2 > 0:
@@ -147,6 +148,7 @@ func try_a2(_opp: Entity):
 	FX.impact_burst(get_parent(), global_position, Color(0.95, 0.9, 0.55), 18, 180.0)
 	_spawn_zone_fx(consecrate_pos, CONSECRATE_RADIUS, CONSECRATE_DUR, Color(0.95, 0.85, 0.4))
 	cd_a2 = CONSECRATE_CD
+	commit_ability()
 
 func resolve_a2(_opp: Entity):
 	pass
@@ -167,6 +169,7 @@ func try_a3(opp: Entity):
 	FX.impact_burst(get_parent(), global_position + facing * (PURIFY_LENGTH * 0.5), Color(0.95, 0.92, 0.7), 16, 180.0)
 	_spawn_rect_fx(global_position, facing, PURIFY_LENGTH, PURIFY_WIDTH, 0.5, Color(0.95, 0.9, 0.55))
 	cd_a3 = PURIFY_CD
+	commit_ability()
 
 func resolve_a3(_opp: Entity):
 	pass
@@ -184,11 +187,15 @@ func try_shift(_opp: Entity):
 		devotion_time_left = DEVOTION_DUR
 	FX.impact_burst(get_parent(), target.global_position, Color(0.95, 0.9, 0.6), 14, 150.0)
 	cd_shift = WARD_CD
+	commit_ability()
 
 func try_ult(_opp: Entity):
 	# No can_start_ability() gate on purpose — this needs to work even
 	# while stunned, since it's meant to be usable as an "I'm about to die"
-	# panic button, not just a proactive team-fight tool.
+	# panic button, not just a proactive team-fight tool. Also not gated on
+	# ability_commit_time_left for the same reason (matches Bruiser's
+	# Unbreakable) — it still SETS the timer below so there's a beat before
+	# the next action, it just never lets a prior one block IT from firing.
 	if not alive or ult_charge < ULT_CHARGE_MAX:
 		return
 	ult_charge = 0.0
@@ -206,6 +213,7 @@ func try_ult(_opp: Entity):
 	_spawn_zone_fx(global_position, 90.0, 0.6, Color(1.0, 0.92, 0.55))
 	if partner != null:
 		_spawn_zone_fx(partner.global_position, 90.0, 0.6, Color(1.0, 0.92, 0.55))
+	commit_ability()
 
 func resolve_ult(_opp: Entity):
 	pass
