@@ -12,7 +12,7 @@ const RANGER_MAX_SPEED = 445.0
 
 # LMB — Quick Shot: fast low-damage poke, builds Momentum on hit
 const QUICKSHOT_CD     = 0.5
-const QUICKSHOT_DMG    = 6.8
+const QUICKSHOT_DMG    = 7.5
 const QUICKSHOT_SPEED  = 1500.0
 const QUICKSHOT_RADIUS = 18.0
 
@@ -22,7 +22,7 @@ const PIERCE_RECOVERY  = 0.18
 const PIERCE_CD        = 4.0
 const PIERCE_SPEED     = 1700.0
 const PIERCE_RADIUS    = 18.0
-const PIERCE_DMG       = 20.4
+const PIERCE_DMG       = 22.4
 const PIERCE_SLOW_DUR  = 1.0
 const PIERCE_SLOW_PCT  = 0.20
 
@@ -36,7 +36,7 @@ const SNARE_ROOT_DUR    = 1.2
 
 # F — Disengage Shot: fire forward, recoil backward — peel tool
 const DISENGAGE_CD     = 6.0
-const DISENGAGE_DMG    = 13.6
+const DISENGAGE_DMG    = 15.0
 const DISENGAGE_SPEED  = 1400.0
 const DISENGAGE_RADIUS = 16.0
 const DISENGAGE_RECOIL = 1400.0
@@ -51,7 +51,7 @@ const RAIN_CAST          = 0.3
 const RAIN_RECOVERY      = 0.3
 const RAIN_DUR           = 2.0
 const RAIN_TICK_INTERVAL = 0.4
-const RAIN_TICK_DMG      = 11.9
+const RAIN_TICK_DMG      = 13.1
 const RAIN_RADIUS        = 130.0
 
 # Passive — Momentum: consecutive landed Quick Shots build stacking move

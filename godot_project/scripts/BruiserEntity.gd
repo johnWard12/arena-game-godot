@@ -7,20 +7,20 @@ const BRUISER_ACCEL      = 2800.0
 const BRUISER_FRICTION   = 1400.0
 
 const BRUISER_AUTO_CD    = 0.70
-const BRUISER_AUTO_DMG   = 3.0
+const BRUISER_AUTO_DMG   = 2.7
 const BRUISER_AUTO_RANGE = 167.0
 
 # E — Shatter: shield slam + stun (instant)
 const SHATTER_RECOVERY = 0.25
 const SHATTER_CD       = 5.5
-const SHATTER_DMG      = 22.0
+const SHATTER_DMG      = 19.8
 const SHATTER_RANGE    = 151.0
 const SHATTER_STUN     = 0.70
 
 # Q — Tremor: ground stomp AoE + slow (instant)
 const TREMOR_RECOVERY = 0.25
 const TREMOR_CD       = 8.0
-const TREMOR_DMG      = 18.0
+const TREMOR_DMG      = 16.2
 const TREMOR_RADIUS   = 180.0
 const TREMOR_SLOW     = 2.0
 
@@ -28,7 +28,7 @@ const TREMOR_SLOW     = 2.0
 const SEISMIC_LUNGE_DUR  = 0.14
 const SEISMIC_LUNGE_DIST = 280.0
 const SEISMIC_RANGE      = 198.0
-const SEISMIC_DMG        = 55.0
+const SEISMIC_DMG        = 49.5
 const SEISMIC_KNOCKUP    = 1.0
 const SEISMIC_RECOVERY   = 0.65
 

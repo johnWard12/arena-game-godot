@@ -79,12 +79,12 @@ const CLASSES = [
 		"hp":    "HP  165",
 		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Warcry     F", "Unbreakable Shift", "Seismic Slam R"],
 		"ability_descs": [
-			"3 dmg. 0.7s cooldown, 167 range. Basic swing, hold to auto-repeat.",
-			"22 dmg shield slam, stuns 0.7s. 5.5s cooldown, 151 range. Instant, no wind-up.",
-			"Ground stomp: 18 dmg + 50% slow for 2s to foes within 180 range. 8s cooldown. Instant.",
+			"2.7 dmg. 0.7s cooldown, 167 range. Basic swing, hold to auto-repeat.",
+			"19.8 dmg shield slam, stuns 0.7s. 5.5s cooldown, 151 range. Instant, no wind-up.",
+			"Ground stomp: 16.2 dmg + 50% slow for 2s to foes within 180 range. 8s cooldown. Instant.",
 			"You take 15% less damage; the opponent deals 10% less damage. Both for 4s, enemy debuff needs them within 210 range. 8s cooldown.",
 			"Cleanses all CC, grants CC immunity, 25% damage reduction, and +20% move speed for 2.5s. 8.5s cooldown. Usable even while stunned.",
-			"Lunge in (up to 280) and slam for 55 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
+			"Lunge in (up to 280) and slam for 49.5 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
 		]
 	},
 	{
@@ -94,12 +94,12 @@ const CLASSES = [
 		"hp":    "HP  130",
 		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "Rain of Arrows R"],
 		"ability_descs": [
-			"6.8 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
-			"20.4 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
+			"7.5 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
+			"22.4 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
 			"Throws a trap 110 out that arms in 0.6s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
-			"13.6 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
+			"15 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
 			"Vanish from AI targeting for 3s (a human player tracking you can still hit you). 10s cooldown.",
-			"Targets a zone that rains arrows for 2s, ticking 11.9 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
+			"Targets a zone that rains arrows for 2s, ticking 13.1 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
 		]
 	},
 	{
