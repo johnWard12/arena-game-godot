@@ -165,6 +165,43 @@ func setup(e: Entity):
 	_build_bond_fx()
 	if key == "bruiser":
 		_build_warcry_fx()
+		_attach_bruiser_sword()
+
+# The Monk model is an unarmed martial-arts rig (Bruiser's kit is a hammer
+# thematically, but the model itself holds nothing), which read as strange
+# for a "brawler" archetype. Its skeleton does have an empty "Weapon.R"
+# socket bone though — every character in this pack shares that same rig
+# convention (Warrior/Rogue/Wizard/Cleric each bake their own weapon onto
+# it). Rather than modeling a new prop, this reuses the Warrior's actual
+# sword mesh + its authored grip transform on that shared socket, so the
+# fit should already be correct without hand-tuning an offset.
+func _attach_bruiser_sword():
+	var skeleton := _find_skeleton(_model)
+	if skeleton == null or skeleton.find_bone("Weapon.R") < 0:
+		return
+
+	var warrior_scene: PackedScene = load(KIT_PATH + "Warrior.gltf")
+	var warrior := warrior_scene.instantiate()
+	var sword := warrior.find_child("Warrior_Sword", true, false)
+	if sword == null:
+		warrior.queue_free()
+		return
+	var sword_copy: Node3D = sword.duplicate()
+	warrior.queue_free()
+
+	var attachment := BoneAttachment3D.new()
+	skeleton.add_child(attachment)
+	attachment.bone_name = "Weapon.R"
+	attachment.add_child(sword_copy)
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var found = _find_skeleton(child)
+		if found != null:
+			return found
+	return null
 
 # Freeze (Mage's Nova) — a slowly-spinning ring of little ice shards around
 # the waist, distinct from the generic yellow stun-star read so a frozen

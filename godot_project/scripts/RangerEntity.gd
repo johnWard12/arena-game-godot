@@ -6,11 +6,13 @@ class_name RangerEntity
 # predictable pathing, a recoiling peel shot, and a stealth escape.
 
 const RANGER_MAX_HP    = 130.0
-const RANGER_MAX_SPEED = 465.0
+# Trimmed slightly from 465 — still the fastest kit in the roster, just a
+# little less untouchable while also doing less damage (see below).
+const RANGER_MAX_SPEED = 445.0
 
 # LMB — Quick Shot: fast low-damage poke, builds Momentum on hit
 const QUICKSHOT_CD     = 0.5
-const QUICKSHOT_DMG    = 8.0
+const QUICKSHOT_DMG    = 6.8
 const QUICKSHOT_SPEED  = 1500.0
 const QUICKSHOT_RADIUS = 18.0
 
@@ -20,7 +22,7 @@ const PIERCE_RECOVERY  = 0.18
 const PIERCE_CD        = 4.0
 const PIERCE_SPEED     = 1700.0
 const PIERCE_RADIUS    = 18.0
-const PIERCE_DMG       = 24.0
+const PIERCE_DMG       = 20.4
 const PIERCE_SLOW_DUR  = 1.0
 const PIERCE_SLOW_PCT  = 0.20
 
@@ -34,7 +36,7 @@ const SNARE_ROOT_DUR    = 1.2
 
 # F — Disengage Shot: fire forward, recoil backward — peel tool
 const DISENGAGE_CD     = 6.0
-const DISENGAGE_DMG    = 16.0
+const DISENGAGE_DMG    = 13.6
 const DISENGAGE_SPEED  = 1400.0
 const DISENGAGE_RADIUS = 16.0
 const DISENGAGE_RECOIL = 1400.0
@@ -49,7 +51,7 @@ const RAIN_CAST          = 0.3
 const RAIN_RECOVERY      = 0.3
 const RAIN_DUR           = 2.0
 const RAIN_TICK_INTERVAL = 0.4
-const RAIN_TICK_DMG      = 14.0
+const RAIN_TICK_DMG      = 11.9
 const RAIN_RADIUS        = 130.0
 
 # Passive — Momentum: consecutive landed Quick Shots build stacking move
@@ -190,7 +192,7 @@ func resolve_ult(opp: Entity):
 	rain_time_left = RAIN_DUR
 	rain_tick_timer = 0.0
 	rain_fx_left = RAIN_DUR + 0.3
-	_spawn_zone_fx(rain_pos, RAIN_RADIUS, RAIN_DUR, Color(0.5, 0.9, 0.3))
+	_spawn_zone_fx(rain_pos, RAIN_RADIUS, RAIN_DUR, Color(0.5, 0.9, 0.3), "pulse", "fall")
 	recovering = {"type": "ult", "time_left": RAIN_RECOVERY, "total": RAIN_RECOVERY}
 
 # ---- Drawing ----

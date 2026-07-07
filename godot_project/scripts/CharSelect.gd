@@ -42,14 +42,14 @@ const CLASSES = [
 		"color": MELEE_COLOR,
 		"key":   "melee",
 		"hp":    "HP  150",
-		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "IronResolve Shift", "Bladestorm R"],
+		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Iron Resolve Shift", "Bladestorm R"],
 		"ability_descs": [
-			"4 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
-			"12 dmg stab. Slows 30% for 2s. 1.8s cooldown, 145 range, 0.09s wind-up.",
-			"Dash up to 270, strike for 20.4 dmg and stun 0.5s. 6.5s cooldown, 150 range.",
-			"6 dmg (up to 14 vs a low-HP target). Slows 30% for 2s. 4s cooldown.",
+			"5 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
+			"15 dmg stab. Slows 30% for 2s. 1.8s cooldown, 145 range, 0.09s wind-up.",
+			"Dash up to 270, strike for 25.5 dmg and stun 0.5s. 6.5s cooldown, 150 range.",
+			"7.5 dmg (up to 17.5 vs a low-HP target). Slows 30% for 2s. 4s cooldown.",
 			"Converts current combo stacks into damage reduction (10% per stack, up to 30%) for 2s, consuming them. 7s cooldown.",
-			"Spin 1.5s, hitting foes within 170 range for 14 dmg every 0.3s (up to 5 hits, 70 total). Slow-immune while active. Builds on a 14s charge meter.",
+			"Spin 1.5s, hitting foes within 170 range for 17.5 dmg every 0.3s (up to 5 hits, 87.5 total). Slow-immune while active. Builds on a 14s charge meter.",
 		]
 	},
 	{
@@ -57,7 +57,7 @@ const CLASSES = [
 		"color": RANGED_COLOR,
 		"key":   "ranged",
 		"hp":    "HP  120",
-		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "ArcaneFan  F", "Barrier    Shift", "VoidColl   R"],
+		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "Arcane Fan F", "Barrier    Shift", "Void Collapse R"],
 		"ability_descs": [
 			"6.75 dmg bolt. 0.75s cooldown. Basic shot, hold to auto-repeat.",
 			"22 dmg piercing bolt. Slows 25% for 1.5s. 3.5s cooldown, 0.25s wind-up.",
@@ -72,13 +72,13 @@ const CLASSES = [
 		"color": BRUISER_COLOR,
 		"key":   "bruiser",
 		"hp":    "HP  165",
-		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Warcry     F", "Unbreakable Shift", "Seismic    R"],
+		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Warcry     F", "Unbreakable Shift", "Seismic Slam R"],
 		"ability_descs": [
 			"3 dmg. 0.7s cooldown, 167 range. Basic swing, hold to auto-repeat.",
 			"22 dmg shield slam, stuns 0.7s. 5.5s cooldown, 151 range. Instant, no wind-up.",
 			"Ground stomp: 18 dmg + 50% slow for 2s to foes within 180 range. 8s cooldown. Instant.",
 			"You take 15% less damage; the opponent deals 10% less damage. Both for 4s, enemy debuff needs them within 210 range. 8s cooldown.",
-			"Cleanses all CC, grants CC immunity, and 25% damage reduction for 2.5s. 8.5s cooldown. Usable even while stunned.",
+			"Cleanses all CC, grants CC immunity, 25% damage reduction, and +20% move speed for 2.5s. 8.5s cooldown. Usable even while stunned.",
 			"Lunge in (up to 280) and slam for 55 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
 		]
 	},
@@ -87,14 +87,14 @@ const CLASSES = [
 		"color": RANGER_COLOR,
 		"key":   "ranger",
 		"hp":    "HP  130",
-		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "RainArrows R"],
+		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "Rain of Arrows R"],
 		"ability_descs": [
-			"8 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
-			"24 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
+			"6.8 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
+			"20.4 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
 			"Throws a trap 110 out that arms in 0.6s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
-			"16 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
+			"13.6 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
 			"Vanish from AI targeting for 3s (a human player tracking you can still hit you). 10s cooldown.",
-			"Targets a zone that rains arrows for 2s, ticking 9 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
+			"Targets a zone that rains arrows for 2s, ticking 11.9 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
 		]
 	},
 	{

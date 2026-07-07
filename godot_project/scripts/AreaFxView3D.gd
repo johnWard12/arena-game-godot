@@ -19,6 +19,10 @@ var _age := 0.0
 # "pulse" (default): static radius, brightness pulse — a lingering zone.
 # "expand": radius grows from a small point to full size — a shockwave burst.
 var _anim_style := "pulse"
+# "rise" (default): small motes drifting up off the ground — Consecrate.
+# "fall": streaks raining down from above into the zone — Rain of Arrows,
+# so it visibly reads as an active damage field instead of just a glow.
+var _particle_style := "rise"
 
 var _disc: MeshInstance3D
 var _disc_mat: StandardMaterial3D
@@ -40,6 +44,7 @@ func setup(fx: Dictionary):
 	_duration = fx["duration"]
 	_color = fx["color"]
 	_anim_style = fx.get("anim", "pulse")
+	_particle_style = fx.get("particles", "rise")
 	position = CoordUtil.to_world(fx["pos"], 0.03)
 
 	var facing: Vector2 = fx["facing"]
@@ -97,6 +102,12 @@ func _build_circle():
 	_ring2.material_override = _ring2_mat
 	add_child(_ring2)
 
+	if _particle_style == "fall":
+		_build_falling_particles(r)
+	else:
+		_build_rising_particles(r)
+
+func _build_rising_particles(r: float):
 	_particles = GPUParticles3D.new()
 	_particles.position = Vector3(0, 0.05, 0)
 	_particles.amount = 20
@@ -123,6 +134,42 @@ func _build_circle():
 	pmat.emission_enabled = true
 	pmat.emission = _color
 	pmat.emission_energy_multiplier = 2.2
+	quad.material = pmat
+	_particles.draw_pass_1 = quad
+	add_child(_particles)
+
+# Rain of Arrows — thin streaks raining down from above the zone, aligned
+# to their fall direction so they read as arrows/bolts rather than generic
+# floating motes. Spawns across the whole zone footprint continuously for
+# as long as the effect lives.
+func _build_falling_particles(r: float):
+	_particles = GPUParticles3D.new()
+	_particles.position = Vector3(0, 2.4, 0)
+	_particles.amount = 28
+	_particles.lifetime = 0.55
+	_particles.emitting = true
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(r * 0.8, 0.02, r * 0.8)
+	pm.direction = Vector3(0, -1, 0)
+	pm.spread = 4.0
+	pm.initial_velocity_min = 4.0
+	pm.initial_velocity_max = 5.5
+	pm.gravity = Vector3(0, -3.0, 0)
+	pm.scale_min = 1.0
+	pm.scale_max = 1.0
+	pm.color = _color
+	pm.particle_flag_align_y_to_velocity = true
+	_particles.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.025, 0.32)
+	var pmat := StandardMaterial3D.new()
+	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	pmat.albedo_color = _color
+	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pmat.emission_enabled = true
+	pmat.emission = _color
+	pmat.emission_energy_multiplier = 2.4
 	quad.material = pmat
 	_particles.draw_pass_1 = quad
 	add_child(_particles)

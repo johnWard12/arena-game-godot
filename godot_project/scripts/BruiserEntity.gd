@@ -32,15 +32,16 @@ const SEISMIC_DMG        = 55.0
 const SEISMIC_KNOCKUP    = 1.0
 const SEISMIC_RECOVERY   = 0.65
 
-# Shift — Unbreakable: CC cleanse + immunity + damage reduction. No longer
-# also grants a move-speed bonus — a tank that's immune to CC AND faster
-# than everyone chasing it had no real counterplay window at all (this was
-# the single biggest driver of Bruiser's persistently ~90% cross-matchup
-# win rate). Duration trimmed slightly too, so the lockout window is
-# shorter even though it's still a full cleanse + immunity + DR button.
+# Shift — Unbreakable: CC cleanse + immunity + damage reduction + a move
+# speed bump. The speed bonus was cut entirely earlier (a tank immune to CC
+# AND faster than everyone chasing it had no real counterplay window), then
+# brought back at roughly half strength — still gives some mobility to
+# capitalize on the cleanse, just not enough to be flatly uncatchable.
+# Duration also stays trimmed from the original 3.0s.
 const UNBREAKABLE_CD           = 8.5
 const UNBREAKABLE_DUR          = 2.5
 const UNBREAKABLE_DMG_REDUCE   = 0.25
+const UNBREAKABLE_MOVE_MULT    = 1.20
 
 # F — Warcry: self damage-reduction buff + opponent damage-dealt debuff
 const WARCRY_CD              = 8.0
@@ -73,6 +74,7 @@ func _physics_process(delta):
 		unbreakable_time_left = max(0.0, unbreakable_time_left - delta)
 		if unbreakable_time_left <= 0:
 			cc_immune      = false
+			speed_override = BRUISER_MAX_SPEED
 	# Damage reduction is recomputed each tick from whichever buffs are
 	# active, rather than imperatively set/cleared, so Unbreakable and
 	# Warcry can overlap without one clobbering the other's contribution.
@@ -188,6 +190,7 @@ func try_shift(_opp: Entity):
 	stunned_time_left = 0.0
 	slowed_time_left  = 0.0
 	cc_immune         = true
+	speed_override    = BRUISER_MAX_SPEED * UNBREAKABLE_MOVE_MULT
 	unbreakable_time_left = UNBREAKABLE_DUR
 	cd_shift = UNBREAKABLE_CD
 

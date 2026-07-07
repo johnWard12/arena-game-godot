@@ -13,13 +13,13 @@ const DASH_DUR = 0.13
 const CARRY = 0.7
 
 const AUTO_CD = 0.55
-const AUTO_DMG = 4.0
+const AUTO_DMG = 5.0
 const AUTO_RANGE = 150.0
 
 const A1_CAST = 0.09
 const A1_RECOVERY = 0.13
 const A1_CD = 1.8
-const A1_DMG = 12.0
+const A1_DMG = 15.0
 const A1_RANGE = 145.0
 const A1_SLOW_DUR = 2.0
 const A1_SLOW_PCT = 0.30
@@ -28,7 +28,7 @@ const A2_CAST = 0.14
 const A2_RECOVERY = 0.22
 const A2_MISS_RECOVERY = 0.45
 const A2_CD = 6.5
-const A2_DMG = 20.4
+const A2_DMG = 25.5
 const A2_RANGE = 150.0
 const A2_LUNGE_DIST = 270.0
 const A2_LUNGE_DUR = 0.13
@@ -65,8 +65,8 @@ const SWORD_THROW_RECOVERY = 0.18
 const SWORD_THROW_CD       = 4.0
 const SWORD_THROW_SPEED    = 1400.0
 const SWORD_THROW_RADIUS   = 16.0
-const SWORD_THROW_DMG_BASE          = 6.0
-const SWORD_THROW_DMG_MISSING_BONUS = 8.0
+const SWORD_THROW_DMG_BASE          = 7.5
+const SWORD_THROW_DMG_MISSING_BONUS = 10.0
 const SWORD_THROW_SLOW_DUR = 2.0
 const SWORD_THROW_SLOW_PCT = 0.30
 
@@ -86,7 +86,7 @@ const KNOCKUP_DUR = 1.0
 # Bladestorm (Duelist R)
 const BLADESTORM_DUR          = 1.5
 const BLADESTORM_HIT_INTERVAL = 0.30
-const BLADESTORM_DMG          = 14.0
+const BLADESTORM_DMG          = 17.5
 const BLADESTORM_RANGE        = 170.0
 
 # Iron Resolve (Duelist Shift) — converts current combo stacks into a
@@ -248,8 +248,8 @@ var hit_flash_left := 0.0
 # in a 2v2/3v3 doesn't also freeze bystanders. The attacker gets a shorter
 # freeze than the defender, standard convention for readable hit feedback.
 var hitstop_time_left := 0.0
-const HITSTOP_ATTACKER_DUR := 0.035
-const HITSTOP_DEFENDER_DUR := 0.06
+const HITSTOP_ATTACKER_DUR := 0.0245
+const HITSTOP_DEFENDER_DUR := 0.042
 
 var dash_charges_max := DASH_CHARGES_MAX
 var dash_charges := DASH_CHARGES_MAX
@@ -1012,10 +1012,11 @@ func _place_trap(pos: Vector2, radius: float, arm_delay: float, lifetime: float,
 # that point on. Fixes the class of bug where a ground effect visually drags
 # along behind whoever cast it because it was rendered relative to their
 # current position instead of where it was actually placed.
-func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color, anim: String = "pulse"):
+func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color, anim: String = "pulse", particles: String = "rise"):
 	area_fx_spawned.emit({
 		"shape": "circle", "pos": pos, "facing": Vector2.RIGHT,
 		"size": Vector2(radius, 0.0), "duration": duration, "color": color, "anim": anim,
+		"particles": particles,
 	})
 
 # A brief rectangular cast flash (e.g. Purify) so a skill-shot's true hit
