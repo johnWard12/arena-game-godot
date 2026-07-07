@@ -13,7 +13,7 @@ const DASH_DUR = 0.13
 const CARRY = 0.7
 
 const AUTO_CD = 0.55
-const AUTO_DMG = 5.0
+const AUTO_DMG = 6.5
 const AUTO_RANGE = 150.0
 
 const A1_CAST = 0.09

@@ -49,7 +49,7 @@ const CLASSES = [
 		"hp":    "HP  150",
 		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Iron Resolve Shift", "Bladestorm R"],
 		"ability_descs": [
-			"5 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
+			"6.5 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
 			"15 dmg stab. Slows 30% for 2s. 1.8s cooldown, 145 range, 0.09s wind-up.",
 			"Dash up to 270, strike for 25.5 dmg and stun 0.5s. 6.5s cooldown, 150 range.",
 			"7.5 dmg (up to 17.5 vs a low-HP target). Slows 30% for 2s. 4s cooldown.",
@@ -109,7 +109,7 @@ const CLASSES = [
 		"hp":    "HP  130",
 		"lines": ["Team support/healer.", "Protects & empowers allies.", "", "Smite      LMB", "Mending    E", "Consecrate Q", "Purify     F", "Guardian Ward Shift", "Guardian's Bond R"],
 		"ability_descs": [
-			"7 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
+			"6 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
 			"Skill-shot heal toward your lowest-HP ally within 400 range (self if none). Heals 24 (+10% per combo stack). 3s cooldown, 0.2s wind-up.",
 			"Instant zone at your feet: damages enemies and heals allies standing in it, ticking every 1s for 3s. 150 radius. 8s cooldown.",
 			"Rectangle cast (300 long, 180 wide) — cleanses CC/debuffs from every ally it hits (including you) and adds a small heal-over-time. 10s cooldown.",

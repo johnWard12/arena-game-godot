@@ -8,7 +8,7 @@ const CLERIC_MAX_HP = 130.0
 
 # LMB — Smite: fast holy bolt poke, builds combo stacks on hit
 const SMITE_CD     = 0.6
-const SMITE_DMG    = 7.0
+const SMITE_DMG    = 6.0
 const SMITE_SPEED  = 1500.0
 const SMITE_RADIUS = 16.0
 
