@@ -7,8 +7,12 @@ const FIXED_DT := 1.0 / 60.0
 # Kiting-heavy matchups (Ranger especially) were hitting this cap as a near-
 # universal draw at 90s, which made it impossible to tell "this class is
 # weak" from "this class's fights just take longer than the cap." Raised to
-# give those matchups room to actually resolve.
-const MAX_MATCH_SECONDS := 150.0
+# 150s to give those matchups room to actually resolve, then to 240s after
+# all classes' HP was scaled up +35% (damage unchanged, to soften team-fight
+# burst) — the bigger HP pools pushed several previously-resolving
+# matchups (Mage vs Cleric, Ranger mirrors) into ~100% draws at 150s, which
+# was a cap artifact, not those classes actually getting worse.
+const MAX_MATCH_SECONDS := 240.0
 const MAX_MATCH_TICKS := int(MAX_MATCH_SECONDS / FIXED_DT)
 
 const CLASS_KEYS = ["melee", "ranged", "bruiser", "ranger", "cleric"]

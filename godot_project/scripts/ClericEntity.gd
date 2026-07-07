@@ -18,7 +18,7 @@ const MENDING_RECOVERY  = 0.2
 const MENDING_CD        = 3.0
 const MENDING_SPEED     = 1400.0
 const MENDING_RADIUS    = 18.0
-const MENDING_HEAL      = 24.0
+const MENDING_HEAL      = 32.4
 const MENDING_TARGET_RADIUS = 400.0
 
 # Q — Consecrate: instant AoE zone at self's position — heals allies and
@@ -27,7 +27,7 @@ const CONSECRATE_RADIUS         = 150.0
 const CONSECRATE_DUR            = 3.0
 const CONSECRATE_TICK           = 1.0
 const CONSECRATE_DMG_PER_TICK   = 8.0
-const CONSECRATE_HEAL_PER_TICK  = 8.0
+const CONSECRATE_HEAL_PER_TICK  = 10.8
 const CONSECRATE_CD             = 8.0
 
 # F — Purify: rectangle skill-shot, wide enough to catch two allies
@@ -35,7 +35,7 @@ const CONSECRATE_CD             = 8.0
 const PURIFY_LENGTH   = 300.0
 const PURIFY_WIDTH    = 180.0
 const PURIFY_HOT_DUR  = 4.0
-const PURIFY_HOT_TICK = 6.0
+const PURIFY_HOT_TICK = 8.1
 const PURIFY_CD       = 10.0
 
 # Shift — Guardian Ward: shields the lowest-HP ally in radius. Cashes in
@@ -54,7 +54,7 @@ const BOND_TARGET_RADIUS = 400.0
 const BOND_DUR           = 4.0
 const BOND_SPLIT_PCT     = 0.5
 const BOND_DMG_REDUCE    = 0.20
-const BOND_HOT_TICK      = 5.0
+const BOND_HOT_TICK      = 6.75
 
 # Passive — Devotion: landing a heal/shield/cleanse on an ALLY (not self)
 # grants a damage-reduction window. Rewards actually playing support.
