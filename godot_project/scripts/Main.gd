@@ -18,6 +18,12 @@ var health_packs := []
 var shake_time_left  := 0.0
 var shake_intensity  := 0.0
 
+# Drives the anti-stall healing-dampen HUD indicator. Tracked independently
+# of any single Entity's own match_elapsed_time (which the mechanic itself
+# uses) so the indicator keeps working even if the human player has died in
+# a 2v2/3v3 while the match continues.
+var match_time_elapsed := 0.0
+
 var hp_bars: Array[ProgressBar] = []  # parallel to `fighters`
 var win_label: Label
 var cd_hud: Node2D   # custom-drawn cooldown panel
@@ -386,6 +392,7 @@ func start_shake(intensity: float, duration: float):
 	shake_time_left = max(shake_time_left, duration)
 
 func _process(delta):
+	match_time_elapsed += delta
 	update_health_packs(delta)
 	_update_targeting(delta)
 	for i in fighters.size():
@@ -421,7 +428,7 @@ func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 		return false
 	if entity.global_position.distance_to(pack["pos"]) > HEALTH_PACK_RADIUS + Entity.RADIUS:
 		return false
-	entity.hp = min(entity.max_hp, entity.hp + HEALTH_PACK_HEAL)
+	entity.heal(entity, HEALTH_PACK_HEAL)
 	entity.hit_flash_left = 0.18
 	FX.heal_sparkle(self, entity.global_position)
 	pack["active"] = false
@@ -458,9 +465,51 @@ func _unhandled_input(event):
 
 func _draw():
 	# Arena is rendered by Arena3D (see build_3d_world()); this remaining
-	# 2D draw pass only handles the cooldown HUD overlay.
+	# 2D draw pass only handles HUD overlays.
 	if is_instance_valid(player) and player.alive:
 		_draw_cooldown_hud()
+	_draw_heal_dampen_indicator()
+
+# Anti-stall healing dampening (see Entity.heal_dampen_mult()) is invisible
+# otherwise — a "no healing" icon (a plus with a slash through it) plus the
+# live percentage, both fading in in intensity as the reduction climbs.
+# Reads match_time_elapsed rather than any one Entity's own copy so it stays
+# correct even if the human player has died but the match continues.
+func _draw_heal_dampen_indicator():
+	var dampen_pct = 1.0 - Entity.compute_heal_dampen_mult(match_time_elapsed)
+	if dampen_pct <= 0.0:
+		return
+
+	var font = ThemeDB.fallback_font
+	var cx = 1860.0
+	var cy = 210.0
+	var r  = 18.0
+	var alpha = 0.55 + 0.45 * dampen_pct
+	var col = Color(1.0, 0.15, 0.15, alpha)
+
+	# dark backdrop so the icon reads clearly against a bright 3D background
+	draw_circle(Vector2(cx, cy), r * 1.7, Color(0.05, 0.05, 0.07, 0.45))
+
+	# the "+" (heal icon)
+	var bar_len = r * 1.15
+	var bar_w   = r * 0.4
+	draw_rect(Rect2(cx - bar_w * 0.5, cy - bar_len * 0.5, bar_w, bar_len), col)
+	draw_rect(Rect2(cx - bar_len * 0.5, cy - bar_w * 0.5, bar_len, bar_w), col)
+
+	# diagonal slash through it — a dark outline drawn first so the colored
+	# line on top reads clearly against the plus behind it
+	var slash_r = r * 1.3
+	var d = Vector2(cos(-PI * 0.25), sin(-PI * 0.25)) * slash_r
+	var p0 = Vector2(cx, cy) - d
+	var p1 = Vector2(cx, cy) + d
+	draw_line(p0, p1, Color(0.05, 0.05, 0.07, alpha * 0.8), 6.5, true)
+	draw_line(p0, p1, col, 3.5, true)
+
+	# live percentage
+	var pct_str = "-%d%% HEALING" % [int(round(dampen_pct * 100.0))]
+	var sz = font.get_string_size(pct_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+	draw_string(font, Vector2(cx - sz * 0.5, cy + r * 1.7 + 16), pct_str,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col)
 
 func _draw_cooldown_hud():
 	var font    = ThemeDB.fallback_font

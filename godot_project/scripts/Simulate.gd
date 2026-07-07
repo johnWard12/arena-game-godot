@@ -103,7 +103,7 @@ func try_pickup(pack: Dictionary, entity: Entity) -> bool:
 		return false
 	if entity.global_position.distance_to(pack["pos"]) > HEALTH_PACK_RADIUS + Entity.RADIUS:
 		return false
-	entity.hp = min(entity.max_hp, entity.hp + HEALTH_PACK_HEAL)
+	entity.heal(entity, HEALTH_PACK_HEAL)
 	pack["active"] = false
 	pack["respawn_left"] = HEALTH_PACK_RESPAWN
 	return true

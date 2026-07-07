@@ -113,7 +113,7 @@ const CLASSES = [
 			"Skill-shot heal toward your lowest-HP ally within 400 range (self if none). Heals 32.4 (+10% per combo stack). 3s cooldown, 0.2s wind-up.",
 			"Instant zone at your feet: 8 dmg to enemies, 10.8 heal to allies standing in it, ticking every 1s for 3s. 150 radius. 8s cooldown.",
 			"Rectangle cast (300 long, 180 wide) — cleanses CC/debuffs from every ally it hits (including you) and adds a small heal-over-time (8.1/tick). 10s cooldown.",
-			"Shields your lowest-HP ally within 400 range (self if none): 30 HP + 8 per banked combo stack, consuming them. 9s cooldown.",
+			"Shields your lowest-HP ally within 400 range (self if none): 34.5 HP + 9.2 per banked combo stack, consuming them. 9s cooldown.",
 			"Links you with your lowest-HP ally in range for 4s: damage either takes splits 50/50, both take 20% less damage and heal over time. No ally in range -> self-only (still get the reduction + healing). Usable even while stunned.",
 		]
 	},

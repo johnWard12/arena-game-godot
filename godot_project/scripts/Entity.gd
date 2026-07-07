@@ -248,6 +248,12 @@ var iron_resolve_time_left := 0.0
 # Blood-lust: granted on a successful parry (see on_landed_parry())
 var bloodlust_time_left := 0.0
 
+# How long this entity has been alive in the current match — used only by
+# heal_dampen_mult()'s anti-stall ramp. Ticks every physics frame
+# regardless of stuns/hitstop, since it needs to track true match time, not
+# this entity's own active time.
+var match_elapsed_time := 0.0
+
 var cd_a3             := 0.0
 var barrier_hp_left   := 0.0
 var barrier_time_left := 0.0
@@ -476,6 +482,7 @@ func _physics_process(delta):
 	prune_trail(now)
 	if not alive:
 		return
+	match_elapsed_time += delta
 	if hitstop_time_left > 0:
 		hitstop_time_left = max(0.0, hitstop_time_left - delta)
 		queue_redraw()
@@ -919,14 +926,36 @@ func deal_damage(target: Entity, amount: float) -> bool:
 
 # Symmetric to deal_damage() — heals `target` and, like landing a hit,
 # refreshes the CASTER's (self's) ult-charge active window. Used by
-# Cleric's kit; any future healer-flavored ability should route through
-# this instead of poking target.hp directly, for the same reason attacks
-# route through deal_damage() instead of poking target.hp directly.
+# Cleric's kit and health-pack pickups; any future healer-flavored ability
+# should route through this instead of poking target.hp directly, for the
+# same reason attacks route through deal_damage() instead of poking
+# target.hp directly — it's also the single choke point the anti-stall
+# heal_dampen_mult() below needs to apply to every healing source.
 func heal(target: Entity, amount: float) -> void:
 	if target == null or not is_instance_valid(target) or not target.alive:
 		return
-	target.hp = min(target.max_hp, target.hp + amount)
+	target.hp = min(target.max_hp, target.hp + amount * target.heal_dampen_mult())
 	ult_active_time_left = ULT_ACTIVE_WINDOW
+
+# Anti-stall: once a match has run long, healing gradually loses
+# effectiveness for everyone, so two sustain-heavy fighters (a Cleric
+# mirror especially) can't stalemate forever. No effect for the first
+# HEAL_DAMPEN_START_TIME, then steps down HEAL_DAMPEN_PER_TICK every
+# HEAL_DAMPEN_TICK_INTERVAL until healing is fully negated. Static so the
+# HUD indicator (Main.gd) can read the same curve off its own match clock
+# without needing a live entity reference.
+const HEAL_DAMPEN_START_TIME    := 120.0
+const HEAL_DAMPEN_TICK_INTERVAL := 1.0
+const HEAL_DAMPEN_PER_TICK      := 0.01
+static func compute_heal_dampen_mult(elapsed: float) -> float:
+	var seconds_past = elapsed - HEAL_DAMPEN_START_TIME
+	if seconds_past <= 0.0:
+		return 1.0
+	var reduction = min(1.0, floor(seconds_past / HEAL_DAMPEN_TICK_INTERVAL) * HEAL_DAMPEN_PER_TICK)
+	return 1.0 - reduction
+
+func heal_dampen_mult() -> float:
+	return Entity.compute_heal_dampen_mult(match_elapsed_time)
 
 func try_auto(opp: Entity):
 	if not can_start_ability() or cd_auto > 0 or opp == null:

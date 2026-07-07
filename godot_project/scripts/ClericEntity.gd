@@ -41,8 +41,8 @@ const PURIFY_CD       = 10.0
 # Shift — Guardian Ward: shields the lowest-HP ally in radius. Cashes in
 # current combo stacks for bonus shield, consuming them.
 const WARD_TARGET_RADIUS = 400.0
-const WARD_BASE_SHIELD   = 30.0
-const WARD_PER_STACK     = 8.0
+const WARD_BASE_SHIELD   = 34.5
+const WARD_PER_STACK     = 9.2
 const WARD_DUR           = 3.0
 const WARD_CD            = 9.0
 
