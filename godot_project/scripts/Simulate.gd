@@ -18,9 +18,9 @@ const MAX_MATCH_TICKS := int(MAX_MATCH_SECONDS / FIXED_DT)
 const CLASS_KEYS = ["melee", "ranged", "bruiser", "ranger", "cleric"]
 const CLASS_LABELS = {"melee": "Duelist", "ranged": "Mage", "bruiser": "Bruiser", "ranger": "Ranger", "cleric": "Cleric"}
 
-const HEALTH_PACK_HEAL = 28.0
+const HEALTH_PACK_HEAL = 25.0
 const HEALTH_PACK_RADIUS = 44.0
-const HEALTH_PACK_RESPAWN = 12.0
+const HEALTH_PACK_RESPAWN = 15.0
 
 var arena_rect := Rect2(Vector2(30, 30), Vector2(1860, 1020))
 var map_obstacles: Array[Rect2] = []

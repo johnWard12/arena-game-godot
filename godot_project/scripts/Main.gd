@@ -32,9 +32,9 @@ var world_3d: Node3D
 var camera3d: Camera3D
 var camera3d_base_pos := Vector3.ZERO
 
-const HEALTH_PACK_HEAL = 28.0
+const HEALTH_PACK_HEAL = 25.0
 const HEALTH_PACK_RADIUS = 44.0
-const HEALTH_PACK_RESPAWN = 12.0
+const HEALTH_PACK_RESPAWN = 15.0
 
 func _ready():
 	team_size = get_tree().root.get_meta("team_size", 1)
