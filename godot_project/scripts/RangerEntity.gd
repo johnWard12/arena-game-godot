@@ -190,39 +190,24 @@ func resolve_ult(opp: Entity):
 	rain_time_left = RAIN_DUR
 	rain_tick_timer = 0.0
 	rain_fx_left = RAIN_DUR + 0.3
+	_spawn_zone_fx(rain_pos, RAIN_RADIUS, RAIN_DUR, Color(0.5, 0.9, 0.3))
 	recovering = {"type": "ult", "time_left": RAIN_RECOVERY, "total": RAIN_RECOVERY}
 
 # ---- Drawing ----
-func _draw():
-	var now = Time.get_ticks_msec()
+# Rain's zone telegraph is NOT drawn here in 3D-view mode — it used to be,
+# via to_local(rain_pos) under the HUD's screen-space correction, but that
+# correction is only a valid approximation at THIS entity's own position.
+# Since rain_pos is a fixed point the Ranger can run away from, the old
+# telegraph visibly dragged along behind them instead of staying put (the
+# same bug Consecrate had). It's now a proper world-space AreaFxView3D
+# effect spawned once from resolve_ult(). Camouflage's ring stays here
+# since it's self-centered and immune to that bug.
+func _draw_3d_extras(now: int):
+	_draw_camo_ring(now)
 
-	if use_3d_view:
-		if not alive:
-			return
-		var view_accent = get_status_accent(base_color)
-		draw_set_transform(_get_hud_screen_correction())
-		_draw_rain_zone()
-		_draw_camo_ring(now)
-		_draw_hud(now, view_accent)
-		draw_set_transform(Vector2.ZERO)
-		return
-
-	for p in trail:
-		var age = (now - p["time"]) / 200.0
-		if age < 1.0:
-			draw_circle(to_local(p["pos"]), RADIUS * 0.85,
-				Color(base_color.r, base_color.g, base_color.b, (1.0 - age) * 0.25))
-
-	if not alive:
-		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
-		return
-
-	var accent = get_status_accent(base_color)
-	if invisible_time_left > 0:
-		accent = Color(accent.r, accent.g, accent.b, 0.35)
+func _draw_body(now: int, accent: Color):
 	_draw_rain_zone()
 	_draw_camo_ring(now)
-	_draw_hud(now, accent)
 
 # Camouflage — soft green shimmer while cloaked
 func _draw_camo_ring(now: int):

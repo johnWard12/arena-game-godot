@@ -210,34 +210,15 @@ func resolve_ult(_opp: Entity):
 	pass
 
 # ---- Drawing ----
-func _draw():
-	var now = Time.get_ticks_msec()
-
-	if use_3d_view:
-		if not alive:
-			return
-		var accent = get_status_accent(base_color)
-		draw_set_transform(_get_hud_screen_correction())
-		_draw_hud(now, accent)
-		draw_set_transform(Vector2.ZERO)
-		return
-
-	for p in trail:
-		var age = (now - p["time"]) / 200.0
-		if age < 1.0:
-			draw_circle(to_local(p["pos"]), RADIUS * 0.85,
-				Color(base_color.r, base_color.g, base_color.b, (1.0 - age) * 0.25))
-
-	if not alive:
-		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
-		return
-
-	var accent = get_status_accent(base_color)
+# No character body art (Cleric was added after the 3D migration, so it has
+# no legacy procedural 2D form) — just the Consecrate zone fallback for the
+# plain-2D path. In 3D-view mode the real telegraph is a proper
+# AreaFxView3D effect spawned once from try_a2(), not drawn here.
+func _draw_body(_now: int, _accent: Color):
 	if consecrate_time_left > 0:
 		var local_center = to_local(consecrate_pos)
 		var pulse = 0.5 + 0.4 * sin(Time.get_ticks_msec() * 0.008)
 		draw_arc(local_center, CONSECRATE_RADIUS, 0, TAU, 48, Color(0.95, 0.9, 0.55, 0.3 * pulse), 3.0)
-	_draw_hud(now, accent)
 
 # Combo pip: a small holy cross, distinct from Duelist's sword/Bruiser's hammer.
 func _draw_combo_pip(pos: Vector2):

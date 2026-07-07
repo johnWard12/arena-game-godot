@@ -47,6 +47,12 @@ const COMBO_DMG_PER_STACK = 0.16
 const PARRY_DUR = 0.22
 const PARRY_CD = 5.0
 const PARRY_STUN_DUR = 0.65
+# A parry only stuns the attacker if they're actually within retaliation
+# range when it happens — a projectile shooter across the map has no way to
+# react to or "deserve" a stun from a parry landing on their arrow/bolt, and
+# it can't be dodged/played around from that far away. Melee hits always
+# resolve well inside this range, so their self-stun-on-parry is unaffected.
+const PARRY_RANGED_STUN_RANGE = 200.0
 const STUN_DUR = 0.5
 
 const BLOODLUST_DUR          = 1.5
@@ -236,6 +242,15 @@ var swing_arc_span := 0.0
 # hit flash on this entity when it receives damage
 var hit_flash_left := 0.0
 
+# Brief per-entity freeze-frame on a landed hit — a few ticks of "nothing
+# moves" is the cheapest way to sell impact weight. Scoped per-entity
+# (rather than a global Engine.time_scale dip) so a hit between two fighters
+# in a 2v2/3v3 doesn't also freeze bystanders. The attacker gets a shorter
+# freeze than the defender, standard convention for readable hit feedback.
+var hitstop_time_left := 0.0
+const HITSTOP_ATTACKER_DUR := 0.035
+const HITSTOP_DEFENDER_DUR := 0.06
+
 var dash_charges_max := DASH_CHARGES_MAX
 var dash_charges := DASH_CHARGES_MAX
 var dash_charge_timer := 0.0
@@ -286,6 +301,32 @@ func get_nearest_enemy(candidates: Array, respect_invisibility: bool = true) -> 
 			nearest_d = d
 			nearest = c
 	return nearest
+
+# Closest living enemy within `range` that's also inside a `half_angle_deg`
+# cone of `facing` — used by stationary melee hits (auto-attack, Strike,
+# Smash) so aim actually determines who gets hit, instead of always
+# resolving against whichever enemy happens to be globally nearest
+# (`opponent`). In 1v1 this is indistinguishable from the old behavior
+# (there's only one enemy to ever face); in 2v2/3v3 it lets a player choose
+# their melee target by literally aiming at them.
+func get_facing_target(atk_range: float, half_angle_deg: float = 50.0) -> Entity:
+	var best: Entity = null
+	var best_d := INF
+	for c in all_fighters:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
+			continue
+		if c.invisible_time_left > 0:
+			continue
+		var to_c = c.global_position - global_position
+		var d = to_c.length()
+		if d > atk_range:
+			continue
+		if d > 0.01 and facing.dot(to_c.normalized()) < cos(deg_to_rad(half_angle_deg)):
+			continue
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
 
 # Every living enemy within `radius` of `center` (defaults to this entity's
 # own position) — what a real AoE ability should hit, as opposed to just
@@ -368,6 +409,10 @@ func _physics_process(delta):
 	var now = Time.get_ticks_msec()
 	prune_trail(now)
 	if not alive:
+		return
+	if hitstop_time_left > 0:
+		hitstop_time_left = max(0.0, hitstop_time_left - delta)
+		queue_redraw()
 		return
 	bloodlust_time_left = max(0.0, bloodlust_time_left - delta)
 	var atkspd_mult = BLOODLUST_ATKSPD_MULT if bloodlust_time_left > 0 else 1.0
@@ -757,7 +802,8 @@ func deal_damage(target: Entity, amount: float) -> bool:
 	if target.parrying:
 		target.parrying = false
 		target.on_landed_parry()
-		apply_stun(PARRY_STUN_DUR)
+		if global_position.distance_to(target.global_position) <= PARRY_RANGED_STUN_RANGE:
+			apply_stun(PARRY_STUN_DUR)
 		casting = null
 		lunging = false
 		FX.parry_flash(get_parent(), target.global_position)
@@ -772,6 +818,8 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		if amount <= 0:
 			FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0))
 			ult_active_time_left = ULT_ACTIVE_WINDOW
+			hitstop_time_left = max(hitstop_time_left, HITSTOP_ATTACKER_DUR)
+			target.hitstop_time_left = max(target.hitstop_time_left, HITSTOP_DEFENDER_DUR)
 			return true
 	if target.casting != null:
 		target.casting = null
@@ -799,6 +847,8 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		FX.death_shatter(get_parent(), target.global_position, target.base_color)
 		target.died.emit()
 	ult_active_time_left = ULT_ACTIVE_WINDOW
+	hitstop_time_left = max(hitstop_time_left, HITSTOP_ATTACKER_DUR)
+	target.hitstop_time_left = max(target.hitstop_time_left, HITSTOP_DEFENDER_DUR)
 	return true
 
 # Symmetric to deal_damage() — heals `target` and, like landing a hit,
@@ -818,8 +868,12 @@ func try_auto(opp: Entity):
 	cd_auto = AUTO_CD
 	facing = get_aim_dir(opp)
 	start_swing(70.0, 0.12)
-	if global_position.distance_to(opp.global_position) <= AUTO_RANGE:
-		if deal_damage(opp, AUTO_DMG):
+	# A stationary swing hits whoever's actually in front of you within
+	# range, not necessarily `opp` (the globally-nearest enemy) — lets aim
+	# choose the target in a team fight instead of it being automatic.
+	var target = get_facing_target(AUTO_RANGE)
+	if target != null:
+		if deal_damage(target, AUTO_DMG):
 			add_combo_stack()
 
 func try_a1(opp: Entity):
@@ -830,10 +884,11 @@ func try_a1(opp: Entity):
 func resolve_a1(opp: Entity):
 	facing = get_aim_dir(opp)
 	start_swing(110.0, 0.2)
-	if global_position.distance_to(opp.global_position) <= A1_RANGE:
+	var target = get_facing_target(A1_RANGE)
+	if target != null:
 		var dmg = round(A1_DMG * combo_mult())
-		if deal_damage(opp, dmg):
-			opp.apply_slow(A1_SLOW_DUR, A1_SLOW_PCT)
+		if deal_damage(target, dmg):
+			target.apply_slow(A1_SLOW_DUR, A1_SLOW_PCT)
 			add_combo_stack()
 	cd_a1 = A1_CD
 	recovering = {"type": "a1", "time_left": A1_RECOVERY, "total": A1_RECOVERY}
@@ -957,10 +1012,10 @@ func _place_trap(pos: Vector2, radius: float, arm_delay: float, lifetime: float,
 # that point on. Fixes the class of bug where a ground effect visually drags
 # along behind whoever cast it because it was rendered relative to their
 # current position instead of where it was actually placed.
-func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color):
+func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color, anim: String = "pulse"):
 	area_fx_spawned.emit({
 		"shape": "circle", "pos": pos, "facing": Vector2.RIGHT,
-		"size": Vector2(radius, 0.0), "duration": duration, "color": color,
+		"size": Vector2(radius, 0.0), "duration": duration, "color": color, "anim": anim,
 	})
 
 # A brief rectangular cast flash (e.g. Purify) so a skill-shot's true hit
@@ -1215,6 +1270,13 @@ func _draw_duelist(now: int, accent: Color):
 		draw_line(guard + sperp * 11, guard - sperp * 11, Color(0.75, 0.78, 1.0, alpha), 4.0)
 
 # ---- Drawing ----
+# Shared scaffolding for every class's _draw(): the 3D-view early-return
+# (only the overhead HUD renders there — character art comes from
+# EntityView3D instead), trail/death handling, and the knockup transform
+# were identical across all five classes and used to be copied into each of
+# their _draw() overrides. Subclasses now only implement _draw_body() (the
+# actual plain-2D character art, plus any per-class overlay effects that
+# still use that path) instead of repeating all of this scaffolding.
 func _draw():
 	var now = Time.get_ticks_msec()
 
@@ -1222,11 +1284,11 @@ func _draw():
 		if not alive:
 			return
 		draw_set_transform(_get_hud_screen_correction())
+		_draw_3d_extras(now)
 		_draw_hud(now, get_status_accent(base_color))
 		draw_set_transform(Vector2.ZERO)
 		return
 
-	# trail
 	for p in trail:
 		var age = (now - p["time"]) / 200.0
 		if age < 1.0:
@@ -1243,6 +1305,26 @@ func _draw():
 		draw_circle(Vector2(0, RADIUS - 4), 16.0 - abs(ku_y) * 0.06, Color(0, 0, 0, 0.35))
 		draw_set_transform(Vector2(0, ku_y))
 
+	_draw_body(now, accent)
+
+	if ku_y != 0.0:
+		draw_set_transform(Vector2.ZERO)
+
+	_draw_hud(now, accent)
+
+# Rare per-class hook for a self-centered 2D overlay that still needs to
+# render even in 3D-view mode (currently only Ranger's Camouflage ring).
+# Self-centered-only: anything not drawn at local (0,0) must NOT go here,
+# since the HUD screen-space correction this runs under is only a valid
+# approximation at THIS entity's own position (see
+# _get_hud_screen_correction()) — that's the exact bug Consecrate/Rain of
+# Arrows had before their telegraphs moved to real 3D world-space effects.
+func _draw_3d_extras(_now: int):
+	pass
+
+# Default (Duelist) body: procedural character art + Bladestorm's orbiting
+# ghost-sword ultimate visual. Overridden per-class for the other four.
+func _draw_body(now: int, accent: Color):
 	_draw_duelist(now, accent)
 
 	# Bladestorm — 3 orbiting ghost swords
@@ -1263,8 +1345,3 @@ func _draw():
 		var pulse = 0.4 + 0.35 * sin(t * 6.0)
 		draw_arc(Vector2.ZERO, RADIUS + SWORD_LEN * 0.9, 0, TAU, 64,
 			Color(1.0, 0.8, 0.15, pct * pulse * 0.45), 3.0)
-
-	if ku_y != 0.0:
-		draw_set_transform(Vector2.ZERO)
-
-	_draw_hud(now, accent)

@@ -131,6 +131,7 @@ func resolve_a2(opp: Entity):
 		facing = get_aim_dir(opp)
 	nova_fx_left = 0.35
 	FX.impact_burst(get_parent(), global_position, Color(0.72, 0.4, 1.0), 18, 260.0)
+	_spawn_zone_fx(global_position, NOVA_RADIUS, 0.45, Color(0.72, 0.4, 1.0), "expand")
 	var landed := false
 	# True AoE: every enemy caught in the burst gets hit, not just the
 	# primary target — matters in 2v2/3v3 where more than one foe can be
@@ -156,10 +157,12 @@ func resolve_ult(opp: Entity):
 		rift_pos = opp.global_position
 		rift_pull_left = VOIDCOLLAPSE_PULL_DUR
 		rift_fx_left   = VOIDCOLLAPSE_PULL_DUR + 0.5
+		_spawn_zone_fx(rift_pos, 55.0, VOIDCOLLAPSE_PULL_DUR, Color(0.5, 0.1, 0.95))
 
 func _resolve_void_explosion():
 	rift_fx_left = 0.50
 	FX.impact_burst(get_parent(), rift_pos, Color(0.75, 0.15, 1.0), 34, 380.0)
+	_spawn_zone_fx(rift_pos, 300.0, 0.5, Color(0.85, 0.3, 1.0), "expand")
 	if opponent != null and opponent.alive:
 		var dist = opponent.global_position.distance_to(rift_pos)
 		var closeness = 1.0 - clamp(dist / 320.0, 0.0, 1.0)
@@ -204,33 +207,7 @@ func resolve_a3(_opp: Entity):
 	pass
 
 # ---- Drawing override ----
-func _draw():
-	var now = Time.get_ticks_msec()
-
-	if use_3d_view:
-		if not alive:
-			return
-		draw_set_transform(_get_hud_screen_correction())
-		_draw_hud(now, get_status_accent(base_color))
-		draw_set_transform(Vector2.ZERO)
-		return
-
-	for p in trail:
-		var age = (now - p["time"]) / 200.0
-		if age < 1.0:
-			draw_circle(to_local(p["pos"]), RADIUS * 0.85,
-				Color(base_color.r, base_color.g, base_color.b, (1.0 - age) * 0.25))
-
-	if not alive:
-		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
-		return
-
-	var accent = get_status_accent(base_color)
-	var ku_y = get_knockup_draw_offset()
-	if ku_y != 0.0:
-		draw_circle(Vector2(0, RADIUS - 4), 16.0 - abs(ku_y) * 0.06, Color(0, 0, 0, 0.35))
-		draw_set_transform(Vector2(0, ku_y))
-
+func _draw_body(now: int, accent: Color):
 	var perp     = Vector2(-facing.y, facing.x)
 	var robe_col = _col_dark(accent, 0.6)
 	var skin_col = Color(0.88, 0.72, 0.56)
@@ -367,9 +344,6 @@ func _draw():
 			draw_arc(rp, exp_r * 0.55, 0, TAU, 48, Color(1.0, 0.7, 1.0,  exp_pct * 0.5),  3.0)
 			draw_circle(rp, 22.0 * exp_pct, Color(1.0, 0.85, 1.0, exp_pct * 0.65))
 
-	if ku_y != 0.0:
-		draw_set_transform(Vector2.ZERO)
-
 	# dash charge pips below
 	for i in dash_charges_max:
 		var px  = (i - (dash_charges_max - 1) * 0.5) * 14.0
@@ -380,5 +354,3 @@ func _draw():
 		draw_arc(Vector2(px, RADIUS + 14), 4.5, -PI/2,
 			-PI/2 + TAU * (dash_charge_timer / DASH_CHARGE_REGEN), 16,
 			Color(0.6, 0.9, 1.0, 0.8), 2.0)
-
-	_draw_hud(now, accent)

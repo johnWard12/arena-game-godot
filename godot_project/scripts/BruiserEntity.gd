@@ -1,7 +1,7 @@
 extends "res://scripts/Entity.gd"
 class_name BruiserEntity
 
-const BRUISER_MAX_HP     = 180.0
+const BRUISER_MAX_HP     = 165.0
 const BRUISER_MAX_SPEED  = 370.0
 const BRUISER_ACCEL      = 2800.0
 const BRUISER_FRICTION   = 1400.0
@@ -32,11 +32,15 @@ const SEISMIC_DMG        = 55.0
 const SEISMIC_KNOCKUP    = 1.0
 const SEISMIC_RECOVERY   = 0.65
 
-# Shift — Unbreakable: CC cleanse + immunity + damage reduction
+# Shift — Unbreakable: CC cleanse + immunity + damage reduction. No longer
+# also grants a move-speed bonus — a tank that's immune to CC AND faster
+# than everyone chasing it had no real counterplay window at all (this was
+# the single biggest driver of Bruiser's persistently ~90% cross-matchup
+# win rate). Duration trimmed slightly too, so the lockout window is
+# shorter even though it's still a full cleanse + immunity + DR button.
 const UNBREAKABLE_CD           = 8.5
-const UNBREAKABLE_DUR          = 3.0
+const UNBREAKABLE_DUR          = 2.5
 const UNBREAKABLE_DMG_REDUCE   = 0.25
-const UNBREAKABLE_MOVE_MULT    = 1.40
 
 # F — Warcry: self damage-reduction buff + opponent damage-dealt debuff
 const WARCRY_CD              = 8.0
@@ -69,7 +73,6 @@ func _physics_process(delta):
 		unbreakable_time_left = max(0.0, unbreakable_time_left - delta)
 		if unbreakable_time_left <= 0:
 			cc_immune      = false
-			speed_override = BRUISER_MAX_SPEED
 	# Damage reduction is recomputed each tick from whichever buffs are
 	# active, rather than imperatively set/cleared, so Unbreakable and
 	# Warcry can overlap without one clobbering the other's contribution.
@@ -94,8 +97,12 @@ func try_auto(opp: Entity):
 	cd_auto = BRUISER_AUTO_CD
 	facing = get_aim_dir(opp)
 	start_swing(80.0, 0.15)
-	if global_position.distance_to(opp.global_position) <= BRUISER_AUTO_RANGE:
-		deal_damage(opp, BRUISER_AUTO_DMG * combo_mult())
+	# A stationary swing hits whoever's actually in front of you within
+	# range, not necessarily `opp` — lets aim choose the target in a team
+	# fight instead of it being automatic.
+	var target = get_facing_target(BRUISER_AUTO_RANGE)
+	if target != null:
+		deal_damage(target, BRUISER_AUTO_DMG * combo_mult())
 		add_combo_stack()
 
 func try_a1(opp: Entity):
@@ -103,12 +110,13 @@ func try_a1(opp: Entity):
 		return
 	facing = get_aim_dir(opp)
 	start_swing(100.0, 0.22)
-	if opp.alive and global_position.distance_to(opp.global_position) <= SHATTER_RANGE:
+	var target = get_facing_target(SHATTER_RANGE)
+	if target != null:
 		var dmg = round(SHATTER_DMG * combo_mult())
-		deal_damage(opp, dmg)
-		if opp.alive:
-			opp.apply_stun(SHATTER_STUN)
-			FX.impact_burst(get_parent(), opp.global_position, Color(1.0, 0.85, 0.3), 16, 260.0)
+		deal_damage(target, dmg)
+		if target.alive:
+			target.apply_stun(SHATTER_STUN)
+			FX.impact_burst(get_parent(), target.global_position, Color(1.0, 0.85, 0.3), 16, 260.0)
 		add_combo_stack()
 	cd_a1 = SHATTER_CD
 	recovering = {"type": "a1", "time_left": SHATTER_RECOVERY, "total": SHATTER_RECOVERY}
@@ -180,7 +188,6 @@ func try_shift(_opp: Entity):
 	stunned_time_left = 0.0
 	slowed_time_left  = 0.0
 	cc_immune         = true
-	speed_override    = BRUISER_MAX_SPEED * UNBREAKABLE_MOVE_MULT
 	unbreakable_time_left = UNBREAKABLE_DUR
 	cd_shift = UNBREAKABLE_CD
 
@@ -201,40 +208,8 @@ func resolve_a3(_opp: Entity):
 	pass
 
 # ---- Drawing ----
-func _draw():
-	var now = Time.get_ticks_msec()
-
-	if use_3d_view:
-		if not alive:
-			return
-		draw_set_transform(_get_hud_screen_correction())
-		_draw_hud(now, get_status_accent(base_color))
-		draw_set_transform(Vector2.ZERO)
-		return
-
-	for p in trail:
-		var age = (now - p["time"]) / 200.0
-		if age < 1.0:
-			draw_circle(to_local(p["pos"]), RADIUS * 0.85,
-				Color(base_color.r, base_color.g, base_color.b, (1.0 - age) * 0.28))
-
-	if not alive:
-		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
-		return
-
-	var accent = get_status_accent(base_color)
-
-	var ku_y = get_knockup_draw_offset()
-	if ku_y != 0.0:
-		draw_circle(Vector2(0, RADIUS - 4), 16.0 - abs(ku_y) * 0.06, Color(0, 0, 0, 0.35))
-		draw_set_transform(Vector2(0, ku_y))
-
+func _draw_body(now: int, accent: Color):
 	_draw_bruiser(now, accent)
-
-	if ku_y != 0.0:
-		draw_set_transform(Vector2.ZERO)
-
-	_draw_hud(now, accent)
 
 func _draw_bruiser(now: int, accent: Color):
 	var perp   = Vector2(-facing.y, facing.x)

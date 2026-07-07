@@ -71,14 +71,14 @@ const CLASSES = [
 		"label": "BRUISER",
 		"color": BRUISER_COLOR,
 		"key":   "bruiser",
-		"hp":    "HP  180",
+		"hp":    "HP  165",
 		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Warcry     F", "Unbreakable Shift", "Seismic    R"],
 		"ability_descs": [
 			"3 dmg. 0.7s cooldown, 167 range. Basic swing, hold to auto-repeat.",
 			"22 dmg shield slam, stuns 0.7s. 5.5s cooldown, 151 range. Instant, no wind-up.",
 			"Ground stomp: 18 dmg + 50% slow for 2s to foes within 180 range. 8s cooldown. Instant.",
 			"You take 15% less damage; the opponent deals 10% less damage. Both for 4s, enemy debuff needs them within 210 range. 8s cooldown.",
-			"Cleanses all CC, grants CC immunity, 25% damage reduction, and +40% move speed for 3s. 8.5s cooldown. Usable even while stunned.",
+			"Cleanses all CC, grants CC immunity, and 25% damage reduction for 2.5s. 8.5s cooldown. Usable even while stunned.",
 			"Lunge in (up to 280) and slam for 55 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
 		]
 	},

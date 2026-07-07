@@ -66,9 +66,38 @@ func _physics_process(delta):
 		_check_pierce_hits()
 		return
 
-	if target != null and is_instance_valid(target) and target.alive:
-		if global_position.distance_to(target.global_position) <= hit_radius + target.RADIUS:
-			_on_hit()
+	if is_heal:
+		# Heals stay precision-aimed at the intended ally — no "body block"
+		# reroute, unlike damage below.
+		if target != null and is_instance_valid(target) and target.alive:
+			if global_position.distance_to(target.global_position) <= hit_radius + target.RADIUS:
+				_on_hit()
+		return
+
+	_check_single_hit()
+
+# A damage skill-shot connects with the first enemy body it actually
+# touches, not necessarily whichever enemy it was originally aimed at
+# (`target`) — lets an ally body-block a shot meant for a teammate, and
+# rewards angling a shot around one, instead of every projectile ghosting
+# through anyone standing between the shooter and its locked target.
+func _check_single_hit():
+	if owner_entity == null or not is_instance_valid(owner_entity) or not owner_entity.alive:
+		return
+	var best: Entity = null
+	var best_d := INF
+	for e in owner_entity.all_fighters:
+		if not is_instance_valid(e) or not e.alive or e.team_id == owner_entity.team_id:
+			continue
+		if e.invisible_time_left > 0:
+			continue
+		var d = global_position.distance_to(e.global_position)
+		if d <= hit_radius + e.RADIUS and d < best_d:
+			best_d = d
+			best = e
+	if best != null:
+		target = best
+		_on_hit()
 
 func _check_pierce_hits():
 	if owner_entity == null or not is_instance_valid(owner_entity) or not owner_entity.alive:

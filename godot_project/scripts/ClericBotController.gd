@@ -1,6 +1,8 @@
 extends "res://scripts/ClericEntity.gd"
 class_name ClericBotController
 
+const BotSteering = preload("res://scripts/BotSteering.gd")
+
 const PREFERRED_RANGE = 300.0
 const FLEE_RANGE = 140.0
 
@@ -99,13 +101,4 @@ func ai_decide():
 		var perp = Vector2(-to_opp.y, to_opp.x) * (1 if randf() < 0.5 else -1)
 		ai_target = perp
 
-	# wall repulsion — push away from arena edges so bot doesn't get cornered
-	var wall_margin = 120.0
-	var repulse := Vector2.ZERO
-	var ar = arena_rect
-	repulse.x += max(0.0, wall_margin - (global_position.x - ar.position.x)) / wall_margin
-	repulse.x -= max(0.0, wall_margin - (ar.position.x + ar.size.x - global_position.x)) / wall_margin
-	repulse.y += max(0.0, wall_margin - (global_position.y - ar.position.y)) / wall_margin
-	repulse.y -= max(0.0, wall_margin - (ar.position.y + ar.size.y - global_position.y)) / wall_margin
-	if repulse.length() > 0.01:
-		ai_target = (ai_target + repulse * 2.0).normalized()
+	ai_target = BotSteering.apply_wall_repulsion(global_position, arena_rect, ai_target)
