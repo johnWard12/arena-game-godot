@@ -122,8 +122,8 @@ var lunge_opponent: Entity = null
 var lunge_speed := 0.0
 var lunge_reach := 0.0
 
-var hp := 150.0
-var max_hp := 150.0
+var hp := 202.5
+var max_hp := 202.5
 var alive := true
 
 var casting = null

@@ -46,7 +46,7 @@ const CLASSES = [
 		"label": "DUELIST",
 		"color": MELEE_COLOR,
 		"key":   "melee",
-		"hp":    "HP  150",
+		"hp":    "HP  202.5",
 		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Iron Resolve Shift", "Bladestorm R"],
 		"ability_descs": [
 			"6.5 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
@@ -61,7 +61,7 @@ const CLASSES = [
 		"label": "MAGE",
 		"color": RANGED_COLOR,
 		"key":   "ranged",
-		"hp":    "HP  120",
+		"hp":    "HP  162",
 		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "Arcane Fan F", "Barrier    Shift", "Void Collapse R"],
 		"ability_descs": [
 			"6.75 dmg bolt. 0.75s cooldown. Basic shot, hold to auto-repeat.",
@@ -76,7 +76,7 @@ const CLASSES = [
 		"label": "BRUISER",
 		"color": BRUISER_COLOR,
 		"key":   "bruiser",
-		"hp":    "HP  165",
+		"hp":    "HP  222.75",
 		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Warcry     F", "Unbreakable Shift", "Seismic Slam R"],
 		"ability_descs": [
 			"2.7 dmg. 0.7s cooldown, 167 range. Basic swing, hold to auto-repeat.",
@@ -91,7 +91,7 @@ const CLASSES = [
 		"label": "RANGER",
 		"color": RANGER_COLOR,
 		"key":   "ranger",
-		"hp":    "HP  130",
+		"hp":    "HP  175.5",
 		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "Rain of Arrows R"],
 		"ability_descs": [
 			"7.5 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
@@ -106,7 +106,7 @@ const CLASSES = [
 		"label": "CLERIC",
 		"color": CLERIC_COLOR,
 		"key":   "cleric",
-		"hp":    "HP  130",
+		"hp":    "HP  175.5",
 		"lines": ["Team support/healer.", "Protects & empowers allies.", "", "Smite      LMB", "Mending    E", "Consecrate Q", "Purify     F", "Guardian Ward Shift", "Guardian's Bond R"],
 		"ability_descs": [
 			"6 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
