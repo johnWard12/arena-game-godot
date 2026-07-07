@@ -18,16 +18,21 @@ const MAX_SIDE_WIDTH := 900.0
 var player_cards_x: Array = []
 var bot_cards_x: Array = []
 
-# 0=Duelist 1=Mage 2=Bruiser; default: player=Duelist, bot=Mage
-var player_sel := 0
-var bot_sel    := 1
 var hovered    := Vector2i(-1, -1)  # x=side (0=player,1=bot), y=card idx
 
-# Team size (1v1/2v2/3v3). The chosen class fills every slot on a side for
-# now — teammates/enemies beyond the human player are AI-controlled copies
-# of that same class. A per-slot class picker is a natural follow-up.
+# Team size (1v1/2v2/3v3). Each side now picks a class PER SLOT so 2v2/3v3
+# can field mixed comps (a Cleric behind two bruisers, etc.), not just N
+# copies of one class. player_slots[i]/bot_slots[i] are class indices into
+# CLASSES; only the first `team_size` entries are used. Clicking a class
+# card fills the currently-active slot and advances to the next, so you can
+# fill a whole team by clicking classes left-to-right.
 const TEAM_SIZES = [1, 2, 3]
 var team_size := 1
+
+var player_slots := [0, 4, 2]  # Duelist, Cleric, Bruiser
+var bot_slots    := [1, 3, 4]  # Mage, Ranger, Cleric
+var player_active_slot := 0
+var bot_active_slot    := 0
 
 const MELEE_COLOR  = Color(0.37, 0.88, 0.75)
 const RANGED_COLOR = Color(0.72, 0.4,  1.0)
@@ -139,20 +144,49 @@ func _input(event):
 			queue_redraw()
 		queue_redraw()  # tooltip tracks the cursor within a card too
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var c = _card_under(event.position)
-		if c.x == 0:
-			player_sel = c.y
-			queue_redraw()
-		elif c.x == 1:
-			bot_sel = c.y
-			queue_redraw()
+		# team size
 		for i in TEAM_SIZES.size():
 			if _team_size_btn_rect(i).has_point(event.position):
 				team_size = TEAM_SIZES[i]
+				player_active_slot = min(player_active_slot, team_size - 1)
+				bot_active_slot = min(bot_active_slot, team_size - 1)
 				queue_redraw()
+				return
+		# slot chips — click to choose which slot the next class pick fills
+		for s in team_size:
+			if _slot_chip_rect(0, s).has_point(event.position):
+				player_active_slot = s
+				queue_redraw()
+				return
+			if _slot_chip_rect(1, s).has_point(event.position):
+				bot_active_slot = s
+				queue_redraw()
+				return
+		# class cards — assign to the active slot, then advance to the next
+		var c = _card_under(event.position)
+		if c.x == 0:
+			player_slots[player_active_slot] = c.y
+			player_active_slot = (player_active_slot + 1) % team_size
+			queue_redraw()
+			return
+		elif c.x == 1:
+			bot_slots[bot_active_slot] = c.y
+			bot_active_slot = (bot_active_slot + 1) % team_size
+			queue_redraw()
+			return
 		# fight button
 		if _fight_btn_rect().has_point(event.position):
 			_start()
+
+# One class chip per team slot, in a row centered under each side's header.
+func _slot_chip_rect(side: int, slot_idx: int) -> Rect2:
+	var chip_w = 88.0
+	var chip_h = 26.0
+	var gap = 8.0
+	var total = chip_w * team_size + gap * (team_size - 1)
+	var center_x = W * 0.25 if side == 0 else W * 0.75
+	var start_x = center_x - total * 0.5
+	return Rect2(start_x + slot_idx * (chip_w + gap), 176, chip_w, chip_h)
 
 func _team_size_btn_rect(i: int) -> Rect2:
 	var w = 64.0
@@ -177,8 +211,17 @@ func _fight_btn_rect() -> Rect2:
 	return Rect2(W * 0.5 - 100, CARD_Y + CARD_H + 40, 200, 52)
 
 func _start():
-	get_tree().root.set_meta("player_class", CLASSES[player_sel]["key"])
-	get_tree().root.set_meta("bot_class",    CLASSES[bot_sel]["key"])
+	var pkeys := []
+	var bkeys := []
+	for s in team_size:
+		pkeys.append(CLASSES[player_slots[s]]["key"])
+		bkeys.append(CLASSES[bot_slots[s]]["key"])
+	get_tree().root.set_meta("player_classes", pkeys)
+	get_tree().root.set_meta("bot_classes",    bkeys)
+	# Legacy single-key meta kept for any reader that still expects it; slot 0
+	# is the human-controlled fighter on the player side.
+	get_tree().root.set_meta("player_class", pkeys[0])
+	get_tree().root.set_meta("bot_class",    bkeys[0])
 	get_tree().root.set_meta("team_size",    team_size)
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
@@ -204,6 +247,10 @@ func _draw():
 	_draw_text("YOU", Vector2(W * 0.25, 148), 18, Color(0.8, 0.8, 0.9, 0.7), true)
 	_draw_text("BOT", Vector2(W * 0.75, 148), 18, Color(0.8, 0.8, 0.9, 0.7), true)
 
+	# per-slot class chips (one row per side)
+	_draw_slot_chips(0, player_slots, player_active_slot)
+	_draw_slot_chips(1, bot_slots, bot_active_slot)
+
 	# center divider
 	var mid = W * 0.5
 	draw_line(Vector2(mid, CARD_Y - 10), Vector2(mid, CARD_Y + CARD_H + 10),
@@ -213,10 +260,12 @@ func _draw():
 	# draw all cards
 	tooltip_text = ""
 	var mouse_pos = get_viewport().get_mouse_position()
+	# A card reads as "selected" when it's the class currently in the active
+	# slot, so it always reflects what the next pick would replace.
 	for i in CLASSES.size():
-		_draw_card(player_cards_x[i], i, player_sel == i, hovered == Vector2i(0, i), mouse_pos)
+		_draw_card(player_cards_x[i], i, player_slots[player_active_slot] == i, hovered == Vector2i(0, i), mouse_pos)
 	for i in CLASSES.size():
-		_draw_card(bot_cards_x[i], i, bot_sel == i, hovered == Vector2i(1, i), mouse_pos)
+		_draw_card(bot_cards_x[i], i, bot_slots[bot_active_slot] == i, hovered == Vector2i(1, i), mouse_pos)
 
 	# fight button
 	var btn = _fight_btn_rect()
@@ -227,16 +276,34 @@ func _draw():
 	_draw_text("FIGHT", Vector2(btn.position.x + btn.size.x * 0.5, btn.position.y + btn.size.y * 0.5 + 2),
 		22, Color(0.05, 0.08, 0.1), true)
 
-	# matchup summary below button
-	var p_name = CLASSES[player_sel]["label"]
-	var b_name = CLASSES[bot_sel]["label"]
-	var summary = ("%s  vs  %s (bot)" % [p_name, b_name]) if team_size == 1 \
-		else ("%s x%d  vs  %s x%d (bot)" % [p_name, team_size, b_name, team_size])
+	# matchup summary below button — lists each side's comp
+	var p_names := []
+	var b_names := []
+	for s in team_size:
+		p_names.append(CLASSES[player_slots[s]]["label"].capitalize())
+		b_names.append(CLASSES[bot_slots[s]]["label"].capitalize())
+	var summary = "%s  vs  %s (bot)" % [" / ".join(p_names), " / ".join(b_names)]
 	_draw_text(summary,
 		Vector2(W * 0.5, btn.position.y + btn.size.y + 28), 15, Color(0.55, 0.55, 0.65, 0.7), true)
 
 	if tooltip_text != "":
 		_draw_tooltip()
+
+# A row of class chips, one per team slot, showing each slot's current class
+# in its class color. The active slot (the one the next class click fills)
+# is outlined brighter. Clicking a chip makes that slot active.
+func _draw_slot_chips(side: int, slots: Array, active: int):
+	if team_size <= 1:
+		return  # a single slot is already fully conveyed by the card highlight
+	for s in team_size:
+		var r = _slot_chip_rect(side, s)
+		var cls = CLASSES[slots[s]]
+		var col: Color = cls["color"]
+		var is_active = s == active
+		draw_rect(r, Color(col.r, col.g, col.b, 0.30 if is_active else 0.16))
+		draw_rect(r, Color(col.r, col.g, col.b, 1.0 if is_active else 0.4), false, 2.0 if is_active else 1.0)
+		_draw_text(cls["label"].capitalize(), r.position + r.size * 0.5, 12,
+			Color(1, 1, 1, 0.95 if is_active else 0.7), true)
 
 func _draw_tooltip():
 	var font    = ThemeDB.fallback_font

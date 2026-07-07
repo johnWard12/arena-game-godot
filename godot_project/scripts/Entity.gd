@@ -163,6 +163,26 @@ var rooted_time_left  := 0.0
 # Camouflage; nothing else sets it yet.
 var invisible_time_left := 0.0
 
+# Marks a support/healer archetype (set true by ClericEntity._ready()).
+# Read by the AI focus-targeting logic so bots prioritize killing the enemy
+# healer — checked via this flag rather than `is ClericEntity` so the base
+# class doesn't take a hard dependency on a subclass type, and so any future
+# healer just sets the flag.
+var is_healer := false
+
+# --- AI focus targeting (bots only; players aim manually) ---
+# A bot commits to one target for a dwell window rather than re-picking every
+# frame, so focus fire reads as deliberate instead of thrashing. See
+# pick_ai_target().
+var ai_committed_target: Entity = null
+var ai_target_dwell_left := 0.0
+const AI_TARGET_DWELL_MIN := 1.4
+const AI_TARGET_DWELL_MAX := 2.6
+# On a re-pick, chance to ignore the healer and go for a kill on the
+# lowest-HP enemy instead — real teams focus the healer but occasionally
+# swap to a finish, and being 100% predictable is easy to play around.
+const AI_HEALER_SWAP_CHANCE := 0.25
+
 # Heal-over-time — generic, so any future ability can use it the same way
 # attacks all route through deal_damage(). Introduced for Cleric.
 var hot_time_left := 0.0
@@ -301,6 +321,52 @@ func get_nearest_enemy(candidates: Array, respect_invisibility: bool = true) -> 
 			nearest_d = d
 			nearest = c
 	return nearest
+
+# AI target selection with focus-fire + dwell. Commits to one enemy for a
+# short window (so focus reads as deliberate, not frame-to-frame thrashing),
+# preferring the enemy healer, with an occasional swap to a kill target as a
+# mixup. Degrades to exactly the single enemy in 1v1, so it changes nothing
+# there. `delta` advances the dwell timer; pass 0.0 from non-per-frame
+# callers (spawn, on-death re-target), which just forces an immediate re-pick
+# whenever the committed target is no longer valid.
+func pick_ai_target(candidates: Array, delta: float) -> Entity:
+	ai_target_dwell_left -= delta
+	var committed_ok = ai_committed_target != null and is_instance_valid(ai_committed_target) \
+		and ai_committed_target.alive and ai_committed_target.team_id != team_id \
+		and ai_committed_target.invisible_time_left <= 0
+	if committed_ok and ai_target_dwell_left > 0.0:
+		return ai_committed_target
+	ai_committed_target = _choose_focus_target(candidates)
+	ai_target_dwell_left = randf_range(AI_TARGET_DWELL_MIN, AI_TARGET_DWELL_MAX)
+	return ai_committed_target
+
+func _choose_focus_target(candidates: Array) -> Entity:
+	var enemies := []
+	for c in candidates:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
+			continue
+		if c.invisible_time_left > 0:
+			continue
+		enemies.append(c)
+	if enemies.is_empty():
+		return null
+	# Focus the enemy healer — that's who a real team trains onto — but on a
+	# fraction of re-picks skip it and go for a kill instead (below).
+	if randf() > AI_HEALER_SWAP_CHANCE:
+		for e in enemies:
+			if e.is_healer:
+				return e
+	# Kill priority: lowest current HP, ties broken by proximity.
+	var best: Entity = null
+	var best_hp := INF
+	var best_d := INF
+	for e in enemies:
+		var d = global_position.distance_to(e.global_position)
+		if e.hp < best_hp or (e.hp == best_hp and d < best_d):
+			best_hp = e.hp
+			best_d = d
+			best = e
+	return best
 
 # Closest living enemy within `range` that's also inside a `half_angle_deg`
 # cone of `facing` — used by stationary melee hits (auto-attack, Strike,

@@ -9,6 +9,8 @@ const FLEE_RANGE = 150.0
 var ai_timer := 0.0
 var ai_target := Vector2.ZERO
 var ai_move := Vector2.ZERO
+var strafe_sign := 1
+var strafe_timer := 0.0
 
 func _ready():
 	super._ready()
@@ -21,11 +23,15 @@ func get_movement_input() -> Vector2:
 func _physics_process(delta):
 	if alive and opponent != null and opponent.alive:
 		try_dodge_dash()
+		strafe_timer -= delta
+		if strafe_timer <= 0:
+			strafe_sign = 1 if randf() < 0.5 else -1
+			strafe_timer = 1.0 + randf() * 1.2
 		ai_timer -= delta
 		if ai_timer <= 0:
 			ai_decide()
 			ai_timer = 0.16 + randf() * 0.1
-		ai_move = ai_move.lerp(ai_target, min(1.0, delta * 5.5))
+		ai_move = ai_move.lerp(ai_target, min(1.0, delta * 6.0))
 	super._physics_process(delta)
 
 func try_dodge_dash():
@@ -46,6 +52,10 @@ func ai_decide():
 		ai_target = Vector2.ZERO
 		return
 
+	# Movement decided first and unconditionally (see RangedBotController for
+	# why) so poking never freezes the kite.
+	ai_target = BotSteering.apply_wall_repulsion(global_position, arena_rect, _kite_move(d))
+
 	# Camouflage to vanish and reposition when low HP
 	if hp < max_hp * 0.35 and cd_shift <= 0 and randf() < 0.6:
 		try_shift(opponent)
@@ -56,8 +66,8 @@ func ai_decide():
 		try_a3(opponent)
 		return
 
-	# Snare Trap — place proactively at medium range to punish a chase
-	if d > 120 and d < 400 and cd_a2 <= 0 and randf() < 0.35:
+	# Snare Trap — drop proactively at medium range to punish a chase
+	if d > 120 and d < 400 and cd_a2 <= 0 and randf() < 0.4:
 		try_a2(opponent)
 		return
 
@@ -67,28 +77,27 @@ func ai_decide():
 		return
 
 	# ult when charged and in range
-	if ult_charge >= ULT_CHARGE_MAX and d < 450 and randf() < 0.5:
+	if ult_charge >= ULT_CHARGE_MAX and d < 460 and randf() < 0.6:
 		try_ult(opponent)
 		return
 
-	# Piercing Shot
-	if cd_a1 <= 0 and d < 500 and randf() < 0.45:
+	# Piercing Shot — main poke
+	if cd_a1 <= 0 and d < 520 and randf() < 0.6:
 		try_a1(opponent)
 		return
 
-	# auto shot
-	if cd_auto <= 0 and d < 550:
+	# Quick Shot — fire near-constantly to build Momentum while kiting
+	if cd_auto <= 0 and d < 560:
 		try_auto(opponent)
 		return
 
-	# movement: maintain preferred range, strafe laterally
+# Kiting movement: hold PREFERRED_RANGE, always weaving so the path is
+# evasive rather than a predictable straight line.
+func _kite_move(d: float) -> Vector2:
 	var to_opp = (opponent.global_position - global_position).normalized()
-	if d < PREFERRED_RANGE - 40:
-		ai_target = -to_opp
-	elif d > PREFERRED_RANGE + 60:
-		ai_target = to_opp * 0.6
-	else:
-		var perp = Vector2(-to_opp.y, to_opp.x) * (1 if randf() < 0.5 else -1)
-		ai_target = perp
-
-	ai_target = BotSteering.apply_wall_repulsion(global_position, arena_rect, ai_target)
+	var perp = Vector2(-to_opp.y, to_opp.x) * strafe_sign
+	if d < PREFERRED_RANGE - 60:
+		return (-to_opp + perp * 0.5).normalized()
+	elif d > PREFERRED_RANGE + 80:
+		return (to_opp * 0.7 + perp * 0.4).normalized()
+	return (perp * 0.9 - to_opp * 0.25).normalized()

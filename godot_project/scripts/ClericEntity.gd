@@ -75,6 +75,7 @@ func _ready():
 	hp     = CLERIC_MAX_HP
 	max_hp = CLERIC_MAX_HP
 	base_color = Color(0.95, 0.88, 0.6)
+	is_healer = true  # AI focus-targeting trains onto healers
 
 func _physics_process(delta):
 	devotion_time_left = max(0.0, devotion_time_left - delta)

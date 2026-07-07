@@ -31,9 +31,12 @@ const HEALTH_PACK_RADIUS = 44.0
 const HEALTH_PACK_RESPAWN = 12.0
 
 func _ready():
-	var player_class = get_tree().root.get_meta("player_class", "melee")
-	var bot_class    = get_tree().root.get_meta("bot_class",    "melee")
 	team_size = get_tree().root.get_meta("team_size", 1)
+	# Per-slot comps (set by CharSelect). Fall back to the legacy single-class
+	# meta — repeated across the team — if the arrays aren't present, so an
+	# older entry point or a direct scene launch still works.
+	var player_classes = get_tree().root.get_meta("player_classes", [get_tree().root.get_meta("player_class", "melee")])
+	var bot_classes    = get_tree().root.get_meta("bot_classes",    [get_tree().root.get_meta("bot_class",    "melee")])
 	build_map()
 
 	var spawn_x = _scale_point(Vector2(450.0, 540.0)).x
@@ -42,7 +45,7 @@ func _ready():
 	var enemy_positions  = _team_spawn_positions(team_size, enemy_x)
 
 	for i in team_size:
-		var e = _make_fighter(player_class, i == 0)
+		var e = _make_fighter(_class_for_slot(player_classes, i), i == 0)
 		e.team_id = 0
 		e.global_position = player_positions[i]
 		_spawn_fighter(e)
@@ -50,7 +53,7 @@ func _ready():
 			player = e
 
 	for i in team_size:
-		var e = _make_fighter(bot_class, false)
+		var e = _make_fighter(_class_for_slot(bot_classes, i), false)
 		e.team_id = 1
 		e.global_position = enemy_positions[i]
 		_spawn_fighter(e)
@@ -60,6 +63,13 @@ func _ready():
 	build_3d_world()
 	build_ui()
 	queue_redraw()
+
+# Class key for team slot i, tolerant of a classes array shorter than the
+# team size (reuses the last entry) so a mismatch never crashes spawning.
+func _class_for_slot(classes: Array, i: int) -> String:
+	if classes.is_empty():
+		return "melee"
+	return classes[i] if i < classes.size() else classes[classes.size() - 1]
 
 # Team 0 fighters are indices [0, count); team 1 fighters (built from the
 # same helper with a different base x) fill [count, 2*count). Spreads each
@@ -120,16 +130,20 @@ func _spawn_fighter(e: Entity):
 	e.died.connect(func(): _on_fighter_died(e))
 	fighters.append(e)
 
-# Keeps every living fighter's `opponent` pointed at their nearest living
-# enemy. Called once at spawn and every frame thereafter (_process), so a
-# fighter whose target dies immediately reacquires instead of idling.
-func _update_targeting():
+# Keeps every living fighter's `opponent` pointed at a sensible target.
+# Called once at spawn and every frame thereafter (_process, which passes
+# delta), so a fighter whose target dies immediately reacquires instead of
+# idling. Players just track their nearest enemy (they aim manually and are
+# expected to see through Camouflage); bots use focus-fire target selection
+# so a team trains onto the enemy healer with occasional kill-swaps.
+func _update_targeting(delta: float = 0.0):
 	for f in fighters:
 		if is_instance_valid(f) and f.alive:
-			# A human player is expected to manually track a camouflaged
-			# enemy; only AI-controlled fighters actually lose the trail.
-			f.opponent = f.get_nearest_enemy(fighters, not f.is_player)
 			f.all_fighters = fighters
+			if f.is_player:
+				f.opponent = f.get_nearest_enemy(fighters, false)
+			else:
+				f.opponent = f.pick_ai_target(fighters, delta)
 
 func build_3d_world():
 	world_3d = Node3D.new()
@@ -373,7 +387,7 @@ func start_shake(intensity: float, duration: float):
 
 func _process(delta):
 	update_health_packs(delta)
-	_update_targeting()
+	_update_targeting(delta)
 	for i in fighters.size():
 		if is_instance_valid(fighters[i]):
 			hp_bars[i].value = fighters[i].hp
