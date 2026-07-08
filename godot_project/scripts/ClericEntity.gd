@@ -4,7 +4,7 @@ class_name ClericEntity
 # threat alone. Every ally-targeted ability falls back to self when no
 # ally is close enough (or in 1v1, ever), via get_lowest_hp_ally().
 
-const CLERIC_MAX_HP = 175.5
+const CLERIC_MAX_HP = 176.0
 
 # LMB — Smite: fast holy bolt poke, builds combo stacks on hit
 const SMITE_CD     = 0.6

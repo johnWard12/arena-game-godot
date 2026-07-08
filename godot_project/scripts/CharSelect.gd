@@ -46,15 +46,15 @@ const CLASSES = [
 		"label": "DUELIST",
 		"color": MELEE_COLOR,
 		"key":   "melee",
-		"hp":    "HP  202.5",
+		"hp":    "HP  203",
 		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Iron Resolve Shift", "Bladestorm R"],
 		"ability_descs": [
 			"7.5 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
-			"17.25 dmg stab. Slows 30% for 2s and reduces their healing received 30% for 3s. 1.8s cooldown, 145 range, 0.09s wind-up.",
-			"Dash up to 270, strike for 29.3 dmg and stun 0.5s. 6.5s cooldown, 150 range.",
+			"17.25 dmg stab. Slows 30% for 2s and reduces their healing received 25% for 3s. 2.5s cooldown, 145 range, 0.09s wind-up.",
+			"Dash up to 270, strike for 29.3 dmg and stun 0.75s. 6.5s cooldown, 150 range.",
 			"9.5 dmg (up to 22.15 vs a low-HP target). Slows 30% for 2s. 4s cooldown.",
 			"Converts current combo stacks into damage reduction (10% per stack, up to 30%) for 3s, consuming them. 9s cooldown.",
-			"Spin 1.5s, hitting foes within 170 range for 20.1 dmg every 0.3s (up to 5 hits, 100.5 total). Slow-immune while active. Builds on a 14s charge meter.",
+			"Spin 1.5s, hitting foes within 170 range for 17.1 dmg every 0.3s (up to 5 hits, 85.5 total). Slow-immune while active. Builds on a 14s charge meter.",
 		]
 	},
 	{
@@ -76,7 +76,7 @@ const CLASSES = [
 		"label": "BRUISER",
 		"color": BRUISER_COLOR,
 		"key":   "bruiser",
-		"hp":    "HP  222.75",
+		"hp":    "HP  223",
 		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Warcry     F", "Unbreakable Shift", "Seismic Slam R"],
 		"ability_descs": [
 			"2.7 dmg. 0.7s cooldown, 167 range. Basic swing, hold to auto-repeat.",
@@ -91,7 +91,7 @@ const CLASSES = [
 		"label": "RANGER",
 		"color": RANGER_COLOR,
 		"key":   "ranger",
-		"hp":    "HP  175.5",
+		"hp":    "HP  176",
 		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "Rain of Arrows R"],
 		"ability_descs": [
 			"7.5 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
@@ -106,7 +106,7 @@ const CLASSES = [
 		"label": "CLERIC",
 		"color": CLERIC_COLOR,
 		"key":   "cleric",
-		"hp":    "HP  175.5",
+		"hp":    "HP  176",
 		"lines": ["Team support/healer.", "Protects & empowers allies.", "", "Smite      LMB", "Mending    E", "Consecrate Q", "Purify     F", "Guardian Ward Shift", "Guardian's Bond R"],
 		"ability_descs": [
 			"6 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",

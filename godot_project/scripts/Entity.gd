@@ -18,13 +18,13 @@ const AUTO_RANGE = 150.0
 
 const A1_CAST = 0.09
 const A1_RECOVERY = 0.13
-const A1_CD = 1.8
+const A1_CD = 2.5
 const A1_DMG = 17.25
 const A1_RANGE = 145.0
 const A1_SLOW_DUR = 2.0
 const A1_SLOW_PCT = 0.30
 const A1_HEAL_REDUCE_DUR = 3.0
-const A1_HEAL_REDUCE_PCT = 0.30
+const A1_HEAL_REDUCE_PCT = 0.25
 
 const A2_CAST = 0.14
 const A2_RECOVERY = 0.22
@@ -34,6 +34,7 @@ const A2_DMG = 29.3
 const A2_RANGE = 150.0
 const A2_LUNGE_DIST = 270.0
 const A2_LUNGE_DUR = 0.13
+const A2_STUN_DUR = 0.75
 
 const ULT_CAST = 0.45
 const ULT_RECOVERY = 0.3
@@ -89,7 +90,7 @@ const KNOCKUP_DUR = 1.0
 # Bladestorm (Duelist R)
 const BLADESTORM_DUR          = 1.5
 const BLADESTORM_HIT_INTERVAL = 0.30
-const BLADESTORM_DMG          = 20.1
+const BLADESTORM_DMG          = 17.1
 const BLADESTORM_RANGE        = 170.0
 
 # Iron Resolve (Duelist Shift) — converts current combo stacks into a
@@ -125,8 +126,8 @@ var lunge_opponent: Entity = null
 var lunge_speed := 0.0
 var lunge_reach := 0.0
 
-var hp := 202.5
-var max_hp := 202.5
+var hp := 203.0
+var max_hp := 203.0
 var alive := true
 
 var casting = null
@@ -938,6 +939,13 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		var shared = amount * target.bond_split_pct
 		amount -= shared
 		shared *= (1.0 - partner.dmg_reduction)
+		# Rounded to a whole number right before it touches hp — percentage
+		# reductions (dmg_reduction, outgoing_dmg_mult, bond splits) almost
+		# always produce a fractional amount, which otherwise leaves HP
+		# sitting at an awkward fraction forever: an exactly-lethal hit would
+		# never quite show 0, since it'd land on some tiny fractional
+		# remainder instead of landing exactly on empty.
+		shared = round(shared)
 		partner.hp = max(0.0, partner.hp - shared)
 		partner.hit_flash_left = 0.25
 		FX.hit_spark(get_parent(), partner.global_position, partner.base_color)
@@ -945,6 +953,8 @@ func deal_damage(target: Entity, amount: float) -> bool:
 			partner.alive = false
 			FX.death_shatter(get_parent(), partner.global_position, partner.base_color)
 			partner.died.emit()
+	# Same rounding as the bond-split above, same reason.
+	amount = round(amount)
 	target.hp = max(0.0, target.hp - amount)
 	target.hit_flash_left = 0.25
 	FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0) if barrier_hit else target.base_color)
@@ -969,7 +979,12 @@ func deal_damage(target: Entity, amount: float) -> bool:
 func heal(target: Entity, amount: float) -> void:
 	if target == null or not is_instance_valid(target) or not target.alive:
 		return
-	target.hp = min(target.max_hp, target.hp + amount * target.heal_dampen_mult() * target.healing_reduction_mult())
+	# Rounded for the same reason deal_damage() rounds its final amount —
+	# heal_dampen_mult()/healing_reduction_mult() are both percentage
+	# multipliers, so without this HP would keep drifting onto fractional
+	# values via healing too, not just damage.
+	var final_amount = round(amount * target.heal_dampen_mult() * target.healing_reduction_mult())
+	target.hp = min(target.max_hp, target.hp + final_amount)
 	ult_active_time_left = ULT_ACTIVE_WINDOW
 
 # Anti-stall: once a match has run long, healing gradually loses
@@ -1049,7 +1064,7 @@ func resolve_lunge_strike(opp: Entity):
 		if deal_damage(opp, dmg):
 			landed = true
 			if opp.alive:
-				opp.apply_stun(0.5)
+				opp.apply_stun(A2_STUN_DUR)
 			add_combo_stack()
 	var recovery_time = A2_RECOVERY if landed else A2_MISS_RECOVERY
 	recovering = {"type": "a2", "time_left": recovery_time, "total": recovery_time}

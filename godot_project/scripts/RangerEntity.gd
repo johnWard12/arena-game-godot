@@ -5,7 +5,7 @@ class_name RangerEntity
 # via the highest move speed in the roster, a snare that punishes
 # predictable pathing, a recoiling peel shot, and a stealth escape.
 
-const RANGER_MAX_HP    = 175.5
+const RANGER_MAX_HP    = 176.0
 # Trimmed slightly from 465 — still the fastest kit in the roster, just a
 # little less untouchable while also doing less damage (see below).
 const RANGER_MAX_SPEED = 445.0
