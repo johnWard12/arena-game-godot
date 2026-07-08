@@ -15,6 +15,9 @@ func get_movement_input() -> Vector2:
 func get_aim_dir(_opp: Entity) -> Vector2:
 	return _input.get_aim_dir(self)
 
+func get_aim_pos(_opp: Entity) -> Vector2:
+	return _input.get_aim_world_pos(self)
+
 func _physics_process(delta):
 	super._physics_process(delta)
 	_input.process(self, delta)

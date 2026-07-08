@@ -50,6 +50,22 @@ func get_aim_dir(entity: Entity) -> Vector2:
 		return entity.facing
 	return dir.normalized()
 
+# Same ground-plane raycast as get_aim_dir(), but returns the actual world
+# point under the cursor instead of just a direction — used by ground-
+# targeted placement abilities (e.g. Cleric's Consecrate) where where you
+# click matters, not just which way you're facing.
+func get_aim_world_pos(entity: Entity) -> Vector2:
+	var cam = entity.get_tree().get_first_node_in_group("game_camera")
+	if cam != null:
+		var mouse_pos = entity.get_viewport().get_mouse_position()
+		var ray_origin = cam.project_ray_origin(mouse_pos)
+		var ray_dir = cam.project_ray_normal(mouse_pos)
+		var hit = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_dir)
+		if hit != null:
+			return CoordUtil.to_sim(hit)
+		return entity.global_position
+	return entity.get_global_mouse_position()
+
 # Call once per _physics_process from the owning PlayerController.
 func process(entity: Entity, delta: float):
 	_poll_dash(entity)

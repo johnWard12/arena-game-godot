@@ -68,12 +68,13 @@ const BLOODLUST_ATKSPD_MULT  = 1.10
 const BLOODLUST_MOVESPD_MULT = 1.10
 
 # F — Sword Throw: thrown blade, low damage, slows on hit. Widened hitbox
-# (16->20) makes it noticeably easier to actually land as a skill-shot.
+# (16->20, then 20->25) makes it noticeably easier to actually land as a
+# skill-shot.
 const SWORD_THROW_CAST     = 0.12
 const SWORD_THROW_RECOVERY = 0.18
 const SWORD_THROW_CD       = 4.0
 const SWORD_THROW_SPEED    = 1400.0
-const SWORD_THROW_RADIUS   = 20.0
+const SWORD_THROW_RADIUS   = 25.0
 const SWORD_THROW_DMG_BASE          = 9.5
 const SWORD_THROW_DMG_MISSING_BONUS = 12.65
 const SWORD_THROW_SLOW_DUR = 2.0
@@ -712,6 +713,15 @@ func get_aim_dir(opp: Entity) -> Vector2:
 		return facing
 	return (opp.global_position - global_position).normalized()
 
+# Ground-targeted placement point (e.g. Cleric's Consecrate). Base/bot
+# behavior aims at the current opponent (or a spot ahead if there is none);
+# each PlayerController variant overrides this to the real mouse world
+# position instead, mirroring how get_aim_dir() is overridden for mouse aim.
+func get_aim_pos(opp: Entity) -> Vector2:
+	if opp != null and is_instance_valid(opp) and opp.alive:
+		return opp.global_position
+	return global_position + facing * 200.0
+
 func is_facing_target(target: Entity, half_angle_deg: float) -> bool:
 	if target == null:
 		return false
@@ -1157,7 +1167,7 @@ func resolve_a3(opp: Entity):
 	var missing_ratio = 1.0 - (opp.hp / opp.max_hp) if opp != null and opp.alive else 0.0
 	var dmg = round((SWORD_THROW_DMG_BASE + missing_ratio * SWORD_THROW_DMG_MISSING_BONUS) * combo_mult())
 	_fire(facing, SWORD_THROW_SPEED, SWORD_THROW_RADIUS, dmg, opp,
-		Color(0.8, 0.85, 0.95), 10.0, SWORD_THROW_SLOW_DUR, SWORD_THROW_SLOW_PCT)
+		Color(0.8, 0.85, 0.95), 13.0, SWORD_THROW_SLOW_DUR, SWORD_THROW_SLOW_PCT)
 	cd_a3 = SWORD_THROW_CD
 	recovering = {"type": "a3", "time_left": SWORD_THROW_RECOVERY, "total": SWORD_THROW_RECOVERY}
 	commit_ability()
