@@ -32,17 +32,24 @@ const CONSECRATE_CD             = 8.0
 
 # F — Purify: rectangle skill-shot, wide enough to catch two allies
 # standing close together. Cleanses CC/debuffs + a small heal-over-time.
-const PURIFY_LENGTH   = 300.0
-const PURIFY_WIDTH    = 180.0
-const PURIFY_HOT_DUR  = 4.0
-const PURIFY_HOT_TICK = 8.1
-const PURIFY_CD       = 10.0
+# Also lands a small instant heal on the Cleric itself (on top of the HoT it
+# already gets from being caught in its own rect) — a support tool that
+# leaves the healer completely empty-handed otherwise discourages using it
+# proactively rather than only in a panic.
+const PURIFY_LENGTH    = 300.0
+const PURIFY_WIDTH     = 180.0
+const PURIFY_HOT_DUR   = 4.0
+const PURIFY_HOT_TICK  = 8.1
+const PURIFY_SELF_HEAL = 12.0
+const PURIFY_CD        = 10.0
 
-# Shift — Guardian Ward: shields the lowest-HP ally in radius. Cashes in
-# current combo stacks for bonus shield, consuming them.
+# Shift — Guardian Ward: shields the lowest-HP ally in radius. Scales with
+# current combo stacks but no longer consumes them (Smite/Consecrate still
+# feed Guardian's Ward AND heal_mult() off the same stacks now) — nerfed
+# down in base/scaling to compensate for stacks no longer being spent.
 const WARD_TARGET_RADIUS = 400.0
-const WARD_BASE_SHIELD   = 34.5
-const WARD_PER_STACK     = 9.2
+const WARD_BASE_SHIELD   = 25.0
+const WARD_PER_STACK     = 6.0
 const WARD_DUR           = 3.0
 const WARD_CD            = 9.0
 
@@ -166,6 +173,7 @@ func try_a3(opp: Entity):
 			hit_ally = true
 	if hit_ally:
 		devotion_time_left = DEVOTION_DUR
+	heal(self, PURIFY_SELF_HEAL * heal_mult())
 	FX.impact_burst(get_parent(), global_position + facing * (PURIFY_LENGTH * 0.5), Color(0.95, 0.92, 0.7), 16, 180.0)
 	_spawn_rect_fx(global_position, facing, PURIFY_LENGTH, PURIFY_WIDTH, 0.5, Color(0.95, 0.9, 0.55))
 	cd_a3 = PURIFY_CD
@@ -181,8 +189,6 @@ func try_shift(_opp: Entity):
 	var shield_amt = WARD_BASE_SHIELD + combo_stacks * WARD_PER_STACK
 	target.barrier_hp_left = shield_amt
 	target.barrier_time_left = WARD_DUR
-	combo_stacks = 0
-	combo_time_left = 0.0
 	if target != self:
 		devotion_time_left = DEVOTION_DUR
 	FX.impact_burst(get_parent(), target.global_position, Color(0.95, 0.9, 0.6), 14, 150.0)

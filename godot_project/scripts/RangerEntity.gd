@@ -26,11 +26,15 @@ const PIERCE_DMG       = 22.4
 const PIERCE_SLOW_DUR  = 1.0
 const PIERCE_SLOW_PCT  = 0.20
 
-# Q — Snare Trap: thrown trap, arms after a delay, roots on trigger
+# Q — Snare Trap: thrown trap, arms after a delay, roots on trigger.
+# Sized way up (2.5x radius) so it threatens real map space instead of a
+# single tile, but with a shorter arm delay than before removed — you can no
+# longer drop it right on top of someone and get an instant snare; they have
+# a beat to see and dodge it first.
 const SNARE_CD          = 7.0
 const SNARE_PLACE_DIST  = 110.0
-const SNARE_RADIUS      = 30.0
-const SNARE_ARM_DELAY   = 0.6
+const SNARE_RADIUS      = 75.0
+const SNARE_ARM_DELAY   = 0.5
 const SNARE_LIFETIME    = 8.0
 const SNARE_ROOT_DUR    = 1.2
 

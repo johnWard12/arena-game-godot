@@ -96,7 +96,7 @@ const CLASSES = [
 		"ability_descs": [
 			"7.5 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
 			"22.4 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
-			"Throws a trap 110 out that arms in 0.6s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
+			"Throws a large trap 110 out that arms in 0.5s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
 			"15 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
 			"Vanish from AI targeting for 3s (a human player tracking you can still hit you). 10s cooldown.",
 			"Targets a zone that rains arrows for 2s, ticking 13.1 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
@@ -112,8 +112,8 @@ const CLASSES = [
 			"6 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
 			"Skill-shot heal toward your lowest-HP ally within 400 range (self if none). Heals 32.4 (+10% per combo stack). 3s cooldown, 0.2s wind-up.",
 			"Instant zone at your feet: 8 dmg to enemies, 10.8 heal to allies standing in it, ticking every 1s for 3s. 150 radius. 8s cooldown.",
-			"Rectangle cast (300 long, 180 wide) — cleanses CC/debuffs from every ally it hits (including you) and adds a small heal-over-time (8.1/tick). 10s cooldown.",
-			"Shields your lowest-HP ally within 400 range (self if none): 34.5 HP + 9.2 per banked combo stack, consuming them. 9s cooldown.",
+			"Rectangle cast (300 long, 180 wide) — cleanses CC/debuffs from every ally it hits (including you), adds a small heal-over-time (8.1/tick), and heals you for 12 instantly. 10s cooldown.",
+			"Shields your lowest-HP ally within 400 range (self if none): 25 HP + 6 per banked combo stack (stacks aren't consumed). 9s cooldown.",
 			"Links you with your lowest-HP ally in range for 4s: damage either takes splits 50/50, both take 20% less damage and heal over time. No ally in range -> self-only (still get the reduction + healing). Usable even while stunned.",
 		]
 	},
