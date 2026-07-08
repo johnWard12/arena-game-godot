@@ -35,6 +35,11 @@ const A2_RANGE = 150.0
 const A2_LUNGE_DIST = 270.0
 const A2_LUNGE_DUR = 0.13
 const A2_STUN_DUR = 0.75
+# Landing the charge-in strike rewards committing to the gap-close with a
+# brief attack-speed window afterward, same mechanism as Blood-lust
+# (stacks multiplicatively with it via atkspd_mult in _physics_process).
+const LUNGE_ATKSPD_MULT = 1.30
+const LUNGE_ATKSPD_DUR  = 2.0
 
 const ULT_CAST = 0.45
 const ULT_RECOVERY = 0.3
@@ -268,6 +273,12 @@ var iron_resolve_time_left := 0.0
 
 # Blood-lust: granted on a successful parry (see on_landed_parry())
 var bloodlust_time_left := 0.0
+
+# Attack-speed window granted for landing the Lunge/charge strike (see
+# resolve_lunge_strike()) — inert for classes that override
+# resolve_lunge_strike() with their own payoff (Bruiser's Seismic Slam,
+# Ranger's Disengage), since only the base implementation sets it.
+var lunge_atkspd_time_left := 0.0
 
 # How long this entity has been alive in the current match — used only by
 # heal_dampen_mult()'s anti-stall ramp. Ticks every physics frame
@@ -509,7 +520,12 @@ func _physics_process(delta):
 		queue_redraw()
 		return
 	bloodlust_time_left = max(0.0, bloodlust_time_left - delta)
-	var atkspd_mult = BLOODLUST_ATKSPD_MULT if bloodlust_time_left > 0 else 1.0
+	lunge_atkspd_time_left = max(0.0, lunge_atkspd_time_left - delta)
+	var atkspd_mult = 1.0
+	if bloodlust_time_left > 0:
+		atkspd_mult *= BLOODLUST_ATKSPD_MULT
+	if lunge_atkspd_time_left > 0:
+		atkspd_mult *= LUNGE_ATKSPD_MULT
 	cd_auto = max(0.0, cd_auto - delta * atkspd_mult)
 	cd_a1 = max(0.0, cd_a1 - delta * atkspd_mult)
 	cd_a2 = max(0.0, cd_a2 - delta * atkspd_mult)
@@ -1077,6 +1093,7 @@ func resolve_lunge_strike(opp: Entity):
 			if opp.alive:
 				opp.apply_stun(A2_STUN_DUR)
 			add_combo_stack()
+			lunge_atkspd_time_left = LUNGE_ATKSPD_DUR
 	var recovery_time = A2_RECOVERY if landed else A2_MISS_RECOVERY
 	recovering = {"type": "a2", "time_left": recovery_time, "total": recovery_time}
 	commit_ability()
@@ -1132,7 +1149,7 @@ func try_a3(opp: Entity):
 func resolve_a3(opp: Entity):
 	facing = get_aim_dir(opp)
 	var missing_ratio = 1.0 - (opp.hp / opp.max_hp) if opp != null and opp.alive else 0.0
-	var dmg = round(SWORD_THROW_DMG_BASE + missing_ratio * SWORD_THROW_DMG_MISSING_BONUS)
+	var dmg = round((SWORD_THROW_DMG_BASE + missing_ratio * SWORD_THROW_DMG_MISSING_BONUS) * combo_mult())
 	_fire(facing, SWORD_THROW_SPEED, SWORD_THROW_RADIUS, dmg, opp,
 		Color(0.8, 0.85, 0.95), 10.0, SWORD_THROW_SLOW_DUR, SWORD_THROW_SLOW_PCT)
 	cd_a3 = SWORD_THROW_CD
