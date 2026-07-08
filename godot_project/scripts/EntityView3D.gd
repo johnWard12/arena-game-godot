@@ -168,6 +168,7 @@ func setup(e: Entity):
 	if key == "bruiser":
 		_build_warcry_fx()
 		_attach_bruiser_sword()
+		_attach_bruiser_shield()
 	if key == "duelist":
 		_build_bladestorm_fx()
 
@@ -197,6 +198,81 @@ func _attach_bruiser_sword():
 	skeleton.add_child(attachment)
 	attachment.bone_name = "Weapon.R"
 	attachment.add_child(sword_copy)
+
+# Unlike the sword, there's no pre-authored socket to reuse here — no
+# character in this pack holds anything in their left hand, so "Fist.L"
+# has no "Weapon.L" equivalent with a known-good grip transform sitting
+# next to it. This builds a round shield from primitive meshes (same
+# style as the rest of this view layer's VFX) and hand-tunes a
+# best-effort local offset/rotation for a natural held pose. The exact
+# fit is a guess without a reference transform to copy — if it looks off
+# in-game, the position/rotation_degrees values right below are the ones
+# to nudge.
+func _attach_bruiser_shield():
+	var skeleton := _find_skeleton(_model)
+	if skeleton == null or skeleton.find_bone("Fist.L") < 0:
+		return
+
+	var attachment := BoneAttachment3D.new()
+	skeleton.add_child(attachment)
+	attachment.bone_name = "Fist.L"
+
+	var shield := Node3D.new()
+	attachment.add_child(shield)
+	shield.position = Vector3(0.0, 0.0, 0.1)
+	shield.rotation_degrees = Vector3(0, 90, 90)
+
+	# Sized in the model's own native (pre-scale) units so it comes out to
+	# roughly a 0.32m real-world radius once the model's uniform scale
+	# (target_height / measured_height, ~0.7 for the Monk) is applied.
+	var r := 0.46
+	var thickness := 0.11
+
+	var disc := MeshInstance3D.new()
+	var disc_mesh := CylinderMesh.new()
+	disc_mesh.top_radius = r
+	disc_mesh.bottom_radius = r
+	disc_mesh.height = thickness
+	disc.mesh = disc_mesh
+	var disc_mat := StandardMaterial3D.new()
+	disc_mat.albedo_color = Color(0.32, 0.33, 0.37)
+	disc_mat.metallic = 0.6
+	disc_mat.roughness = 0.4
+	disc.material_override = disc_mat
+	shield.add_child(disc)
+
+	# Team-colored rim — doubles as another at-a-glance team marker,
+	# consistent with the ground ring / HP bar (set once at attach time
+	# since team color never changes mid-match, no per-frame update needed).
+	var rim := MeshInstance3D.new()
+	var rim_mesh := TorusMesh.new()
+	rim_mesh.inner_radius = r * 0.88
+	rim_mesh.outer_radius = r
+	rim.mesh = rim_mesh
+	rim.rotation_degrees = Vector3(90, 0, 0)
+	rim.position.y = thickness * 0.5 + 0.01
+	var rim_mat := StandardMaterial3D.new()
+	rim_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rim_mat.albedo_color = entity.base_color
+	rim_mat.emission_enabled = true
+	rim_mat.emission = entity.base_color
+	rim_mat.emission_energy_multiplier = 1.4
+	rim.material_override = rim_mat
+	shield.add_child(rim)
+
+	var boss := MeshInstance3D.new()
+	var boss_mesh := CylinderMesh.new()
+	boss_mesh.top_radius = r * 0.22
+	boss_mesh.bottom_radius = r * 0.22
+	boss_mesh.height = thickness * 1.6
+	boss.mesh = boss_mesh
+	boss.position.y = thickness * 0.5
+	var boss_mat := StandardMaterial3D.new()
+	boss_mat.albedo_color = Color(0.5, 0.5, 0.55)
+	boss_mat.metallic = 0.7
+	boss_mat.roughness = 0.3
+	boss.material_override = boss_mat
+	shield.add_child(boss)
 
 func _find_skeleton(node: Node) -> Skeleton3D:
 	if node is Skeleton3D:
@@ -283,14 +359,18 @@ func _build_bloodlust_particles():
 func _build_bladestorm_fx():
 	_bladestorm_particles = GPUParticles3D.new()
 	_bladestorm_particles.position = Vector3(0, 0.9, 0)
-	_bladestorm_particles.amount = 18
+	_bladestorm_particles.amount = 26
 	_bladestorm_particles.lifetime = 0.4
 	_bladestorm_particles.emitting = false
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
 	pm.emission_sphere_radius = 0.12
 	pm.direction = Vector3(0, 1, 0)
-	pm.spread = 90.0
+	# spread=180 (the max) covers the full sphere of possible directions
+	# before flatness=1.0 collapses that down onto the horizontal plane —
+	# spread=90 alone left a directional bias toward "up" that read as a
+	# narrower fan instead of a complete ring around the character.
+	pm.spread = 180.0
 	pm.flatness = 1.0
 	pm.initial_velocity_min = 3.5
 	pm.initial_velocity_max = 5.5
