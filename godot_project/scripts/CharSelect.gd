@@ -83,7 +83,7 @@ const CLASSES = [
 			"19.8 dmg shield slam, stuns 0.7s. 5.5s cooldown, 151 range. Instant, no wind-up.",
 			"Ground stomp: 16.2 dmg + 50% slow for 2s to foes within 180 range. 8s cooldown. Instant.",
 			"You take 15% less damage; the opponent deals 10% less damage. Both for 4s, enemy debuff needs them within 210 range. 8s cooldown.",
-			"Cleanses all CC, grants CC immunity, 25% damage reduction, and +20% move speed for 2.5s. 8.5s cooldown. Usable even while stunned.",
+			"Cleanses all CC, grants CC immunity, 25% damage reduction, and +30% move speed for 2.5s. 8.5s cooldown. Usable even while stunned.",
 			"Lunge in (up to 280) and slam for 49.5 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
 		]
 	},

@@ -35,13 +35,14 @@ const SEISMIC_RECOVERY   = 0.65
 # Shift — Unbreakable: CC cleanse + immunity + damage reduction + a move
 # speed bump. The speed bonus was cut entirely earlier (a tank immune to CC
 # AND faster than everyone chasing it had no real counterplay window), then
-# brought back at roughly half strength — still gives some mobility to
-# capitalize on the cleanse, just not enough to be flatly uncatchable.
-# Duration also stays trimmed from the original 3.0s.
+# brought back at roughly half strength, then bumped up again to 30% —
+# still short of the original 40%, so it's not flatly uncatchable, but
+# meaningfully more mobile while it's up. Duration also stays trimmed from
+# the original 3.0s.
 const UNBREAKABLE_CD           = 8.5
 const UNBREAKABLE_DUR          = 2.5
 const UNBREAKABLE_DMG_REDUCE   = 0.25
-const UNBREAKABLE_MOVE_MULT    = 1.20
+const UNBREAKABLE_MOVE_MULT    = 1.30
 
 # F — Warcry: self damage-reduction buff + opponent damage-dealt debuff
 const WARCRY_CD              = 8.0
