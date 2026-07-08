@@ -79,8 +79,14 @@ const SWORD_THROW_DMG_MISSING_BONUS = 12.65
 const SWORD_THROW_SLOW_DUR = 2.0
 const SWORD_THROW_SLOW_PCT = 0.30
 
+# Regen bumped +1.5s (2.5 -> 4.0) — the universal dash was giving kiting
+# classes (Ranger especially) near-permanent uptime on repositioning bursts,
+# making them very hard to close distance on even for a dedicated
+# gap-closer like Duelist's Lunge. Slowing the recharge hits every class
+# equally, but lands hardest on whoever leans on spamming it to keep
+# distance rather than using it as an occasional dodge/reposition tool.
 const DASH_CHARGES_MAX  = 2
-const DASH_CHARGE_REGEN = 2.5
+const DASH_CHARGE_REGEN = 4.0
 
 const RADIUS = 34.0
 const TRAIL_LIFETIME_MS = 220
