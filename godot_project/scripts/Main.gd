@@ -133,7 +133,13 @@ func _spawn_fighter(e: Entity):
 		av.setup(fx)
 	)
 	e.screen_shake.connect(start_shake)
-	e.died.connect(func(): _on_fighter_died(e))
+	# Plain method reference, not a lambda — _on_fighter_died() doesn't need
+	# to know WHICH fighter died (it just rescans `fighters` for the win
+	# check), so there's no reason to capture `e` in a closure at all. That
+	# capture was also almost certainly the source of the "Lambda capture at
+	# index 0 was freed" warnings in 3v3 (an AoE killing multiple fighters
+	# in the same frame emits several `died` signals in one call stack).
+	e.died.connect(_on_fighter_died)
 	fighters.append(e)
 
 # Keeps every living fighter's `opponent` pointed at a sensible target.
@@ -435,7 +441,7 @@ func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 	pack["respawn_left"] = HEALTH_PACK_RESPAWN
 	return true
 
-func _on_fighter_died(_who: Entity):
+func _on_fighter_died():
 	# Re-target immediately so nobody spends a frame aiming at a corpse.
 	_update_targeting()
 

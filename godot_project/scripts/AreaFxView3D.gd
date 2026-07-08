@@ -159,7 +159,7 @@ func _build_falling_particles(r: float):
 	pm.scale_min = 1.0
 	pm.scale_max = 1.0
 	pm.color = _color
-	pm.particle_flag_align_y_to_velocity = true
+	pm.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
 	_particles.process_material = pm
 	var quad := QuadMesh.new()
 	quad.size = Vector2(0.025, 0.32)
