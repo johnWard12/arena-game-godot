@@ -111,7 +111,7 @@ const CLASSES = [
 		"ability_descs": [
 			"6 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
 			"Skill-shot heal toward your lowest-HP ally within 400 range (self if none). Heals 32.4 (+10% per combo stack). An enemy body in its path takes 12 dmg and is slowed 30% for 1s instead. 3s cooldown, 0.2s wind-up.",
-			"Instant zone at your feet: 8 dmg to enemies, 10.8 heal to allies standing in it, ticking every 1s for 3s. 150 radius. 8s cooldown.",
+			"Instant zone at your feet: 8 dmg to enemies, 10.8 heal to allies standing in it, ticking every 1s for 3s. 225 radius. 8s cooldown.",
 			"Rectangle cast (300 long, 180 wide) — cleanses CC/debuffs from every ally it hits (including you), adds a small heal-over-time (8.1/tick), and heals you for 12 instantly. 10s cooldown.",
 			"Shields your lowest-HP ally within 400 range (self if none): 25 HP + 7.5 per banked combo stack (stacks aren't consumed). 9s cooldown.",
 			"Links you with your lowest-HP ally in range for 4s: damage either takes splits 50/50, both take 20% less damage and heal over time. No ally in range -> self-only (still get the reduction + healing). Usable even while stunned.",

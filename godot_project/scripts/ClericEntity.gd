@@ -28,7 +28,7 @@ const MENDING_ENEMY_SLOW_PCT = 0.30
 
 # Q — Consecrate: instant AoE zone at self's position — heals allies and
 # damages enemies standing in it, ticking over its duration
-const CONSECRATE_RADIUS         = 150.0
+const CONSECRATE_RADIUS         = 225.0
 const CONSECRATE_DUR            = 3.0
 const CONSECRATE_TICK           = 1.0
 const CONSECRATE_DMG_PER_TICK   = 8.0
