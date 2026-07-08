@@ -84,6 +84,8 @@ var _freeze_shards: Array[MeshInstance3D] = []
 
 var _bloodlust_particles: GPUParticles3D
 
+var _bladestorm_particles: GPUParticles3D
+
 var _shift_style := ""
 var _shift_dome: MeshInstance3D
 var _shift_dome_mat: StandardMaterial3D
@@ -166,6 +168,8 @@ func setup(e: Entity):
 	if key == "bruiser":
 		_build_warcry_fx()
 		_attach_bruiser_sword()
+	if key == "duelist":
+		_build_bladestorm_fx()
 
 # The Monk model is an unarmed martial-arts rig (Bruiser's kit is a hammer
 # thematically, but the model itself holds nothing), which read as strange
@@ -266,6 +270,48 @@ func _build_bloodlust_particles():
 	quad.material = pmat
 	_bloodlust_particles.draw_pass_1 = quad
 	add_child(_bloodlust_particles)
+
+# Duelist — Bladestorm (ult): previously had NO 3D visual at all (its only
+# feedback was the old 2D-only "orbiting ghost swords" art, which lives in
+# a code path that never runs once use_3d_view is on — the same class of
+# bug Void Collapse/Rain of Arrows had before their telegraphs moved to
+# real 3D effects). Small bright-gold blade shapes bursting outward
+# continuously while active, so the ultimate reads as clearly "on" instead
+# of only being felt through its AoE tick damage — same color language as
+# the Duelist's combo-pip sword icon, shot outward rather than a diffuse
+# glow so it reads as "swords flying out."
+func _build_bladestorm_fx():
+	_bladestorm_particles = GPUParticles3D.new()
+	_bladestorm_particles.position = Vector3(0, 0.9, 0)
+	_bladestorm_particles.amount = 18
+	_bladestorm_particles.lifetime = 0.4
+	_bladestorm_particles.emitting = false
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.12
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 90.0
+	pm.flatness = 1.0
+	pm.initial_velocity_min = 3.5
+	pm.initial_velocity_max = 5.5
+	pm.gravity = Vector3.ZERO
+	pm.scale_min = 1.0
+	pm.scale_max = 1.0
+	pm.color = Color(1.0, 0.88, 0.2)
+	pm.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
+	_bladestorm_particles.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.05, 0.38)
+	var pmat := StandardMaterial3D.new()
+	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	pmat.albedo_color = Color(1.0, 0.9, 0.3)
+	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pmat.emission_enabled = true
+	pmat.emission = Color(1.0, 0.85, 0.25)
+	pmat.emission_energy_multiplier = 2.6
+	quad.material = pmat
+	_bladestorm_particles.draw_pass_1 = quad
+	add_child(_bladestorm_particles)
 
 # Shift (Iron Resolve / Barrier / Unbreakable) — one shared "shield up"
 # Each class's Shift payoff is mechanically different (a defensive buff, an
@@ -600,6 +646,9 @@ func _update_status_fx(delta: float):
 			shard.scale = Vector3.ONE * (0.85 + chill * 0.25)
 
 	_bloodlust_particles.emitting = entity.bloodlust_time_left > 0
+
+	if _bladestorm_particles != null:
+		_bladestorm_particles.emitting = entity.bladestorm_time_left > 0
 
 	var shift_active = entity.get_shift_active()
 	if _shift_ring != null:

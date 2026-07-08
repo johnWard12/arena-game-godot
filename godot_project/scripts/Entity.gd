@@ -951,6 +951,15 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		FX.hit_spark(get_parent(), partner.global_position, partner.base_color)
 		if partner.hp <= 0 and partner.alive:
 			partner.alive = false
+			# _physics_process() early-returns for good once alive is false,
+			# so it never reaches its own queue_redraw() calls again — without
+			# forcing one final redraw here, _draw()'s last output (the
+			# overhead HP bar/cast bar/status rings from the frame right
+			# before death) stays frozen on screen forever, even though the
+			# 3D model itself (a separate, still-running system) correctly
+			# fades out. This one extra call lets _draw() run once more with
+			# alive=false, which is what makes it draw nothing instead.
+			partner.queue_redraw()
 			FX.death_shatter(get_parent(), partner.global_position, partner.base_color)
 			partner.died.emit()
 	# Same rounding as the bond-split above, same reason.
@@ -960,6 +969,8 @@ func deal_damage(target: Entity, amount: float) -> bool:
 	FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0) if barrier_hit else target.base_color)
 	if target.hp <= 0 and target.alive:
 		target.alive = false
+		# See the identical comment on the bond-partner death branch above.
+		target.queue_redraw()
 		FX.death_shatter(get_parent(), target.global_position, target.base_color)
 		target.died.emit()
 	ult_active_time_left = ULT_ACTIVE_WINDOW
