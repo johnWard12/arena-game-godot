@@ -26,9 +26,11 @@ const MENDING_ENEMY_DMG      = 12.0
 const MENDING_ENEMY_SLOW_DUR = 1.0
 const MENDING_ENEMY_SLOW_PCT = 0.30
 
-# Q — Consecrate: instant AoE zone at self's position — heals allies and
+# Q — Consecrate: instant AoE zone placed at the cursor (clamped to a max
+# cast range rather than always dropping at self's feet) — heals allies and
 # damages enemies standing in it, ticking over its duration
 const CONSECRATE_RADIUS         = 225.0
+const CONSECRATE_MAX_RANGE      = 350.0
 const CONSECRATE_DUR            = 3.0
 const CONSECRATE_TICK           = 1.0
 const CONSECRATE_DMG_PER_TICK   = 8.0
@@ -152,13 +154,17 @@ func resolve_a1(target: Entity):
 	recovering = {"type": "a1", "time_left": MENDING_RECOVERY, "total": MENDING_RECOVERY}
 	commit_ability()
 
-func try_a2(_opp: Entity):
+func try_a2(opp: Entity):
 	if not can_start_ability() or cd_a2 > 0:
 		return
-	consecrate_pos = global_position
+	var target_pos = get_aim_pos(opp)
+	var offset = target_pos - global_position
+	if offset.length() > CONSECRATE_MAX_RANGE:
+		target_pos = global_position + offset.normalized() * CONSECRATE_MAX_RANGE
+	consecrate_pos = target_pos
 	consecrate_time_left = CONSECRATE_DUR
 	consecrate_tick_timer = 0.0
-	FX.impact_burst(get_parent(), global_position, Color(0.95, 0.9, 0.55), 18, 180.0)
+	FX.impact_burst(get_parent(), consecrate_pos, Color(0.95, 0.9, 0.55), 18, 180.0)
 	_spawn_zone_fx(consecrate_pos, CONSECRATE_RADIUS, CONSECRATE_DUR, Color(0.95, 0.85, 0.4))
 	cd_a2 = CONSECRATE_CD
 	commit_ability()
