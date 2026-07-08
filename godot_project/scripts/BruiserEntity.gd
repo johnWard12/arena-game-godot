@@ -1,26 +1,26 @@
 extends "res://scripts/Entity.gd"
 class_name BruiserEntity
 
-const BRUISER_MAX_HP     = 180.0
+const BRUISER_MAX_HP     = 223.0
 const BRUISER_MAX_SPEED  = 370.0
 const BRUISER_ACCEL      = 2800.0
 const BRUISER_FRICTION   = 1400.0
 
 const BRUISER_AUTO_CD    = 0.70
-const BRUISER_AUTO_DMG   = 3.0
+const BRUISER_AUTO_DMG   = 2.7
 const BRUISER_AUTO_RANGE = 167.0
 
 # E — Shatter: shield slam + stun (instant)
 const SHATTER_RECOVERY = 0.25
 const SHATTER_CD       = 5.5
-const SHATTER_DMG      = 22.0
+const SHATTER_DMG      = 19.8
 const SHATTER_RANGE    = 151.0
 const SHATTER_STUN     = 0.70
 
 # Q — Tremor: ground stomp AoE + slow (instant)
 const TREMOR_RECOVERY = 0.25
 const TREMOR_CD       = 8.0
-const TREMOR_DMG      = 18.0
+const TREMOR_DMG      = 16.2
 const TREMOR_RADIUS   = 180.0
 const TREMOR_SLOW     = 2.0
 
@@ -28,15 +28,21 @@ const TREMOR_SLOW     = 2.0
 const SEISMIC_LUNGE_DUR  = 0.14
 const SEISMIC_LUNGE_DIST = 280.0
 const SEISMIC_RANGE      = 198.0
-const SEISMIC_DMG        = 55.0
+const SEISMIC_DMG        = 49.5
 const SEISMIC_KNOCKUP    = 1.0
 const SEISMIC_RECOVERY   = 0.65
 
-# Shift — Unbreakable: CC cleanse + immunity + damage reduction
+# Shift — Unbreakable: CC cleanse + immunity + damage reduction + a move
+# speed bump. The speed bonus was cut entirely earlier (a tank immune to CC
+# AND faster than everyone chasing it had no real counterplay window), then
+# brought back at roughly half strength, then bumped up again to 30% —
+# still short of the original 40%, so it's not flatly uncatchable, but
+# meaningfully more mobile while it's up. Duration also stays trimmed from
+# the original 3.0s.
 const UNBREAKABLE_CD           = 8.5
-const UNBREAKABLE_DUR          = 3.0
+const UNBREAKABLE_DUR          = 2.5
 const UNBREAKABLE_DMG_REDUCE   = 0.25
-const UNBREAKABLE_MOVE_MULT    = 1.40
+const UNBREAKABLE_MOVE_MULT    = 1.30
 
 # F — Warcry: self damage-reduction buff + opponent damage-dealt debuff
 const WARCRY_CD              = 8.0
@@ -94,30 +100,36 @@ func try_auto(opp: Entity):
 	cd_auto = BRUISER_AUTO_CD
 	facing = get_aim_dir(opp)
 	start_swing(80.0, 0.15)
-	if global_position.distance_to(opp.global_position) <= BRUISER_AUTO_RANGE:
-		deal_damage(opp, BRUISER_AUTO_DMG * combo_mult())
+	# A stationary swing hits whoever's actually in front of you within
+	# range, not necessarily `opp` — lets aim choose the target in a team
+	# fight instead of it being automatic.
+	var target = get_facing_target(BRUISER_AUTO_RANGE)
+	if target != null:
+		deal_damage(target, BRUISER_AUTO_DMG * combo_mult())
 		add_combo_stack()
 
 func try_a1(opp: Entity):
-	if not alive or cd_a1 > 0 or recovering != null or lunging or opp == null:
+	if not alive or cd_a1 > 0 or recovering != null or lunging or ability_commit_time_left > 0 or opp == null:
 		return
 	facing = get_aim_dir(opp)
 	start_swing(100.0, 0.22)
-	if opp.alive and global_position.distance_to(opp.global_position) <= SHATTER_RANGE:
+	var target = get_facing_target(SHATTER_RANGE)
+	if target != null:
 		var dmg = round(SHATTER_DMG * combo_mult())
-		deal_damage(opp, dmg)
-		if opp.alive:
-			opp.apply_stun(SHATTER_STUN)
-			FX.impact_burst(get_parent(), opp.global_position, Color(1.0, 0.85, 0.3), 16, 260.0)
+		deal_damage(target, dmg)
+		if target.alive:
+			target.apply_stun(SHATTER_STUN)
+			FX.impact_burst(get_parent(), target.global_position, Color(1.0, 0.85, 0.3), 16, 260.0)
 		add_combo_stack()
 	cd_a1 = SHATTER_CD
 	recovering = {"type": "a1", "time_left": SHATTER_RECOVERY, "total": SHATTER_RECOVERY}
+	commit_ability()
 
 func resolve_a1(_opp: Entity):
 	pass
 
 func try_a2(_opp: Entity):
-	if not alive or cd_a2 > 0 or recovering != null or lunging:
+	if not alive or cd_a2 > 0 or recovering != null or lunging or ability_commit_time_left > 0:
 		return
 	tremor_fx_left = 0.4
 	FX.impact_burst(get_parent(), global_position, Color(0.85, 0.6, 0.3), 22, 220.0)
@@ -131,12 +143,13 @@ func try_a2(_opp: Entity):
 		add_combo_stack()
 	cd_a2 = TREMOR_CD
 	recovering = {"type": "a2", "time_left": TREMOR_RECOVERY, "total": TREMOR_RECOVERY}
+	commit_ability()
 
 func resolve_a2(_opp: Entity):
 	pass
 
 func try_ult(opp: Entity):
-	if not alive or ult_charge < ULT_CHARGE_MAX or recovering != null or lunging or opp == null:
+	if not alive or ult_charge < ULT_CHARGE_MAX or recovering != null or lunging or ability_commit_time_left > 0 or opp == null:
 		return
 	ult_charge = 0.0
 	# Always lunge straight at the opponent's actual position — this is a
@@ -172,9 +185,12 @@ func _do_seismic_slam(opp: Entity):
 				opp.knockup_time_left = SEISMIC_KNOCKUP
 	screen_shake.emit(14.0, 0.45)
 	recovering = {"type": "ult", "time_left": SEISMIC_RECOVERY, "total": SEISMIC_RECOVERY}
+	commit_ability()
 
 func try_shift(_opp: Entity):
-	# Usable even while stunned — that's the point
+	# Usable even while stunned — that's the point. Not gated on
+	# ability_commit_time_left either, for the same reason: this is a panic
+	# button that has to fire the instant it's pressed, not after a beat.
 	if not alive or cd_shift > 0 or unbreakable_time_left > 0:
 		return
 	stunned_time_left = 0.0
@@ -183,17 +199,19 @@ func try_shift(_opp: Entity):
 	speed_override    = BRUISER_MAX_SPEED * UNBREAKABLE_MOVE_MULT
 	unbreakable_time_left = UNBREAKABLE_DUR
 	cd_shift = UNBREAKABLE_CD
+	commit_ability()
 
 func get_shift_active() -> bool:
 	return unbreakable_time_left > 0 or barrier_time_left > 0
 
 func try_a3(_opp: Entity):
-	if not alive or cd_a3 > 0:
+	if not alive or cd_a3 > 0 or ability_commit_time_left > 0:
 		return
 	warcry_time_left = WARCRY_DUR
 	# AoE debuff — weakens every enemy in range, not just the primary target.
 	for target in get_enemies_in_range(WARCRY_RADIUS):
 		target.apply_outgoing_dmg_debuff(WARCRY_DUR, WARCRY_ENEMY_DMG_MULT)
+	commit_ability()
 	FX.impact_burst(get_parent(), global_position, Color(0.9, 0.25, 0.1), 20, 220.0)
 	cd_a3 = WARCRY_CD
 
@@ -201,40 +219,8 @@ func resolve_a3(_opp: Entity):
 	pass
 
 # ---- Drawing ----
-func _draw():
-	var now = Time.get_ticks_msec()
-
-	if use_3d_view:
-		if not alive:
-			return
-		draw_set_transform(_get_hud_screen_correction())
-		_draw_hud(now, get_status_accent(base_color))
-		draw_set_transform(Vector2.ZERO)
-		return
-
-	for p in trail:
-		var age = (now - p["time"]) / 200.0
-		if age < 1.0:
-			draw_circle(to_local(p["pos"]), RADIUS * 0.85,
-				Color(base_color.r, base_color.g, base_color.b, (1.0 - age) * 0.28))
-
-	if not alive:
-		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
-		return
-
-	var accent = get_status_accent(base_color)
-
-	var ku_y = get_knockup_draw_offset()
-	if ku_y != 0.0:
-		draw_circle(Vector2(0, RADIUS - 4), 16.0 - abs(ku_y) * 0.06, Color(0, 0, 0, 0.35))
-		draw_set_transform(Vector2(0, ku_y))
-
+func _draw_body(now: int, accent: Color):
 	_draw_bruiser(now, accent)
-
-	if ku_y != 0.0:
-		draw_set_transform(Vector2.ZERO)
-
-	_draw_hud(now, accent)
 
 func _draw_bruiser(now: int, accent: Color):
 	var perp   = Vector2(-facing.y, facing.x)

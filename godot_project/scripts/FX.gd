@@ -4,12 +4,30 @@ class_name FX
 # null, which keeps the headless balance simulator (Simulate.gd — entities
 # there are never added to a scene tree) fast and crash-free.
 
+const CoordUtil = preload("res://scripts/CoordUtil.gd")
+
+# Callers pass a simulation-space Vector2 (the same coordinates gameplay uses),
+# but these CPUParticles2D live on the 2D canvas, which is NOT top-down over
+# the arena — the arena is rendered by an angled 3D camera. Drawing a burst at
+# raw sim coords put it wherever that point falls in flat screen space, which
+# is nowhere near where the 3D character actually appears (the exact problem
+# the overhead HUD solves with _get_hud_screen_correction). Project the sim
+# point through the game camera so bursts land on their characters. A small
+# height lifts them from the feet to roughly torso level.
+const _FX_HEIGHT := 0.5
+
+static func _to_screen(parent: Node, pos: Vector2) -> Vector2:
+	var cam = parent.get_tree().get_first_node_in_group("game_camera")
+	if cam == null:
+		return pos  # no 3D camera (e.g. a pure-2D context) — use coords as-is
+	return cam.unproject_position(CoordUtil.to_world(pos, _FX_HEIGHT))
+
 static func _spawn(parent: Node, pos: Vector2, lifetime: float) -> CPUParticles2D:
 	if parent == null:
 		return null
 	var p = CPUParticles2D.new()
 	parent.add_child(p)
-	p.global_position = pos
+	p.global_position = _to_screen(parent, pos)
 	p.z_index = 50
 	p.emitting = false
 	p.one_shot = true

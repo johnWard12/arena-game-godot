@@ -84,6 +84,8 @@ var _freeze_shards: Array[MeshInstance3D] = []
 
 var _bloodlust_particles: GPUParticles3D
 
+var _bladestorm_particles: GPUParticles3D
+
 var _shift_style := ""
 var _shift_dome: MeshInstance3D
 var _shift_dome_mat: StandardMaterial3D
@@ -134,6 +136,16 @@ func setup(e: Entity):
 
 	_anim = _find_anim_player(_model)
 	if _anim != null:
+		# Imported clips default to LOOP_NONE, so a continuously-held state
+		# like moving in a straight line would play Run/Walk/Idle once and
+		# then freeze on its last frame while the character kept gliding via
+		# position updates — _play()'s _current_anim guard never noticed
+		# because the requested animation name hadn't changed. Movement/idle
+		# poses need to actually loop; one-shot clips (attacks, hit reacts,
+		# death) are left alone since holding their last frame is correct.
+		for loop_anim in ["Idle", "Walk", "Run", "Idle_Weapon"]:
+			if _anim.has_animation(loop_anim):
+				_anim.get_animation(loop_anim).loop_mode = Animation.LOOP_LINEAR
 		_anim.play("Idle")
 		_current_anim = "Idle"
 
@@ -165,6 +177,102 @@ func setup(e: Entity):
 	_build_bond_fx()
 	if key == "bruiser":
 		_build_warcry_fx()
+		_attach_bruiser_sword()
+		_attach_bruiser_shield()
+	if key == "duelist":
+		_build_bladestorm_fx()
+
+# The Monk model is an unarmed martial-arts rig (Bruiser's kit is a hammer
+# thematically, but the model itself holds nothing), which read as strange
+# for a "brawler" archetype. Its skeleton does have an empty "Weapon.R"
+# socket bone though — every character in this pack shares that same rig
+# convention (Warrior/Rogue/Wizard/Cleric each bake their own weapon onto
+# it). Rather than modeling a new prop, this reuses the Warrior's actual
+# sword mesh + its authored grip transform on that shared socket, so the
+# fit should already be correct without hand-tuning an offset.
+func _attach_bruiser_sword():
+	var skeleton := _find_skeleton(_model)
+	if skeleton == null or skeleton.find_bone("Weapon.R") < 0:
+		return
+
+	var warrior_scene: PackedScene = load(KIT_PATH + "Warrior.gltf")
+	var warrior := warrior_scene.instantiate()
+	var sword := warrior.find_child("Warrior_Sword", true, false)
+	if sword == null:
+		warrior.queue_free()
+		return
+	var sword_copy: Node3D = sword.duplicate()
+	warrior.queue_free()
+
+	var attachment := BoneAttachment3D.new()
+	skeleton.add_child(attachment)
+	attachment.bone_name = "Weapon.R"
+	attachment.add_child(sword_copy)
+
+# Unlike the sword, there's no pre-authored socket to reuse here — no
+# character in this pack holds anything in their left hand, so "Fist.L"
+# has no "Weapon.L" equivalent with a known-good grip transform sitting
+# next to it. This builds a round shield from primitive meshes (same
+# style as the rest of this view layer's VFX) and hand-tunes a
+# best-effort local offset/rotation for a natural held pose. The exact
+# fit is a guess without a reference transform to copy — if it looks off
+# in-game, the position/rotation_degrees values right below are the ones
+# to nudge.
+func _attach_bruiser_shield():
+	var skeleton := _find_skeleton(_model)
+	if skeleton == null or skeleton.find_bone("Fist.L") < 0:
+		return
+
+	var attachment := BoneAttachment3D.new()
+	skeleton.add_child(attachment)
+	attachment.bone_name = "Fist.L"
+
+	var shield := Node3D.new()
+	attachment.add_child(shield)
+	shield.position = Vector3(0.0, 0.0, 0.1)
+	shield.rotation_degrees = Vector3(0, 90, 90)
+
+	# Sized in the model's own native (pre-scale) units so it comes out to
+	# roughly a 0.38m real-world radius once the model's uniform scale
+	# (target_height / measured_height, ~0.7 for the Monk) is applied.
+	var r := 0.56
+	var thickness := 0.12
+
+	var disc := MeshInstance3D.new()
+	var disc_mesh := CylinderMesh.new()
+	disc_mesh.top_radius = r
+	disc_mesh.bottom_radius = r
+	disc_mesh.height = thickness
+	disc.mesh = disc_mesh
+	var disc_mat := StandardMaterial3D.new()
+	disc_mat.albedo_color = Color(0.72, 0.73, 0.76)
+	disc_mat.metallic = 0.6
+	disc_mat.roughness = 0.35
+	disc.material_override = disc_mat
+	shield.add_child(disc)
+
+	var boss := MeshInstance3D.new()
+	var boss_mesh := CylinderMesh.new()
+	boss_mesh.top_radius = r * 0.22
+	boss_mesh.bottom_radius = r * 0.22
+	boss_mesh.height = thickness * 1.6
+	boss.mesh = boss_mesh
+	boss.position.y = thickness * 0.5
+	var boss_mat := StandardMaterial3D.new()
+	boss_mat.albedo_color = Color(0.85, 0.85, 0.88)
+	boss_mat.metallic = 0.7
+	boss_mat.roughness = 0.25
+	boss.material_override = boss_mat
+	shield.add_child(boss)
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var found = _find_skeleton(child)
+		if found != null:
+			return found
+	return null
 
 # Freeze (Mage's Nova) — a slowly-spinning ring of little ice shards around
 # the waist, distinct from the generic yellow stun-star read so a frozen
@@ -229,6 +337,52 @@ func _build_bloodlust_particles():
 	quad.material = pmat
 	_bloodlust_particles.draw_pass_1 = quad
 	add_child(_bloodlust_particles)
+
+# Duelist — Bladestorm (ult): previously had NO 3D visual at all (its only
+# feedback was the old 2D-only "orbiting ghost swords" art, which lives in
+# a code path that never runs once use_3d_view is on — the same class of
+# bug Void Collapse/Rain of Arrows had before their telegraphs moved to
+# real 3D effects). Small bright-gold blade shapes bursting outward
+# continuously while active, so the ultimate reads as clearly "on" instead
+# of only being felt through its AoE tick damage — same color language as
+# the Duelist's combo-pip sword icon, shot outward rather than a diffuse
+# glow so it reads as "swords flying out."
+func _build_bladestorm_fx():
+	_bladestorm_particles = GPUParticles3D.new()
+	_bladestorm_particles.position = Vector3(0, 0.9, 0)
+	_bladestorm_particles.amount = 26
+	_bladestorm_particles.lifetime = 0.4
+	_bladestorm_particles.emitting = false
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.12
+	pm.direction = Vector3(0, 1, 0)
+	# spread=180 (the max) covers the full sphere of possible directions
+	# before flatness=1.0 collapses that down onto the horizontal plane —
+	# spread=90 alone left a directional bias toward "up" that read as a
+	# narrower fan instead of a complete ring around the character.
+	pm.spread = 180.0
+	pm.flatness = 1.0
+	pm.initial_velocity_min = 5.5
+	pm.initial_velocity_max = 8.0
+	pm.gravity = Vector3.ZERO
+	pm.scale_min = 1.0
+	pm.scale_max = 1.0
+	pm.color = Color(1.0, 0.88, 0.2)
+	pm.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
+	_bladestorm_particles.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.1, 0.42)
+	var pmat := StandardMaterial3D.new()
+	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	pmat.albedo_color = Color(1.0, 0.9, 0.3)
+	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pmat.emission_enabled = true
+	pmat.emission = Color(1.0, 0.85, 0.25)
+	pmat.emission_energy_multiplier = 2.6
+	quad.material = pmat
+	_bladestorm_particles.draw_pass_1 = quad
+	add_child(_bladestorm_particles)
 
 # Shift (Iron Resolve / Barrier / Unbreakable) — one shared "shield up"
 # Each class's Shift payoff is mechanically different (a defensive buff, an
@@ -563,6 +717,9 @@ func _update_status_fx(delta: float):
 			shard.scale = Vector3.ONE * (0.85 + chill * 0.25)
 
 	_bloodlust_particles.emitting = entity.bloodlust_time_left > 0
+
+	if _bladestorm_particles != null:
+		_bladestorm_particles.emitting = entity.bladestorm_time_left > 0
 
 	var shift_active = entity.get_shift_active()
 	if _shift_ring != null:

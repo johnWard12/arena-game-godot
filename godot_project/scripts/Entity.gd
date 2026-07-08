@@ -13,25 +13,33 @@ const DASH_DUR = 0.13
 const CARRY = 0.7
 
 const AUTO_CD = 0.55
-const AUTO_DMG = 4.0
+const AUTO_DMG = 7.5
 const AUTO_RANGE = 150.0
 
 const A1_CAST = 0.09
 const A1_RECOVERY = 0.13
-const A1_CD = 1.8
-const A1_DMG = 12.0
+const A1_CD = 2.5
+const A1_DMG = 17.25
 const A1_RANGE = 145.0
 const A1_SLOW_DUR = 2.0
 const A1_SLOW_PCT = 0.30
+const A1_HEAL_REDUCE_DUR = 3.0
+const A1_HEAL_REDUCE_PCT = 0.25
 
 const A2_CAST = 0.14
 const A2_RECOVERY = 0.22
 const A2_MISS_RECOVERY = 0.45
 const A2_CD = 6.5
-const A2_DMG = 20.4
+const A2_DMG = 29.3
 const A2_RANGE = 150.0
 const A2_LUNGE_DIST = 270.0
 const A2_LUNGE_DUR = 0.13
+const A2_STUN_DUR = 0.75
+# Landing the charge-in strike rewards committing to the gap-close with a
+# brief attack-speed window afterward, same mechanism as Blood-lust
+# (stacks multiplicatively with it via atkspd_mult in _physics_process).
+const LUNGE_ATKSPD_MULT = 1.30
+const LUNGE_ATKSPD_DUR  = 2.0
 
 const ULT_CAST = 0.45
 const ULT_RECOVERY = 0.3
@@ -47,25 +55,38 @@ const COMBO_DMG_PER_STACK = 0.16
 const PARRY_DUR = 0.22
 const PARRY_CD = 5.0
 const PARRY_STUN_DUR = 0.65
+# A parry only stuns the attacker if they're actually within retaliation
+# range when it happens — a projectile shooter across the map has no way to
+# react to or "deserve" a stun from a parry landing on their arrow/bolt, and
+# it can't be dodged/played around from that far away. Melee hits always
+# resolve well inside this range, so their self-stun-on-parry is unaffected.
+const PARRY_RANGED_STUN_RANGE = 200.0
 const STUN_DUR = 0.5
 
 const BLOODLUST_DUR          = 1.5
 const BLOODLUST_ATKSPD_MULT  = 1.10
 const BLOODLUST_MOVESPD_MULT = 1.10
 
-# F — Sword Throw: thrown blade, low damage, slows on hit
+# F — Sword Throw: thrown blade, low damage, slows on hit. Widened hitbox
+# (16->20) makes it noticeably easier to actually land as a skill-shot.
 const SWORD_THROW_CAST     = 0.12
 const SWORD_THROW_RECOVERY = 0.18
 const SWORD_THROW_CD       = 4.0
 const SWORD_THROW_SPEED    = 1400.0
-const SWORD_THROW_RADIUS   = 16.0
-const SWORD_THROW_DMG_BASE          = 6.0
-const SWORD_THROW_DMG_MISSING_BONUS = 8.0
+const SWORD_THROW_RADIUS   = 20.0
+const SWORD_THROW_DMG_BASE          = 9.5
+const SWORD_THROW_DMG_MISSING_BONUS = 12.65
 const SWORD_THROW_SLOW_DUR = 2.0
 const SWORD_THROW_SLOW_PCT = 0.30
 
+# Regen bumped +1.5s (2.5 -> 4.0) — the universal dash was giving kiting
+# classes (Ranger especially) near-permanent uptime on repositioning bursts,
+# making them very hard to close distance on even for a dedicated
+# gap-closer like Duelist's Lunge. Slowing the recharge hits every class
+# equally, but lands hardest on whoever leans on spamming it to keep
+# distance rather than using it as an occasional dodge/reposition tool.
 const DASH_CHARGES_MAX  = 2
-const DASH_CHARGE_REGEN = 2.5
+const DASH_CHARGE_REGEN = 4.0
 
 const RADIUS = 34.0
 const TRAIL_LIFETIME_MS = 220
@@ -80,13 +101,13 @@ const KNOCKUP_DUR = 1.0
 # Bladestorm (Duelist R)
 const BLADESTORM_DUR          = 1.5
 const BLADESTORM_HIT_INTERVAL = 0.30
-const BLADESTORM_DMG          = 14.0
+const BLADESTORM_DMG          = 17.1
 const BLADESTORM_RANGE        = 170.0
 
 # Iron Resolve (Duelist Shift) — converts current combo stacks into a
 # temporary flat damage-reduction buff, consuming the stacks.
-const IRON_RESOLVE_CD        = 7.0
-const IRON_RESOLVE_DUR       = 2.0
+const IRON_RESOLVE_CD        = 9.0
+const IRON_RESOLVE_DUR       = 3.0
 const IRON_RESOLVE_PER_STACK = 0.10
 
 # ---- State ----
@@ -116,8 +137,8 @@ var lunge_opponent: Entity = null
 var lunge_speed := 0.0
 var lunge_reach := 0.0
 
-var hp := 150.0
-var max_hp := 150.0
+var hp := 203.0
+var max_hp := 203.0
 var alive := true
 
 var casting = null
@@ -156,6 +177,26 @@ var rooted_time_left  := 0.0
 # get_nearest_enemy/get_enemies_in_range). Introduced for Ranger's
 # Camouflage; nothing else sets it yet.
 var invisible_time_left := 0.0
+
+# Marks a support/healer archetype (set true by ClericEntity._ready()).
+# Read by the AI focus-targeting logic so bots prioritize killing the enemy
+# healer — checked via this flag rather than `is ClericEntity` so the base
+# class doesn't take a hard dependency on a subclass type, and so any future
+# healer just sets the flag.
+var is_healer := false
+
+# --- AI focus targeting (bots only; players aim manually) ---
+# A bot commits to one target for a dwell window rather than re-picking every
+# frame, so focus fire reads as deliberate instead of thrashing. See
+# pick_ai_target().
+var ai_committed_target: Entity = null
+var ai_target_dwell_left := 0.0
+const AI_TARGET_DWELL_MIN := 1.4
+const AI_TARGET_DWELL_MAX := 2.6
+# On a re-pick, chance to ignore the healer and go for a kill on the
+# lowest-HP enemy instead — real teams focus the healer but occasionally
+# swap to a finish, and being 100% predictable is easy to play around.
+const AI_HEALER_SWAP_CHANCE := 0.25
 
 # Heal-over-time — generic, so any future ability can use it the same way
 # attacks all route through deal_damage(). Introduced for Cleric.
@@ -216,11 +257,40 @@ var dmg_reduction := 0.0
 var outgoing_dmg_mult := 1.0
 var outgoing_dmg_debuff_time_left := 0.0
 
+# Grievous-Wounds-style debuff: while active, healing THIS entity receives
+# (from any source — routes through heal(), same as heal_dampen_mult())
+# is reduced by healing_reduction_pct. Set by Duelist's Strike.
+var healing_reduction_time_left := 0.0
+var healing_reduction_pct := 0.0
+
+# Universal micro-lockout after using any non-auto ability (E/Q/F/Shift/R),
+# briefly blocking the next action of any kind so abilities can't be
+# chained instantly back-to-back just because each is individually off
+# cooldown. Never set by auto-attack itself, so holding LMB stays fully
+# fluid — only using a "real" ability introduces the beat.
+var ability_commit_time_left := 0.0
+const ABILITY_COMMIT_DUR := 0.135
+
+func commit_ability():
+	ability_commit_time_left = ABILITY_COMMIT_DUR
+
 # Iron Resolve (Duelist Shift) active-buff timer
 var iron_resolve_time_left := 0.0
 
 # Blood-lust: granted on a successful parry (see on_landed_parry())
 var bloodlust_time_left := 0.0
+
+# Attack-speed window granted for landing the Lunge/charge strike (see
+# resolve_lunge_strike()) — inert for classes that override
+# resolve_lunge_strike() with their own payoff (Bruiser's Seismic Slam,
+# Ranger's Disengage), since only the base implementation sets it.
+var lunge_atkspd_time_left := 0.0
+
+# How long this entity has been alive in the current match — used only by
+# heal_dampen_mult()'s anti-stall ramp. Ticks every physics frame
+# regardless of stuns/hitstop, since it needs to track true match time, not
+# this entity's own active time.
+var match_elapsed_time := 0.0
 
 var cd_a3             := 0.0
 var barrier_hp_left   := 0.0
@@ -235,6 +305,15 @@ var swing_arc_span := 0.0
 
 # hit flash on this entity when it receives damage
 var hit_flash_left := 0.0
+
+# Brief per-entity freeze-frame on a landed hit — a few ticks of "nothing
+# moves" is the cheapest way to sell impact weight. Scoped per-entity
+# (rather than a global Engine.time_scale dip) so a hit between two fighters
+# in a 2v2/3v3 doesn't also freeze bystanders. The attacker gets a shorter
+# freeze than the defender, standard convention for readable hit feedback.
+var hitstop_time_left := 0.0
+const HITSTOP_ATTACKER_DUR := 0.0245
+const HITSTOP_DEFENDER_DUR := 0.042
 
 var dash_charges_max := DASH_CHARGES_MAX
 var dash_charges := DASH_CHARGES_MAX
@@ -286,6 +365,78 @@ func get_nearest_enemy(candidates: Array, respect_invisibility: bool = true) -> 
 			nearest_d = d
 			nearest = c
 	return nearest
+
+# AI target selection with focus-fire + dwell. Commits to one enemy for a
+# short window (so focus reads as deliberate, not frame-to-frame thrashing),
+# preferring the enemy healer, with an occasional swap to a kill target as a
+# mixup. Degrades to exactly the single enemy in 1v1, so it changes nothing
+# there. `delta` advances the dwell timer; pass 0.0 from non-per-frame
+# callers (spawn, on-death re-target), which just forces an immediate re-pick
+# whenever the committed target is no longer valid.
+func pick_ai_target(candidates: Array, delta: float) -> Entity:
+	ai_target_dwell_left -= delta
+	var committed_ok = ai_committed_target != null and is_instance_valid(ai_committed_target) \
+		and ai_committed_target.alive and ai_committed_target.team_id != team_id \
+		and ai_committed_target.invisible_time_left <= 0
+	if committed_ok and ai_target_dwell_left > 0.0:
+		return ai_committed_target
+	ai_committed_target = _choose_focus_target(candidates)
+	ai_target_dwell_left = randf_range(AI_TARGET_DWELL_MIN, AI_TARGET_DWELL_MAX)
+	return ai_committed_target
+
+func _choose_focus_target(candidates: Array) -> Entity:
+	var enemies := []
+	for c in candidates:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
+			continue
+		if c.invisible_time_left > 0:
+			continue
+		enemies.append(c)
+	if enemies.is_empty():
+		return null
+	# Focus the enemy healer — that's who a real team trains onto — but on a
+	# fraction of re-picks skip it and go for a kill instead (below).
+	if randf() > AI_HEALER_SWAP_CHANCE:
+		for e in enemies:
+			if e.is_healer:
+				return e
+	# Kill priority: lowest current HP, ties broken by proximity.
+	var best: Entity = null
+	var best_hp := INF
+	var best_d := INF
+	for e in enemies:
+		var d = global_position.distance_to(e.global_position)
+		if e.hp < best_hp or (e.hp == best_hp and d < best_d):
+			best_hp = e.hp
+			best_d = d
+			best = e
+	return best
+
+# Closest living enemy within `range` that's also inside a `half_angle_deg`
+# cone of `facing` — used by stationary melee hits (auto-attack, Strike,
+# Smash) so aim actually determines who gets hit, instead of always
+# resolving against whichever enemy happens to be globally nearest
+# (`opponent`). In 1v1 this is indistinguishable from the old behavior
+# (there's only one enemy to ever face); in 2v2/3v3 it lets a player choose
+# their melee target by literally aiming at them.
+func get_facing_target(atk_range: float, half_angle_deg: float = 50.0) -> Entity:
+	var best: Entity = null
+	var best_d := INF
+	for c in all_fighters:
+		if c == self or not is_instance_valid(c) or not c.alive or c.team_id == team_id:
+			continue
+		if c.invisible_time_left > 0:
+			continue
+		var to_c = c.global_position - global_position
+		var d = to_c.length()
+		if d > atk_range:
+			continue
+		if d > 0.01 and facing.dot(to_c.normalized()) < cos(deg_to_rad(half_angle_deg)):
+			continue
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
 
 # Every living enemy within `radius` of `center` (defaults to this entity's
 # own position) — what a real AoE ability should hit, as opposed to just
@@ -369,14 +520,26 @@ func _physics_process(delta):
 	prune_trail(now)
 	if not alive:
 		return
+	match_elapsed_time += delta
+	if hitstop_time_left > 0:
+		hitstop_time_left = max(0.0, hitstop_time_left - delta)
+		queue_redraw()
+		return
 	bloodlust_time_left = max(0.0, bloodlust_time_left - delta)
-	var atkspd_mult = BLOODLUST_ATKSPD_MULT if bloodlust_time_left > 0 else 1.0
+	lunge_atkspd_time_left = max(0.0, lunge_atkspd_time_left - delta)
+	var atkspd_mult = 1.0
+	if bloodlust_time_left > 0:
+		atkspd_mult *= BLOODLUST_ATKSPD_MULT
+	if lunge_atkspd_time_left > 0:
+		atkspd_mult *= LUNGE_ATKSPD_MULT
 	cd_auto = max(0.0, cd_auto - delta * atkspd_mult)
 	cd_a1 = max(0.0, cd_a1 - delta * atkspd_mult)
 	cd_a2 = max(0.0, cd_a2 - delta * atkspd_mult)
 	cd_a3 = max(0.0, cd_a3 - delta * atkspd_mult)
 	cd_shift = max(0.0, cd_shift - delta)
 	parry_cd_left = max(0.0, parry_cd_left - delta)
+	ability_commit_time_left = max(0.0, ability_commit_time_left - delta)
+	healing_reduction_time_left = max(0.0, healing_reduction_time_left - delta)
 	if outgoing_dmg_debuff_time_left > 0:
 		outgoing_dmg_debuff_time_left = max(0.0, outgoing_dmg_debuff_time_left - delta)
 		if outgoing_dmg_debuff_time_left <= 0:
@@ -636,7 +799,8 @@ func prune_trail(now: int):
 		trail.pop_front()
 
 func can_start_ability() -> bool:
-	return alive and casting == null and recovering == null and not dashing and not lunging and not parrying and stunned_time_left <= 0
+	return alive and casting == null and recovering == null and not dashing and not lunging and not parrying \
+		and stunned_time_left <= 0 and ability_commit_time_left <= 0
 
 func can_dash(dir: Vector2) -> bool:
 	return alive and casting == null and not dashing and not lunging and not parrying and stunned_time_left <= 0 \
@@ -751,13 +915,24 @@ func apply_outgoing_dmg_debuff(duration: float, mult: float):
 	outgoing_dmg_debuff_time_left = max(outgoing_dmg_debuff_time_left, duration)
 	outgoing_dmg_mult = min(outgoing_dmg_mult, mult)
 
+# Grievous-Wounds-style debuff: reduces healing THIS entity RECEIVES for a
+# duration — e.g. Duelist's Strike. Stacks multiplicatively with
+# heal_dampen_mult() inside heal(), not blocked by cc_immune (not CC).
+func apply_healing_reduction(duration: float, pct: float):
+	healing_reduction_time_left = max(healing_reduction_time_left, duration)
+	healing_reduction_pct = max(healing_reduction_pct, pct)
+
+func healing_reduction_mult() -> float:
+	return (1.0 - healing_reduction_pct) if healing_reduction_time_left > 0 else 1.0
+
 func deal_damage(target: Entity, amount: float) -> bool:
 	if target == null or not target.alive:
 		return false
 	if target.parrying:
 		target.parrying = false
 		target.on_landed_parry()
-		apply_stun(PARRY_STUN_DUR)
+		if global_position.distance_to(target.global_position) <= PARRY_RANGED_STUN_RANGE:
+			apply_stun(PARRY_STUN_DUR)
 		casting = null
 		lunging = false
 		FX.parry_flash(get_parent(), target.global_position)
@@ -772,6 +947,8 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		if amount <= 0:
 			FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0))
 			ult_active_time_left = ULT_ACTIVE_WINDOW
+			hitstop_time_left = max(hitstop_time_left, HITSTOP_ATTACKER_DUR)
+			target.hitstop_time_left = max(target.hitstop_time_left, HITSTOP_DEFENDER_DUR)
 			return true
 	if target.casting != null:
 		target.casting = null
@@ -784,33 +961,84 @@ func deal_damage(target: Entity, amount: float) -> bool:
 		var shared = amount * target.bond_split_pct
 		amount -= shared
 		shared *= (1.0 - partner.dmg_reduction)
+		# Rounded to a whole number right before it touches hp — percentage
+		# reductions (dmg_reduction, outgoing_dmg_mult, bond splits) almost
+		# always produce a fractional amount, which otherwise leaves HP
+		# sitting at an awkward fraction forever: an exactly-lethal hit would
+		# never quite show 0, since it'd land on some tiny fractional
+		# remainder instead of landing exactly on empty.
+		shared = round(shared)
 		partner.hp = max(0.0, partner.hp - shared)
 		partner.hit_flash_left = 0.25
 		FX.hit_spark(get_parent(), partner.global_position, partner.base_color)
 		if partner.hp <= 0 and partner.alive:
 			partner.alive = false
+			# _physics_process() early-returns for good once alive is false,
+			# so it never reaches its own queue_redraw() calls again — without
+			# forcing one final redraw here, _draw()'s last output (the
+			# overhead HP bar/cast bar/status rings from the frame right
+			# before death) stays frozen on screen forever, even though the
+			# 3D model itself (a separate, still-running system) correctly
+			# fades out. This one extra call lets _draw() run once more with
+			# alive=false, which is what makes it draw nothing instead.
+			partner.queue_redraw()
 			FX.death_shatter(get_parent(), partner.global_position, partner.base_color)
 			partner.died.emit()
+	# Same rounding as the bond-split above, same reason.
+	amount = round(amount)
 	target.hp = max(0.0, target.hp - amount)
 	target.hit_flash_left = 0.25
 	FX.hit_spark(get_parent(), target.global_position, Color(0.4, 0.8, 1.0) if barrier_hit else target.base_color)
 	if target.hp <= 0 and target.alive:
 		target.alive = false
+		# See the identical comment on the bond-partner death branch above.
+		target.queue_redraw()
 		FX.death_shatter(get_parent(), target.global_position, target.base_color)
 		target.died.emit()
 	ult_active_time_left = ULT_ACTIVE_WINDOW
+	hitstop_time_left = max(hitstop_time_left, HITSTOP_ATTACKER_DUR)
+	target.hitstop_time_left = max(target.hitstop_time_left, HITSTOP_DEFENDER_DUR)
 	return true
 
 # Symmetric to deal_damage() — heals `target` and, like landing a hit,
 # refreshes the CASTER's (self's) ult-charge active window. Used by
-# Cleric's kit; any future healer-flavored ability should route through
-# this instead of poking target.hp directly, for the same reason attacks
-# route through deal_damage() instead of poking target.hp directly.
+# Cleric's kit and health-pack pickups; any future healer-flavored ability
+# should route through this instead of poking target.hp directly, for the
+# same reason attacks route through deal_damage() instead of poking
+# target.hp directly — it's also the single choke point the anti-stall
+# heal_dampen_mult() and Grievous-Wounds-style healing_reduction_mult()
+# below need to apply to every healing source, and they stack
+# multiplicatively.
 func heal(target: Entity, amount: float) -> void:
 	if target == null or not is_instance_valid(target) or not target.alive:
 		return
-	target.hp = min(target.max_hp, target.hp + amount)
+	# Rounded for the same reason deal_damage() rounds its final amount —
+	# heal_dampen_mult()/healing_reduction_mult() are both percentage
+	# multipliers, so without this HP would keep drifting onto fractional
+	# values via healing too, not just damage.
+	var final_amount = round(amount * target.heal_dampen_mult() * target.healing_reduction_mult())
+	target.hp = min(target.max_hp, target.hp + final_amount)
 	ult_active_time_left = ULT_ACTIVE_WINDOW
+
+# Anti-stall: once a match has run long, healing gradually loses
+# effectiveness for everyone, so two sustain-heavy fighters (a Cleric
+# mirror especially) can't stalemate forever. No effect for the first
+# HEAL_DAMPEN_START_TIME, then steps down HEAL_DAMPEN_PER_TICK every
+# HEAL_DAMPEN_TICK_INTERVAL until healing is fully negated. Static so the
+# HUD indicator (Main.gd) can read the same curve off its own match clock
+# without needing a live entity reference.
+const HEAL_DAMPEN_START_TIME    := 120.0
+const HEAL_DAMPEN_TICK_INTERVAL := 1.0
+const HEAL_DAMPEN_PER_TICK      := 0.01
+static func compute_heal_dampen_mult(elapsed: float) -> float:
+	var seconds_past = elapsed - HEAL_DAMPEN_START_TIME
+	if seconds_past <= 0.0:
+		return 1.0
+	var reduction = min(1.0, floor(seconds_past / HEAL_DAMPEN_TICK_INTERVAL) * HEAL_DAMPEN_PER_TICK)
+	return 1.0 - reduction
+
+func heal_dampen_mult() -> float:
+	return Entity.compute_heal_dampen_mult(match_elapsed_time)
 
 func try_auto(opp: Entity):
 	if not can_start_ability() or cd_auto > 0 or opp == null:
@@ -818,8 +1046,12 @@ func try_auto(opp: Entity):
 	cd_auto = AUTO_CD
 	facing = get_aim_dir(opp)
 	start_swing(70.0, 0.12)
-	if global_position.distance_to(opp.global_position) <= AUTO_RANGE:
-		if deal_damage(opp, AUTO_DMG):
+	# A stationary swing hits whoever's actually in front of you within
+	# range, not necessarily `opp` (the globally-nearest enemy) — lets aim
+	# choose the target in a team fight instead of it being automatic.
+	var target = get_facing_target(AUTO_RANGE)
+	if target != null:
+		if deal_damage(target, AUTO_DMG):
 			add_combo_stack()
 
 func try_a1(opp: Entity):
@@ -830,13 +1062,16 @@ func try_a1(opp: Entity):
 func resolve_a1(opp: Entity):
 	facing = get_aim_dir(opp)
 	start_swing(110.0, 0.2)
-	if global_position.distance_to(opp.global_position) <= A1_RANGE:
+	var target = get_facing_target(A1_RANGE)
+	if target != null:
 		var dmg = round(A1_DMG * combo_mult())
-		if deal_damage(opp, dmg):
-			opp.apply_slow(A1_SLOW_DUR, A1_SLOW_PCT)
+		if deal_damage(target, dmg):
+			target.apply_slow(A1_SLOW_DUR, A1_SLOW_PCT)
+			target.apply_healing_reduction(A1_HEAL_REDUCE_DUR, A1_HEAL_REDUCE_PCT)
 			add_combo_stack()
 	cd_a1 = A1_CD
 	recovering = {"type": "a1", "time_left": A1_RECOVERY, "total": A1_RECOVERY}
+	commit_ability()
 
 func try_a2(opp: Entity):
 	if not can_start_ability() or cd_a2 > 0 or opp == null:
@@ -862,10 +1097,12 @@ func resolve_lunge_strike(opp: Entity):
 		if deal_damage(opp, dmg):
 			landed = true
 			if opp.alive:
-				opp.apply_stun(0.5)
+				opp.apply_stun(A2_STUN_DUR)
 			add_combo_stack()
+			lunge_atkspd_time_left = LUNGE_ATKSPD_DUR
 	var recovery_time = A2_RECOVERY if landed else A2_MISS_RECOVERY
 	recovering = {"type": "a2", "time_left": recovery_time, "total": recovery_time}
+	commit_ability()
 
 func try_ult(opp: Entity):
 	if not can_start_ability() or ult_charge < ULT_CHARGE_MAX or opp == null:
@@ -873,6 +1110,7 @@ func try_ult(opp: Entity):
 	ult_charge = 0.0
 	bladestorm_time_left = BLADESTORM_DUR
 	bladestorm_hit_timer = 0.0
+	commit_ability()
 
 func resolve_ult(_opp: Entity):
 	pass
@@ -888,6 +1126,7 @@ func try_shift(_opp: Entity):
 	combo_time_left = 0.0
 	cd_shift = IRON_RESOLVE_CD
 	FX.impact_burst(get_parent(), global_position, Color(0.55, 0.75, 1.0), 14, 150.0)
+	commit_ability()
 
 func try_dash(dir: Vector2):
 	if not can_dash(dir):
@@ -916,13 +1155,14 @@ func try_a3(opp: Entity):
 func resolve_a3(opp: Entity):
 	facing = get_aim_dir(opp)
 	var missing_ratio = 1.0 - (opp.hp / opp.max_hp) if opp != null and opp.alive else 0.0
-	var dmg = round(SWORD_THROW_DMG_BASE + missing_ratio * SWORD_THROW_DMG_MISSING_BONUS)
+	var dmg = round((SWORD_THROW_DMG_BASE + missing_ratio * SWORD_THROW_DMG_MISSING_BONUS) * combo_mult())
 	_fire(facing, SWORD_THROW_SPEED, SWORD_THROW_RADIUS, dmg, opp,
 		Color(0.8, 0.85, 0.95), 10.0, SWORD_THROW_SLOW_DUR, SWORD_THROW_SLOW_PCT)
 	cd_a3 = SWORD_THROW_CD
 	recovering = {"type": "a3", "time_left": SWORD_THROW_RECOVERY, "total": SWORD_THROW_RECOVERY}
+	commit_ability()
 
-func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false, kind: String = "orb", is_heal: bool = false):
+func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false, kind: String = "orb", is_heal: bool = false, heal_enemy_dmg: float = 0.0, heal_enemy_slow_dur: float = 0.0, heal_enemy_slow_pct: float = 0.5):
 	var proj = load("res://scripts/Projectile.gd").new()
 	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
 	proj.velocity = dir * speed
@@ -938,6 +1178,9 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	proj.pierce = pierce
 	proj.visual_kind = kind
 	proj.is_heal = is_heal
+	proj.enemy_dmg = heal_enemy_dmg
+	proj.enemy_slow_dur = heal_enemy_slow_dur
+	proj.enemy_slow_pct = heal_enemy_slow_pct
 	proj.obstacle_rects = obstacle_rects
 	projectile_spawned.emit(proj)
 
@@ -957,10 +1200,11 @@ func _place_trap(pos: Vector2, radius: float, arm_delay: float, lifetime: float,
 # that point on. Fixes the class of bug where a ground effect visually drags
 # along behind whoever cast it because it was rendered relative to their
 # current position instead of where it was actually placed.
-func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color):
+func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color, anim: String = "pulse", particles: String = "rise"):
 	area_fx_spawned.emit({
 		"shape": "circle", "pos": pos, "facing": Vector2.RIGHT,
-		"size": Vector2(radius, 0.0), "duration": duration, "color": color,
+		"size": Vector2(radius, 0.0), "duration": duration, "color": color, "anim": anim,
+		"particles": particles,
 	})
 
 # A brief rectangular cast flash (e.g. Purify) so a skill-shot's true hit
@@ -1215,6 +1459,13 @@ func _draw_duelist(now: int, accent: Color):
 		draw_line(guard + sperp * 11, guard - sperp * 11, Color(0.75, 0.78, 1.0, alpha), 4.0)
 
 # ---- Drawing ----
+# Shared scaffolding for every class's _draw(): the 3D-view early-return
+# (only the overhead HUD renders there — character art comes from
+# EntityView3D instead), trail/death handling, and the knockup transform
+# were identical across all five classes and used to be copied into each of
+# their _draw() overrides. Subclasses now only implement _draw_body() (the
+# actual plain-2D character art, plus any per-class overlay effects that
+# still use that path) instead of repeating all of this scaffolding.
 func _draw():
 	var now = Time.get_ticks_msec()
 
@@ -1222,11 +1473,11 @@ func _draw():
 		if not alive:
 			return
 		draw_set_transform(_get_hud_screen_correction())
+		_draw_3d_extras(now)
 		_draw_hud(now, get_status_accent(base_color))
 		draw_set_transform(Vector2.ZERO)
 		return
 
-	# trail
 	for p in trail:
 		var age = (now - p["time"]) / 200.0
 		if age < 1.0:
@@ -1243,6 +1494,26 @@ func _draw():
 		draw_circle(Vector2(0, RADIUS - 4), 16.0 - abs(ku_y) * 0.06, Color(0, 0, 0, 0.35))
 		draw_set_transform(Vector2(0, ku_y))
 
+	_draw_body(now, accent)
+
+	if ku_y != 0.0:
+		draw_set_transform(Vector2.ZERO)
+
+	_draw_hud(now, accent)
+
+# Rare per-class hook for a self-centered 2D overlay that still needs to
+# render even in 3D-view mode (currently only Ranger's Camouflage ring).
+# Self-centered-only: anything not drawn at local (0,0) must NOT go here,
+# since the HUD screen-space correction this runs under is only a valid
+# approximation at THIS entity's own position (see
+# _get_hud_screen_correction()) — that's the exact bug Consecrate/Rain of
+# Arrows had before their telegraphs moved to real 3D world-space effects.
+func _draw_3d_extras(_now: int):
+	pass
+
+# Default (Duelist) body: procedural character art + Bladestorm's orbiting
+# ghost-sword ultimate visual. Overridden per-class for the other four.
+func _draw_body(now: int, accent: Color):
 	_draw_duelist(now, accent)
 
 	# Bladestorm — 3 orbiting ghost swords
@@ -1263,8 +1534,3 @@ func _draw():
 		var pulse = 0.4 + 0.35 * sin(t * 6.0)
 		draw_arc(Vector2.ZERO, RADIUS + SWORD_LEN * 0.9, 0, TAU, 64,
 			Color(1.0, 0.8, 0.15, pct * pulse * 0.45), 3.0)
-
-	if ku_y != 0.0:
-		draw_set_transform(Vector2.ZERO)
-
-	_draw_hud(now, accent)

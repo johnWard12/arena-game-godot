@@ -5,12 +5,14 @@ class_name RangerEntity
 # via the highest move speed in the roster, a snare that punishes
 # predictable pathing, a recoiling peel shot, and a stealth escape.
 
-const RANGER_MAX_HP    = 130.0
-const RANGER_MAX_SPEED = 465.0
+const RANGER_MAX_HP    = 176.0
+# Trimmed slightly from 465 — still the fastest kit in the roster, just a
+# little less untouchable while also doing less damage (see below).
+const RANGER_MAX_SPEED = 445.0
 
 # LMB — Quick Shot: fast low-damage poke, builds Momentum on hit
 const QUICKSHOT_CD     = 0.5
-const QUICKSHOT_DMG    = 8.0
+const QUICKSHOT_DMG    = 7.5
 const QUICKSHOT_SPEED  = 1500.0
 const QUICKSHOT_RADIUS = 18.0
 
@@ -20,21 +22,25 @@ const PIERCE_RECOVERY  = 0.18
 const PIERCE_CD        = 4.0
 const PIERCE_SPEED     = 1700.0
 const PIERCE_RADIUS    = 18.0
-const PIERCE_DMG       = 24.0
+const PIERCE_DMG       = 22.4
 const PIERCE_SLOW_DUR  = 1.0
 const PIERCE_SLOW_PCT  = 0.20
 
-# Q — Snare Trap: thrown trap, arms after a delay, roots on trigger
+# Q — Snare Trap: thrown trap, arms after a delay, roots on trigger.
+# Sized way up (2.5x radius) so it threatens real map space instead of a
+# single tile, but with a shorter arm delay than before removed — you can no
+# longer drop it right on top of someone and get an instant snare; they have
+# a beat to see and dodge it first.
 const SNARE_CD          = 7.0
 const SNARE_PLACE_DIST  = 110.0
-const SNARE_RADIUS      = 30.0
-const SNARE_ARM_DELAY   = 0.6
+const SNARE_RADIUS      = 75.0
+const SNARE_ARM_DELAY   = 0.5
 const SNARE_LIFETIME    = 8.0
 const SNARE_ROOT_DUR    = 1.2
 
 # F — Disengage Shot: fire forward, recoil backward — peel tool
 const DISENGAGE_CD     = 6.0
-const DISENGAGE_DMG    = 16.0
+const DISENGAGE_DMG    = 15.0
 const DISENGAGE_SPEED  = 1400.0
 const DISENGAGE_RADIUS = 16.0
 const DISENGAGE_RECOIL = 1400.0
@@ -49,7 +55,7 @@ const RAIN_CAST          = 0.3
 const RAIN_RECOVERY      = 0.3
 const RAIN_DUR           = 2.0
 const RAIN_TICK_INTERVAL = 0.4
-const RAIN_TICK_DMG      = 14.0
+const RAIN_TICK_DMG      = 13.1
 const RAIN_RADIUS        = 130.0
 
 # Passive — Momentum: consecutive landed Quick Shots build stacking move
@@ -131,6 +137,7 @@ func resolve_a1(opp: Entity):
 		PIERCE_SLOW_DUR, PIERCE_SLOW_PCT, false, true, "arrow")
 	cd_a1 = PIERCE_CD
 	recovering = {"type": "a1", "time_left": PIERCE_RECOVERY, "total": PIERCE_RECOVERY}
+	commit_ability()
 
 func try_a2(opp: Entity):
 	if not can_start_ability() or cd_a2 > 0 or opp == null:
@@ -139,6 +146,7 @@ func try_a2(opp: Entity):
 	var pos = global_position + facing * SNARE_PLACE_DIST
 	_place_trap(pos, SNARE_RADIUS, SNARE_ARM_DELAY, SNARE_LIFETIME, SNARE_ROOT_DUR, Color(0.4, 0.9, 0.3))
 	cd_a2 = SNARE_CD
+	commit_ability()
 
 func resolve_a2(_opp: Entity):
 	pass
@@ -160,6 +168,7 @@ func try_a3(opp: Entity):
 	lunge_reach = 0.0
 	lunge_opponent = null
 	cd_a3 = DISENGAGE_CD
+	commit_ability()
 
 # The recoil already did its job via try_a3's forced lunge; the ranged
 # damage already landed via the projectile fired there too, so arriving
@@ -175,6 +184,7 @@ func try_shift(_opp: Entity):
 		return
 	invisible_time_left = CAMO_DUR
 	cd_shift = CAMO_CD
+	commit_ability()
 
 func get_shift_active() -> bool:
 	return invisible_time_left > 0 or barrier_time_left > 0
@@ -190,39 +200,25 @@ func resolve_ult(opp: Entity):
 	rain_time_left = RAIN_DUR
 	rain_tick_timer = 0.0
 	rain_fx_left = RAIN_DUR + 0.3
+	_spawn_zone_fx(rain_pos, RAIN_RADIUS, RAIN_DUR, Color(0.5, 0.9, 0.3), "pulse", "fall")
 	recovering = {"type": "ult", "time_left": RAIN_RECOVERY, "total": RAIN_RECOVERY}
+	commit_ability()
 
 # ---- Drawing ----
-func _draw():
-	var now = Time.get_ticks_msec()
+# Rain's zone telegraph is NOT drawn here in 3D-view mode — it used to be,
+# via to_local(rain_pos) under the HUD's screen-space correction, but that
+# correction is only a valid approximation at THIS entity's own position.
+# Since rain_pos is a fixed point the Ranger can run away from, the old
+# telegraph visibly dragged along behind them instead of staying put (the
+# same bug Consecrate had). It's now a proper world-space AreaFxView3D
+# effect spawned once from resolve_ult(). Camouflage's ring stays here
+# since it's self-centered and immune to that bug.
+func _draw_3d_extras(now: int):
+	_draw_camo_ring(now)
 
-	if use_3d_view:
-		if not alive:
-			return
-		var view_accent = get_status_accent(base_color)
-		draw_set_transform(_get_hud_screen_correction())
-		_draw_rain_zone()
-		_draw_camo_ring(now)
-		_draw_hud(now, view_accent)
-		draw_set_transform(Vector2.ZERO)
-		return
-
-	for p in trail:
-		var age = (now - p["time"]) / 200.0
-		if age < 1.0:
-			draw_circle(to_local(p["pos"]), RADIUS * 0.85,
-				Color(base_color.r, base_color.g, base_color.b, (1.0 - age) * 0.25))
-
-	if not alive:
-		draw_circle(Vector2.ZERO, RADIUS + 2, Color(0.25, 0.25, 0.28, 0.5))
-		return
-
-	var accent = get_status_accent(base_color)
-	if invisible_time_left > 0:
-		accent = Color(accent.r, accent.g, accent.b, 0.35)
+func _draw_body(now: int, accent: Color):
 	_draw_rain_zone()
 	_draw_camo_ring(now)
-	_draw_hud(now, accent)
 
 # Camouflage — soft green shimmer while cloaked
 func _draw_camo_ring(now: int):

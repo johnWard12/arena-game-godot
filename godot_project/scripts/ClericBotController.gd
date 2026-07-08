@@ -1,6 +1,8 @@
 extends "res://scripts/ClericEntity.gd"
 class_name ClericBotController
 
+const BotSteering = preload("res://scripts/BotSteering.gd")
+
 const PREFERRED_RANGE = 300.0
 const FLEE_RANGE = 140.0
 
@@ -52,6 +54,21 @@ func ai_decide():
 		ai_target = Vector2.ZERO
 		return
 
+	# Offensive dash, healer-flavored two ways: close in on a critically hurt
+	# ally to actually reach them with a heal in time (dash as a rescue tool,
+	# not just an escape), or — failing that — close in on a fleeing,
+	# near-dead enemy to secure the kill with Smite.
+	var hurt_ally = get_lowest_hp_ally(BOND_TARGET_RADIUS)
+	if dash_charges > 0 and not dashing and casting == null:
+		if hurt_ally != self and hurt_ally.hp <= hurt_ally.max_hp * 0.3:
+			var ally_d = global_position.distance_to(hurt_ally.global_position)
+			if ally_d > 200 and ally_d < 550 and randf() < 0.7:
+				try_dash((hurt_ally.global_position - global_position).normalized())
+				return
+		elif opponent.hp <= opponent.max_hp * 0.25 and d > 200 and d < 550 and randf() < 0.6:
+			try_dash((opponent.global_position - global_position).normalized())
+			return
+
 	# Guardian's Bond — usable even while stunned, so lean on it hard when
 	# either the Cleric or a nearby ally is in real danger.
 	var lowest = get_lowest_hp_ally(BOND_TARGET_RADIUS)
@@ -99,13 +116,4 @@ func ai_decide():
 		var perp = Vector2(-to_opp.y, to_opp.x) * (1 if randf() < 0.5 else -1)
 		ai_target = perp
 
-	# wall repulsion — push away from arena edges so bot doesn't get cornered
-	var wall_margin = 120.0
-	var repulse := Vector2.ZERO
-	var ar = arena_rect
-	repulse.x += max(0.0, wall_margin - (global_position.x - ar.position.x)) / wall_margin
-	repulse.x -= max(0.0, wall_margin - (ar.position.x + ar.size.x - global_position.x)) / wall_margin
-	repulse.y += max(0.0, wall_margin - (global_position.y - ar.position.y)) / wall_margin
-	repulse.y -= max(0.0, wall_margin - (ar.position.y + ar.size.y - global_position.y)) / wall_margin
-	if repulse.length() > 0.01:
-		ai_target = (ai_target + repulse * 2.0).normalized()
+	ai_target = BotSteering.apply_wall_repulsion(global_position, arena_rect, ai_target)

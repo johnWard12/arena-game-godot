@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git config *)",
+      "Bash(git push *)",
+      "Bash(gh auth *)",
+      "PowerShell(gh auth status 2>&1)",
+      "PowerShell(Get-Command gh -ErrorAction SilentlyContinue; \\(Get-Command git\\).Source)",
+      "PowerShell(Get-ChildItem \"C:\\\\Program Files\\\\GitHub CLI\\\\\" -ErrorAction SilentlyContinue; Get-ChildItem \"$env:LOCALAPPDATA\\\\Programs\\\\GitHub CLI\\\\\" -ErrorAction SilentlyContinue; where.exe gh 2>$null)",
+      "Bash(gh pr *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(where godot *)",
+      "Bash(where Godot)",
+      "Read(//c/Program Files/**)",
+      "Bash(\"C:\\\\Users\\\\raide\\\\Desktop\\\\godot.exe\" --headless --path godot_project res://scenes/Simulate.tscn -- --matches=5)",
+      "Bash(timeout 15 \"C:\\\\Users\\\\raide\\\\Desktop\\\\godot.exe\" --headless --path godot_project res://scenes/Main.tscn --quit-after 60)",
+      "Bash(timeout 15 \"C:\\\\Users\\\\raide\\\\Desktop\\\\godot.exe\" --headless --path godot_project res://scenes/CharSelect.tscn --quit-after 60)",
+      "Bash(\"C:\\\\Users\\\\raide\\\\Desktop\\\\godot.exe\" --headless --path godot_project res://scenes/Simulate.tscn -- --matches=3)",
+      "Bash(timeout 15 \"C:\\\\Users\\\\raide\\\\Desktop\\\\godot.exe\" --headless --path godot_project res://scenes/CharSelect.tscn --quit-after 30)",
+      "Bash(\"C:\\\\Users\\\\raide\\\\Desktop\\\\godot.exe\" --headless --path godot_project res://scenes/Simulate.tscn -- --matches=2)",
+      "Bash(timeout 15 \"C:\\\\Users\\\\raide\\\\Desktop\\\\godot.exe\" --headless --path godot_project res://scenes/Main.tscn --quit-after 30)",
+      "Bash(\"C:\\\\Users\\\\raide\\\\Desktop\\\\godot.exe\" --headless --path godot_project --import)"
+    ]
+  }
+}

@@ -16,22 +16,35 @@ var _size := Vector2.ZERO   # circle: x = radius (sim units). rect: x = length, 
 var _duration := 1.0
 var _color := Color.WHITE
 var _age := 0.0
+# "pulse" (default): static radius, brightness pulse — a lingering zone.
+# "expand": radius grows from a small point to full size — a shockwave burst.
+var _anim_style := "pulse"
+# "rise" (default): small motes drifting up off the ground — Consecrate.
+# "fall": streaks raining down from above into the zone — Rain of Arrows,
+# so it visibly reads as an active damage field instead of just a glow.
+var _particle_style := "rise"
 
 var _disc: MeshInstance3D
 var _disc_mat: StandardMaterial3D
+var _disc_mesh: CylinderMesh
 var _ring: MeshInstance3D
 var _ring_mat: StandardMaterial3D
+var _torus: TorusMesh
 var _ring2: MeshInstance3D
 var _ring2_mat: StandardMaterial3D
+var _torus2: TorusMesh
 var _particles: GPUParticles3D
 var _border: Array[MeshInstance3D] = []
 var _border_mat: StandardMaterial3D
+var _target_r := 0.0
 
 func setup(fx: Dictionary):
 	_shape = fx["shape"]
 	_size = fx["size"]
 	_duration = fx["duration"]
 	_color = fx["color"]
+	_anim_style = fx.get("anim", "pulse")
+	_particle_style = fx.get("particles", "rise")
 	position = CoordUtil.to_world(fx["pos"], 0.03)
 
 	var facing: Vector2 = fx["facing"]
@@ -55,23 +68,24 @@ func _make_mat(alpha: float) -> StandardMaterial3D:
 
 func _build_circle():
 	var r = _size.x / CoordUtil.SIM_SCALE
+	_target_r = r
 
 	_disc = MeshInstance3D.new()
-	var disc_mesh := CylinderMesh.new()
-	disc_mesh.top_radius = r
-	disc_mesh.bottom_radius = r
-	disc_mesh.height = 0.02
-	_disc.mesh = disc_mesh
+	_disc_mesh = CylinderMesh.new()
+	_disc_mesh.top_radius = r
+	_disc_mesh.bottom_radius = r
+	_disc_mesh.height = 0.02
+	_disc.mesh = _disc_mesh
 	_disc_mat = _make_mat(0.12)
 	_disc_mat.emission_energy_multiplier = 0.5
 	_disc.material_override = _disc_mat
 	add_child(_disc)
 
 	_ring = MeshInstance3D.new()
-	var torus := TorusMesh.new()
-	torus.inner_radius = r * 0.93
-	torus.outer_radius = r
-	_ring.mesh = torus
+	_torus = TorusMesh.new()
+	_torus.inner_radius = r * 0.93
+	_torus.outer_radius = r
+	_ring.mesh = _torus
 	_ring.position.y = 0.03
 	_ring_mat = _make_mat(0.8)
 	_ring_mat.emission_energy_multiplier = 1.6
@@ -79,15 +93,21 @@ func _build_circle():
 	add_child(_ring)
 
 	_ring2 = MeshInstance3D.new()
-	var torus2 := TorusMesh.new()
-	torus2.inner_radius = r * 0.5
-	torus2.outer_radius = r * 0.56
-	_ring2.mesh = torus2
+	_torus2 = TorusMesh.new()
+	_torus2.inner_radius = r * 0.5
+	_torus2.outer_radius = r * 0.56
+	_ring2.mesh = _torus2
 	_ring2.position.y = 0.03
 	_ring2_mat = _make_mat(0.5)
 	_ring2.material_override = _ring2_mat
 	add_child(_ring2)
 
+	if _particle_style == "fall":
+		_build_falling_particles(r)
+	else:
+		_build_rising_particles(r)
+
+func _build_rising_particles(r: float):
 	_particles = GPUParticles3D.new()
 	_particles.position = Vector3(0, 0.05, 0)
 	_particles.amount = 20
@@ -114,6 +134,42 @@ func _build_circle():
 	pmat.emission_enabled = true
 	pmat.emission = _color
 	pmat.emission_energy_multiplier = 2.2
+	quad.material = pmat
+	_particles.draw_pass_1 = quad
+	add_child(_particles)
+
+# Rain of Arrows — thin streaks raining down from above the zone, aligned
+# to their fall direction so they read as arrows/bolts rather than generic
+# floating motes. Spawns across the whole zone footprint continuously for
+# as long as the effect lives.
+func _build_falling_particles(r: float):
+	_particles = GPUParticles3D.new()
+	_particles.position = Vector3(0, 2.4, 0)
+	_particles.amount = 28
+	_particles.lifetime = 0.55
+	_particles.emitting = true
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(r * 0.8, 0.02, r * 0.8)
+	pm.direction = Vector3(0, -1, 0)
+	pm.spread = 4.0
+	pm.initial_velocity_min = 4.0
+	pm.initial_velocity_max = 5.5
+	pm.gravity = Vector3(0, -3.0, 0)
+	pm.scale_min = 1.0
+	pm.scale_max = 1.0
+	pm.color = _color
+	pm.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
+	_particles.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.025, 0.32)
+	var pmat := StandardMaterial3D.new()
+	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	pmat.albedo_color = _color
+	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pmat.emission_enabled = true
+	pmat.emission = _color
+	pmat.emission_energy_multiplier = 2.4
 	quad.material = pmat
 	_particles.draw_pass_1 = quad
 	add_child(_particles)
@@ -166,6 +222,18 @@ func _process(delta):
 		_animate_rect(remain)
 
 func _animate_circle(t: float, remain: float):
+	if _anim_style == "expand":
+		# Shockwave: radius grows from a near-point out to full size with an
+		# ease-out settle, instead of sitting at a fixed size the whole time.
+		var growth = clamp(_age / max(0.05, _duration * 0.55), 0.0, 1.0)
+		growth = 1.0 - pow(1.0 - growth, 2.0)
+		var cur_r = lerp(_target_r * 0.12, _target_r, growth)
+		_torus.inner_radius = cur_r * 0.93
+		_torus.outer_radius = cur_r
+		_torus2.inner_radius = cur_r * 0.5
+		_torus2.outer_radius = cur_r * 0.56
+		_disc_mesh.top_radius = cur_r
+		_disc_mesh.bottom_radius = cur_r
 	var pulse = 0.5 + 0.4 * sin(t * 3.0)
 	var fade = 1.0 if remain > 0.4 else remain / 0.4
 	_ring_mat.emission_energy_multiplier = (1.2 + pulse * 1.2) * fade

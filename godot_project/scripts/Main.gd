@@ -18,6 +18,12 @@ var health_packs := []
 var shake_time_left  := 0.0
 var shake_intensity  := 0.0
 
+# Drives the anti-stall healing-dampen HUD indicator. Tracked independently
+# of any single Entity's own match_elapsed_time (which the mechanic itself
+# uses) so the indicator keeps working even if the human player has died in
+# a 2v2/3v3 while the match continues.
+var match_time_elapsed := 0.0
+
 var hp_bars: Array[ProgressBar] = []  # parallel to `fighters`
 var win_label: Label
 var cd_hud: Node2D   # custom-drawn cooldown panel
@@ -26,14 +32,29 @@ var world_3d: Node3D
 var camera3d: Camera3D
 var camera3d_base_pos := Vector3.ZERO
 
-const HEALTH_PACK_HEAL = 28.0
+const HEALTH_PACK_HEAL = 25.0
 const HEALTH_PACK_RADIUS = 44.0
-const HEALTH_PACK_RESPAWN = 12.0
+const HEALTH_PACK_RESPAWN = 15.0
+
+# Team identity color, applied on top of each fighter's own base_color once
+# they're assigned a team_id — the 3D model itself already tells you which
+# CLASS you're looking at (different mesh per class), so repurposing the
+# color layer (ground ring, hit sparks, dash trail, HP bar) for TEAM
+# identity instead means you can tell friend from foe at a glance without
+# losing class readability, and it also fixes mirror matchups (e.g. Duelist
+# vs Duelist) being hard to tell apart since both used to share one color.
+const TEAM_COLORS := {
+	0: Color(0.3, 0.6, 1.0),   # blue — your side
+	1: Color(1.0, 0.3, 0.35),  # red — the enemy side
+}
 
 func _ready():
-	var player_class = get_tree().root.get_meta("player_class", "melee")
-	var bot_class    = get_tree().root.get_meta("bot_class",    "melee")
 	team_size = get_tree().root.get_meta("team_size", 1)
+	# Per-slot comps (set by CharSelect). Fall back to the legacy single-class
+	# meta — repeated across the team — if the arrays aren't present, so an
+	# older entry point or a direct scene launch still works.
+	var player_classes = get_tree().root.get_meta("player_classes", [get_tree().root.get_meta("player_class", "melee")])
+	var bot_classes    = get_tree().root.get_meta("bot_classes",    [get_tree().root.get_meta("bot_class",    "melee")])
 	build_map()
 
 	var spawn_x = _scale_point(Vector2(450.0, 540.0)).x
@@ -42,24 +63,38 @@ func _ready():
 	var enemy_positions  = _team_spawn_positions(team_size, enemy_x)
 
 	for i in team_size:
-		var e = _make_fighter(player_class, i == 0)
+		var e = _make_fighter(_class_for_slot(player_classes, i), i == 0)
 		e.team_id = 0
 		e.global_position = player_positions[i]
+		# _spawn_fighter() calls add_child(), which is what actually fires
+		# this node's _ready() (Node lifecycle, not .new()) — that's where
+		# each class sets its own signature base_color, so the team-color
+		# override has to happen AFTER _spawn_fighter(), not before, or the
+		# class's own _ready() would immediately clobber it.
 		_spawn_fighter(e)
+		e.base_color = TEAM_COLORS[0]
 		if i == 0:
 			player = e
 
 	for i in team_size:
-		var e = _make_fighter(bot_class, false)
+		var e = _make_fighter(_class_for_slot(bot_classes, i), false)
 		e.team_id = 1
 		e.global_position = enemy_positions[i]
 		_spawn_fighter(e)
+		e.base_color = TEAM_COLORS[1]
 
 	_update_targeting()
 
 	build_3d_world()
 	build_ui()
 	queue_redraw()
+
+# Class key for team slot i, tolerant of a classes array shorter than the
+# team size (reuses the last entry) so a mismatch never crashes spawning.
+func _class_for_slot(classes: Array, i: int) -> String:
+	if classes.is_empty():
+		return "melee"
+	return classes[i] if i < classes.size() else classes[classes.size() - 1]
 
 # Team 0 fighters are indices [0, count); team 1 fighters (built from the
 # same helper with a different base x) fill [count, 2*count). Spreads each
@@ -117,19 +152,29 @@ func _spawn_fighter(e: Entity):
 		av.setup(fx)
 	)
 	e.screen_shake.connect(start_shake)
-	e.died.connect(func(): _on_fighter_died(e))
+	# Plain method reference, not a lambda — _on_fighter_died() doesn't need
+	# to know WHICH fighter died (it just rescans `fighters` for the win
+	# check), so there's no reason to capture `e` in a closure at all. That
+	# capture was also almost certainly the source of the "Lambda capture at
+	# index 0 was freed" warnings in 3v3 (an AoE killing multiple fighters
+	# in the same frame emits several `died` signals in one call stack).
+	e.died.connect(_on_fighter_died)
 	fighters.append(e)
 
-# Keeps every living fighter's `opponent` pointed at their nearest living
-# enemy. Called once at spawn and every frame thereafter (_process), so a
-# fighter whose target dies immediately reacquires instead of idling.
-func _update_targeting():
+# Keeps every living fighter's `opponent` pointed at a sensible target.
+# Called once at spawn and every frame thereafter (_process, which passes
+# delta), so a fighter whose target dies immediately reacquires instead of
+# idling. Players just track their nearest enemy (they aim manually and are
+# expected to see through Camouflage); bots use focus-fire target selection
+# so a team trains onto the enemy healer with occasional kill-swaps.
+func _update_targeting(delta: float = 0.0):
 	for f in fighters:
 		if is_instance_valid(f) and f.alive:
-			# A human player is expected to manually track a camouflaged
-			# enemy; only AI-controlled fighters actually lose the trail.
-			f.opponent = f.get_nearest_enemy(fighters, not f.is_player)
 			f.all_fighters = fighters
+			if f.is_player:
+				f.opponent = f.get_nearest_enemy(fighters, false)
+			else:
+				f.opponent = f.pick_ai_target(fighters, delta)
 
 func build_3d_world():
 	world_3d = Node3D.new()
@@ -281,6 +326,12 @@ func build_ui():
 		bar.position = Vector2(x, y)
 		bar.size = Vector2(220, 22)
 		bar.show_percentage = false
+		# Tint just the fill (not the whole bar via modulate, which would also
+		# wash out the dark background track) so team color reads clearly
+		# against a normal-looking HP bar.
+		var fill_style := StyleBoxFlat.new()
+		fill_style.bg_color = TEAM_COLORS[f.team_id]
+		bar.add_theme_stylebox_override("fill", fill_style)
 		canvas.add_child(bar)
 		hp_bars.append(bar)
 
@@ -372,8 +423,9 @@ func start_shake(intensity: float, duration: float):
 	shake_time_left = max(shake_time_left, duration)
 
 func _process(delta):
+	match_time_elapsed += delta
 	update_health_packs(delta)
-	_update_targeting()
+	_update_targeting(delta)
 	for i in fighters.size():
 		if is_instance_valid(fighters[i]):
 			hp_bars[i].value = fighters[i].hp
@@ -407,14 +459,14 @@ func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 		return false
 	if entity.global_position.distance_to(pack["pos"]) > HEALTH_PACK_RADIUS + Entity.RADIUS:
 		return false
-	entity.hp = min(entity.max_hp, entity.hp + HEALTH_PACK_HEAL)
+	entity.heal(entity, HEALTH_PACK_HEAL)
 	entity.hit_flash_left = 0.18
 	FX.heal_sparkle(self, entity.global_position)
 	pack["active"] = false
 	pack["respawn_left"] = HEALTH_PACK_RESPAWN
 	return true
 
-func _on_fighter_died(_who: Entity):
+func _on_fighter_died():
 	# Re-target immediately so nobody spends a frame aiming at a corpse.
 	_update_targeting()
 
@@ -444,9 +496,51 @@ func _unhandled_input(event):
 
 func _draw():
 	# Arena is rendered by Arena3D (see build_3d_world()); this remaining
-	# 2D draw pass only handles the cooldown HUD overlay.
+	# 2D draw pass only handles HUD overlays.
 	if is_instance_valid(player) and player.alive:
 		_draw_cooldown_hud()
+	_draw_heal_dampen_indicator()
+
+# Anti-stall healing dampening (see Entity.heal_dampen_mult()) is invisible
+# otherwise — a "no healing" icon (a plus with a slash through it) plus the
+# live percentage, both fading in in intensity as the reduction climbs.
+# Reads match_time_elapsed rather than any one Entity's own copy so it stays
+# correct even if the human player has died but the match continues.
+func _draw_heal_dampen_indicator():
+	var dampen_pct = 1.0 - Entity.compute_heal_dampen_mult(match_time_elapsed)
+	if dampen_pct <= 0.0:
+		return
+
+	var font = ThemeDB.fallback_font
+	var cx = 1860.0
+	var cy = 210.0
+	var r  = 18.0
+	var alpha = 0.55 + 0.45 * dampen_pct
+	var col = Color(1.0, 0.15, 0.15, alpha)
+
+	# dark backdrop so the icon reads clearly against a bright 3D background
+	draw_circle(Vector2(cx, cy), r * 1.7, Color(0.05, 0.05, 0.07, 0.45))
+
+	# the "+" (heal icon)
+	var bar_len = r * 1.15
+	var bar_w   = r * 0.4
+	draw_rect(Rect2(cx - bar_w * 0.5, cy - bar_len * 0.5, bar_w, bar_len), col)
+	draw_rect(Rect2(cx - bar_len * 0.5, cy - bar_w * 0.5, bar_len, bar_w), col)
+
+	# diagonal slash through it — a dark outline drawn first so the colored
+	# line on top reads clearly against the plus behind it
+	var slash_r = r * 1.3
+	var d = Vector2(cos(-PI * 0.25), sin(-PI * 0.25)) * slash_r
+	var p0 = Vector2(cx, cy) - d
+	var p1 = Vector2(cx, cy) + d
+	draw_line(p0, p1, Color(0.05, 0.05, 0.07, alpha * 0.8), 6.5, true)
+	draw_line(p0, p1, col, 3.5, true)
+
+	# live percentage
+	var pct_str = "-%d%% HEALING" % [int(round(dampen_pct * 100.0))]
+	var sz = font.get_string_size(pct_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+	draw_string(font, Vector2(cx - sz * 0.5, cy + r * 1.7 + 16), pct_str,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col)
 
 func _draw_cooldown_hud():
 	var font    = ThemeDB.fallback_font

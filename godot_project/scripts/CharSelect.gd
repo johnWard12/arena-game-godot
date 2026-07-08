@@ -18,16 +18,21 @@ const MAX_SIDE_WIDTH := 900.0
 var player_cards_x: Array = []
 var bot_cards_x: Array = []
 
-# 0=Duelist 1=Mage 2=Bruiser; default: player=Duelist, bot=Mage
-var player_sel := 0
-var bot_sel    := 1
 var hovered    := Vector2i(-1, -1)  # x=side (0=player,1=bot), y=card idx
 
-# Team size (1v1/2v2/3v3). The chosen class fills every slot on a side for
-# now — teammates/enemies beyond the human player are AI-controlled copies
-# of that same class. A per-slot class picker is a natural follow-up.
+# Team size (1v1/2v2/3v3). Each side now picks a class PER SLOT so 2v2/3v3
+# can field mixed comps (a Cleric behind two bruisers, etc.), not just N
+# copies of one class. player_slots[i]/bot_slots[i] are class indices into
+# CLASSES; only the first `team_size` entries are used. Clicking a class
+# card fills the currently-active slot and advances to the next, so you can
+# fill a whole team by clicking classes left-to-right.
 const TEAM_SIZES = [1, 2, 3]
 var team_size := 1
+
+var player_slots := [0, 4, 2]  # Duelist, Cleric, Bruiser
+var bot_slots    := [1, 3, 4]  # Mage, Ranger, Cleric
+var player_active_slot := 0
+var bot_active_slot    := 0
 
 const MELEE_COLOR  = Color(0.37, 0.88, 0.75)
 const RANGED_COLOR = Color(0.72, 0.4,  1.0)
@@ -41,23 +46,23 @@ const CLASSES = [
 		"label": "DUELIST",
 		"color": MELEE_COLOR,
 		"key":   "melee",
-		"hp":    "HP  150",
-		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "IronResolve Shift", "Bladestorm R"],
+		"hp":    "HP  203",
+		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Iron Resolve Shift", "Bladestorm R"],
 		"ability_descs": [
-			"4 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
-			"12 dmg stab. Slows 30% for 2s. 1.8s cooldown, 145 range, 0.09s wind-up.",
-			"Dash up to 270, strike for 20.4 dmg and stun 0.5s. 6.5s cooldown, 150 range.",
-			"6 dmg (up to 14 vs a low-HP target). Slows 30% for 2s. 4s cooldown.",
-			"Converts current combo stacks into damage reduction (10% per stack, up to 30%) for 2s, consuming them. 7s cooldown.",
-			"Spin 1.5s, hitting foes within 170 range for 14 dmg every 0.3s (up to 5 hits, 70 total). Slow-immune while active. Builds on a 14s charge meter.",
+			"7.5 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
+			"17.25 dmg stab. Slows 30% for 2s and reduces their healing received 25% for 3s. 2.5s cooldown, 145 range, 0.09s wind-up.",
+			"Dash up to 270, strike for 29.3 dmg and stun 0.75s. Landing it grants 30% attack speed for 2s. 6.5s cooldown, 150 range.",
+			"9.5 dmg (up to 22.15 vs a low-HP target), boosted up to 48% more by combo stacks. Slows 30% for 2s. 4s cooldown.",
+			"Converts current combo stacks into damage reduction (10% per stack, up to 30%) for 3s, consuming them. 9s cooldown.",
+			"Spin 1.5s, hitting foes within 170 range for 17.1 dmg every 0.3s (up to 5 hits, 85.5 total). Slow-immune while active. Builds on a 14s charge meter.",
 		]
 	},
 	{
 		"label": "MAGE",
 		"color": RANGED_COLOR,
 		"key":   "ranged",
-		"hp":    "HP  120",
-		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "ArcaneFan  F", "Barrier    Shift", "VoidColl   R"],
+		"hp":    "HP  162",
+		"lines": ["Ranged burst mage.", "Kite and punish.", "", "Auto Shot  LMB", "Bolt       E", "Burst      Q", "Arcane Fan F", "Barrier    Shift", "Void Collapse R"],
 		"ability_descs": [
 			"6.75 dmg bolt. 0.75s cooldown. Basic shot, hold to auto-repeat.",
 			"22 dmg piercing bolt. Slows 25% for 1.5s. 3.5s cooldown, 0.25s wind-up.",
@@ -71,44 +76,44 @@ const CLASSES = [
 		"label": "BRUISER",
 		"color": BRUISER_COLOR,
 		"key":   "bruiser",
-		"hp":    "HP  180",
-		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Warcry     F", "Unbreakable Shift", "Seismic    R"],
+		"hp":    "HP  223",
+		"lines": ["Tanky melee brawler.", "CC chains + survive.", "", "Smash      LMB", "Shatter    E", "Tremor     Q", "Warcry     F", "Unbreakable Shift", "Seismic Slam R"],
 		"ability_descs": [
-			"3 dmg. 0.7s cooldown, 167 range. Basic swing, hold to auto-repeat.",
-			"22 dmg shield slam, stuns 0.7s. 5.5s cooldown, 151 range. Instant, no wind-up.",
-			"Ground stomp: 18 dmg + 50% slow for 2s to foes within 180 range. 8s cooldown. Instant.",
+			"2.7 dmg. 0.7s cooldown, 167 range. Basic swing, hold to auto-repeat.",
+			"19.8 dmg shield slam, stuns 0.7s. 5.5s cooldown, 151 range. Instant, no wind-up.",
+			"Ground stomp: 16.2 dmg + 50% slow for 2s to foes within 180 range. 8s cooldown. Instant.",
 			"You take 15% less damage; the opponent deals 10% less damage. Both for 4s, enemy debuff needs them within 210 range. 8s cooldown.",
-			"Cleanses all CC, grants CC immunity, 25% damage reduction, and +40% move speed for 3s. 8.5s cooldown. Usable even while stunned.",
-			"Lunge in (up to 280) and slam for 55 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
+			"Cleanses all CC, grants CC immunity, 25% damage reduction, and +30% move speed for 2.5s. 8.5s cooldown. Usable even while stunned.",
+			"Lunge in (up to 280) and slam for 49.5 dmg, launching the target airborne for 1s — still damageable while up. 198 range.",
 		]
 	},
 	{
 		"label": "RANGER",
 		"color": RANGER_COLOR,
 		"key":   "ranger",
-		"hp":    "HP  130",
-		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "RainArrows R"],
+		"hp":    "HP  176",
+		"lines": ["Mobile skirmisher.", "Kite, snare, vanish.", "", "QuickShot  LMB", "Pierce     E", "Snare      Q", "Disengage  F", "Camouflage Shift", "Rain of Arrows R"],
 		"ability_descs": [
-			"8 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
-			"24 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
-			"Throws a trap 110 out that arms in 0.6s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
-			"16 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
+			"7.5 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
+			"22.4 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
+			"Throws a large trap 110 out that arms in 0.5s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
+			"15 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
 			"Vanish from AI targeting for 3s (a human player tracking you can still hit you). 10s cooldown.",
-			"Targets a zone that rains arrows for 2s, ticking 9 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
+			"Targets a zone that rains arrows for 2s, ticking 13.1 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
 		]
 	},
 	{
 		"label": "CLERIC",
 		"color": CLERIC_COLOR,
 		"key":   "cleric",
-		"hp":    "HP  130",
+		"hp":    "HP  176",
 		"lines": ["Team support/healer.", "Protects & empowers allies.", "", "Smite      LMB", "Mending    E", "Consecrate Q", "Purify     F", "Guardian Ward Shift", "Guardian's Bond R"],
 		"ability_descs": [
-			"7 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
-			"Skill-shot heal toward your lowest-HP ally within 400 range (self if none). Heals 24 (+10% per combo stack). 3s cooldown, 0.2s wind-up.",
-			"Instant zone at your feet: damages enemies and heals allies standing in it, ticking every 1s for 3s. 150 radius. 8s cooldown.",
-			"Rectangle cast (300 long, 180 wide) — cleanses CC/debuffs from every ally it hits (including you) and adds a small heal-over-time. 10s cooldown.",
-			"Shields your lowest-HP ally within 400 range (self if none): 30 HP + 8 per banked combo stack, consuming them. 9s cooldown.",
+			"6 dmg holy bolt. 0.6s cooldown. Builds combo stacks (boosts your healing, not damage).",
+			"Skill-shot heal toward your lowest-HP ally within 400 range (self if none). Heals 32.4 (+10% per combo stack). An enemy body in its path takes 12 dmg and is slowed 30% for 1s instead. 3s cooldown, 0.2s wind-up.",
+			"Instant zone at your feet: 8 dmg to enemies, 10.8 heal to allies standing in it, ticking every 1s for 3s. 225 radius. 8s cooldown.",
+			"Rectangle cast (300 long, 180 wide) — cleanses CC/debuffs from every ally it hits (including you), adds a small heal-over-time (8.1/tick), and heals you for 12 instantly. 10s cooldown.",
+			"Shields your lowest-HP ally within 400 range (self if none): 25 HP + 7.5 per banked combo stack (stacks aren't consumed). 9s cooldown.",
 			"Links you with your lowest-HP ally in range for 4s: damage either takes splits 50/50, both take 20% less damage and heal over time. No ally in range -> self-only (still get the reduction + healing). Usable even while stunned.",
 		]
 	},
@@ -139,20 +144,49 @@ func _input(event):
 			queue_redraw()
 		queue_redraw()  # tooltip tracks the cursor within a card too
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var c = _card_under(event.position)
-		if c.x == 0:
-			player_sel = c.y
-			queue_redraw()
-		elif c.x == 1:
-			bot_sel = c.y
-			queue_redraw()
+		# team size
 		for i in TEAM_SIZES.size():
 			if _team_size_btn_rect(i).has_point(event.position):
 				team_size = TEAM_SIZES[i]
+				player_active_slot = min(player_active_slot, team_size - 1)
+				bot_active_slot = min(bot_active_slot, team_size - 1)
 				queue_redraw()
+				return
+		# slot chips — click to choose which slot the next class pick fills
+		for s in team_size:
+			if _slot_chip_rect(0, s).has_point(event.position):
+				player_active_slot = s
+				queue_redraw()
+				return
+			if _slot_chip_rect(1, s).has_point(event.position):
+				bot_active_slot = s
+				queue_redraw()
+				return
+		# class cards — assign to the active slot, then advance to the next
+		var c = _card_under(event.position)
+		if c.x == 0:
+			player_slots[player_active_slot] = c.y
+			player_active_slot = (player_active_slot + 1) % team_size
+			queue_redraw()
+			return
+		elif c.x == 1:
+			bot_slots[bot_active_slot] = c.y
+			bot_active_slot = (bot_active_slot + 1) % team_size
+			queue_redraw()
+			return
 		# fight button
 		if _fight_btn_rect().has_point(event.position):
 			_start()
+
+# One class chip per team slot, in a row centered under each side's header.
+func _slot_chip_rect(side: int, slot_idx: int) -> Rect2:
+	var chip_w = 88.0
+	var chip_h = 26.0
+	var gap = 8.0
+	var total = chip_w * team_size + gap * (team_size - 1)
+	var center_x = W * 0.25 if side == 0 else W * 0.75
+	var start_x = center_x - total * 0.5
+	return Rect2(start_x + slot_idx * (chip_w + gap), 176, chip_w, chip_h)
 
 func _team_size_btn_rect(i: int) -> Rect2:
 	var w = 64.0
@@ -177,8 +211,17 @@ func _fight_btn_rect() -> Rect2:
 	return Rect2(W * 0.5 - 100, CARD_Y + CARD_H + 40, 200, 52)
 
 func _start():
-	get_tree().root.set_meta("player_class", CLASSES[player_sel]["key"])
-	get_tree().root.set_meta("bot_class",    CLASSES[bot_sel]["key"])
+	var pkeys := []
+	var bkeys := []
+	for s in team_size:
+		pkeys.append(CLASSES[player_slots[s]]["key"])
+		bkeys.append(CLASSES[bot_slots[s]]["key"])
+	get_tree().root.set_meta("player_classes", pkeys)
+	get_tree().root.set_meta("bot_classes",    bkeys)
+	# Legacy single-key meta kept for any reader that still expects it; slot 0
+	# is the human-controlled fighter on the player side.
+	get_tree().root.set_meta("player_class", pkeys[0])
+	get_tree().root.set_meta("bot_class",    bkeys[0])
 	get_tree().root.set_meta("team_size",    team_size)
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
@@ -204,6 +247,10 @@ func _draw():
 	_draw_text("YOU", Vector2(W * 0.25, 148), 18, Color(0.8, 0.8, 0.9, 0.7), true)
 	_draw_text("BOT", Vector2(W * 0.75, 148), 18, Color(0.8, 0.8, 0.9, 0.7), true)
 
+	# per-slot class chips (one row per side)
+	_draw_slot_chips(0, player_slots, player_active_slot)
+	_draw_slot_chips(1, bot_slots, bot_active_slot)
+
 	# center divider
 	var mid = W * 0.5
 	draw_line(Vector2(mid, CARD_Y - 10), Vector2(mid, CARD_Y + CARD_H + 10),
@@ -213,10 +260,12 @@ func _draw():
 	# draw all cards
 	tooltip_text = ""
 	var mouse_pos = get_viewport().get_mouse_position()
+	# A card reads as "selected" when it's the class currently in the active
+	# slot, so it always reflects what the next pick would replace.
 	for i in CLASSES.size():
-		_draw_card(player_cards_x[i], i, player_sel == i, hovered == Vector2i(0, i), mouse_pos)
+		_draw_card(player_cards_x[i], i, player_slots[player_active_slot] == i, hovered == Vector2i(0, i), mouse_pos)
 	for i in CLASSES.size():
-		_draw_card(bot_cards_x[i], i, bot_sel == i, hovered == Vector2i(1, i), mouse_pos)
+		_draw_card(bot_cards_x[i], i, bot_slots[bot_active_slot] == i, hovered == Vector2i(1, i), mouse_pos)
 
 	# fight button
 	var btn = _fight_btn_rect()
@@ -227,16 +276,34 @@ func _draw():
 	_draw_text("FIGHT", Vector2(btn.position.x + btn.size.x * 0.5, btn.position.y + btn.size.y * 0.5 + 2),
 		22, Color(0.05, 0.08, 0.1), true)
 
-	# matchup summary below button
-	var p_name = CLASSES[player_sel]["label"]
-	var b_name = CLASSES[bot_sel]["label"]
-	var summary = ("%s  vs  %s (bot)" % [p_name, b_name]) if team_size == 1 \
-		else ("%s x%d  vs  %s x%d (bot)" % [p_name, team_size, b_name, team_size])
+	# matchup summary below button — lists each side's comp
+	var p_names := []
+	var b_names := []
+	for s in team_size:
+		p_names.append(CLASSES[player_slots[s]]["label"].capitalize())
+		b_names.append(CLASSES[bot_slots[s]]["label"].capitalize())
+	var summary = "%s  vs  %s (bot)" % [" / ".join(p_names), " / ".join(b_names)]
 	_draw_text(summary,
 		Vector2(W * 0.5, btn.position.y + btn.size.y + 28), 15, Color(0.55, 0.55, 0.65, 0.7), true)
 
 	if tooltip_text != "":
 		_draw_tooltip()
+
+# A row of class chips, one per team slot, showing each slot's current class
+# in its class color. The active slot (the one the next class click fills)
+# is outlined brighter. Clicking a chip makes that slot active.
+func _draw_slot_chips(side: int, slots: Array, active: int):
+	if team_size <= 1:
+		return  # a single slot is already fully conveyed by the card highlight
+	for s in team_size:
+		var r = _slot_chip_rect(side, s)
+		var cls = CLASSES[slots[s]]
+		var col: Color = cls["color"]
+		var is_active = s == active
+		draw_rect(r, Color(col.r, col.g, col.b, 0.30 if is_active else 0.16))
+		draw_rect(r, Color(col.r, col.g, col.b, 1.0 if is_active else 0.4), false, 2.0 if is_active else 1.0)
+		_draw_text(cls["label"].capitalize(), r.position + r.size * 0.5, 12,
+			Color(1, 1, 1, 0.95 if is_active else 0.7), true)
 
 func _draw_tooltip():
 	var font    = ThemeDB.fallback_font
