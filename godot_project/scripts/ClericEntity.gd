@@ -12,7 +12,9 @@ const SMITE_DMG    = 6.0
 const SMITE_SPEED  = 1500.0
 const SMITE_RADIUS = 16.0
 
-# E — Mending Light: skill-shot heal toward the lowest-HP ally in radius
+# E — Mending Light: skill-shot heal toward the lowest-HP ally in radius.
+# Also punishes an enemy body it flies through on the way there — deals
+# damage and applies a slow, so body-blocking a heal isn't free anymore.
 const MENDING_CAST      = 0.2
 const MENDING_RECOVERY  = 0.2
 const MENDING_CD        = 3.0
@@ -20,6 +22,9 @@ const MENDING_SPEED     = 1400.0
 const MENDING_RADIUS    = 18.0
 const MENDING_HEAL      = 32.4
 const MENDING_TARGET_RADIUS = 400.0
+const MENDING_ENEMY_DMG      = 12.0
+const MENDING_ENEMY_SLOW_DUR = 1.0
+const MENDING_ENEMY_SLOW_PCT = 0.30
 
 # Q — Consecrate: instant AoE zone at self's position — heals allies and
 # damages enemies standing in it, ticking over its duration
@@ -49,7 +54,7 @@ const PURIFY_CD        = 10.0
 # down in base/scaling to compensate for stacks no longer being spent.
 const WARD_TARGET_RADIUS = 400.0
 const WARD_BASE_SHIELD   = 25.0
-const WARD_PER_STACK     = 6.0
+const WARD_PER_STACK     = 7.5
 const WARD_DUR           = 3.0
 const WARD_CD            = 9.0
 
@@ -139,7 +144,8 @@ func resolve_a1(target: Entity):
 		target = self
 	facing = get_aim_dir(target)
 	_fire(facing, MENDING_SPEED, MENDING_RADIUS, MENDING_HEAL * heal_mult(), target,
-		Color(0.95, 0.85, 0.5), 9.0, 0.0, 0.5, false, false, "orb", true)
+		Color(0.95, 0.85, 0.5), 9.0, 0.0, 0.5, false, false, "orb", true,
+		MENDING_ENEMY_DMG, MENDING_ENEMY_SLOW_DUR, MENDING_ENEMY_SLOW_PCT)
 	if target != self:
 		devotion_time_left = DEVOTION_DUR
 	cd_a1 = MENDING_CD

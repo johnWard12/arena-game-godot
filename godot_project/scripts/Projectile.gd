@@ -38,6 +38,14 @@ var report_result := false
 # collision, obstacles, trail) is identical to a damage projectile.
 var is_heal := false
 
+# A heal projectile can still punish an enemy body standing in its path —
+# if enemy_dmg > 0, an enemy touched before (or instead of) reaching the
+# heal target takes enemy_dmg and gets slowed, consuming the projectile.
+# Only relevant when is_heal is true.
+var enemy_dmg := 0.0
+var enemy_slow_dur := 0.0
+var enemy_slow_pct := 0.5
+
 var trail: Array = []
 const TRAIL_MAX_POINTS = 9
 var spawn_fx_done := false
@@ -67,8 +75,12 @@ func _physics_process(delta):
 		return
 
 	if is_heal:
-		# Heals stay precision-aimed at the intended ally — no "body block"
-		# reroute, unlike damage below.
+		# The heal itself stays precision-aimed at the intended ally — no
+		# "body block" reroute there, unlike damage below. But an enemy body
+		# crossing its path is checked every frame regardless, so flying it
+		# through an enemy to reach an ally still punishes them.
+		if enemy_dmg > 0.0 and _check_heal_enemy_hit():
+			return
 		if target != null and is_instance_valid(target) and target.alive:
 			if global_position.distance_to(target.global_position) <= hit_radius + target.RADIUS:
 				_on_hit()
@@ -98,6 +110,29 @@ func _check_single_hit():
 	if best != null:
 		target = best
 		_on_hit()
+
+# Enemy-hit check for a heal projectile (Mending Light) — separate from
+# _check_single_hit() since a heal shot's `target` is an ally, not an enemy,
+# and landing on that ally must NOT be rerouted by an enemy body the way a
+# damage shot would be.
+func _check_heal_enemy_hit() -> bool:
+	if owner_entity == null or not is_instance_valid(owner_entity) or not owner_entity.alive:
+		return false
+	for e in owner_entity.all_fighters:
+		if not is_instance_valid(e) or not e.alive or e.team_id == owner_entity.team_id:
+			continue
+		if e.invisible_time_left > 0:
+			continue
+		if global_position.distance_to(e.global_position) <= hit_radius + e.RADIUS:
+			var landed = owner_entity.deal_damage(e, enemy_dmg)
+			if landed and enemy_slow_dur > 0:
+				e.slowed_time_left = enemy_slow_dur
+				e.slow_pct = enemy_slow_pct
+			if report_result and owner_entity.has_method("register_ability_result"):
+				owner_entity.register_ability_result(landed)
+			queue_free()
+			return true
+	return false
 
 func _check_pierce_hits():
 	if owner_entity == null or not is_instance_valid(owner_entity) or not owner_entity.alive:

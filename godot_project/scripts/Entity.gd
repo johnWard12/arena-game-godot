@@ -1139,7 +1139,7 @@ func resolve_a3(opp: Entity):
 	recovering = {"type": "a3", "time_left": SWORD_THROW_RECOVERY, "total": SWORD_THROW_RECOVERY}
 	commit_ability()
 
-func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false, kind: String = "orb", is_heal: bool = false):
+func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false, kind: String = "orb", is_heal: bool = false, heal_enemy_dmg: float = 0.0, heal_enemy_slow_dur: float = 0.0, heal_enemy_slow_pct: float = 0.5):
 	var proj = load("res://scripts/Projectile.gd").new()
 	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
 	proj.velocity = dir * speed
@@ -1155,6 +1155,9 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	proj.pierce = pierce
 	proj.visual_kind = kind
 	proj.is_heal = is_heal
+	proj.enemy_dmg = heal_enemy_dmg
+	proj.enemy_slow_dur = heal_enemy_slow_dur
+	proj.enemy_slow_pct = heal_enemy_slow_pct
 	proj.obstacle_rects = obstacle_rects
 	projectile_spawned.emit(proj)
 

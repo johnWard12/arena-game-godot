@@ -136,6 +136,16 @@ func setup(e: Entity):
 
 	_anim = _find_anim_player(_model)
 	if _anim != null:
+		# Imported clips default to LOOP_NONE, so a continuously-held state
+		# like moving in a straight line would play Run/Walk/Idle once and
+		# then freeze on its last frame while the character kept gliding via
+		# position updates — _play()'s _current_anim guard never noticed
+		# because the requested animation name hadn't changed. Movement/idle
+		# poses need to actually loop; one-shot clips (attacks, hit reacts,
+		# death) are left alone since holding their last frame is correct.
+		for loop_anim in ["Idle", "Walk", "Run", "Idle_Weapon"]:
+			if _anim.has_animation(loop_anim):
+				_anim.get_animation(loop_anim).loop_mode = Animation.LOOP_LINEAR
 		_anim.play("Idle")
 		_current_anim = "Idle"
 
