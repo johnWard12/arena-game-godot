@@ -56,6 +56,13 @@ func ai_decide():
 	# why) so poking never freezes the kite.
 	ai_target = BotSteering.apply_wall_repulsion(global_position, arena_rect, _kite_move(d))
 
+	# Offensive dash: close in to secure a kill on a fleeing, near-dead
+	# opponent instead of dash staying purely an escape tool.
+	if opponent.hp <= opponent.max_hp * 0.25 and d > 200 and d < 550 \
+		and dash_charges > 0 and not dashing and casting == null and randf() < 0.7:
+		try_dash((opponent.global_position - global_position).normalized())
+		return
+
 	# Camouflage to vanish and reposition when low HP
 	if hp < max_hp * 0.35 and cd_shift <= 0 and randf() < 0.6:
 		try_shift(opponent)

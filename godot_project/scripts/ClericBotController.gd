@@ -54,6 +54,21 @@ func ai_decide():
 		ai_target = Vector2.ZERO
 		return
 
+	# Offensive dash, healer-flavored two ways: close in on a critically hurt
+	# ally to actually reach them with a heal in time (dash as a rescue tool,
+	# not just an escape), or — failing that — close in on a fleeing,
+	# near-dead enemy to secure the kill with Smite.
+	var hurt_ally = get_lowest_hp_ally(BOND_TARGET_RADIUS)
+	if dash_charges > 0 and not dashing and casting == null:
+		if hurt_ally != self and hurt_ally.hp <= hurt_ally.max_hp * 0.3:
+			var ally_d = global_position.distance_to(hurt_ally.global_position)
+			if ally_d > 200 and ally_d < 550 and randf() < 0.7:
+				try_dash((hurt_ally.global_position - global_position).normalized())
+				return
+		elif opponent.hp <= opponent.max_hp * 0.25 and d > 200 and d < 550 and randf() < 0.6:
+			try_dash((opponent.global_position - global_position).normalized())
+			return
+
 	# Guardian's Bond — usable even while stunned, so lean on it hard when
 	# either the Cleric or a nearby ally is in real danger.
 	var lowest = get_lowest_hp_ally(BOND_TARGET_RADIUS)

@@ -81,8 +81,13 @@ func ai_decide():
 		try_auto(opponent)
 		return
 
-	# dash to close distance fast when kiting opponent is out of lunge range
-	if is_kiter and d > 460 and dash_charges > 0:
+	# Dash to close distance fast — no longer kiter-only. Lunge is still the
+	# primary gap-closer (checked above), so this only fires once Lunge is
+	# down or too far to reach; even melee-vs-melee is worth dashing at
+	# once the gap gets real, instead of dash staying a purely defensive
+	# tool that only ever fires vs kiters.
+	var dash_close_range = 460 if is_kiter else 260
+	if d > dash_close_range and dash_charges > 0 and randf() < (0.9 if is_kiter else 0.55):
 		var toward = (opponent.global_position - global_position).normalized()
 		try_dash(toward)
 		return

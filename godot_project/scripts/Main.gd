@@ -36,6 +36,18 @@ const HEALTH_PACK_HEAL = 25.0
 const HEALTH_PACK_RADIUS = 44.0
 const HEALTH_PACK_RESPAWN = 15.0
 
+# Team identity color, applied on top of each fighter's own base_color once
+# they're assigned a team_id — the 3D model itself already tells you which
+# CLASS you're looking at (different mesh per class), so repurposing the
+# color layer (ground ring, hit sparks, dash trail, HP bar) for TEAM
+# identity instead means you can tell friend from foe at a glance without
+# losing class readability, and it also fixes mirror matchups (e.g. Duelist
+# vs Duelist) being hard to tell apart since both used to share one color.
+const TEAM_COLORS := {
+	0: Color(0.3, 0.6, 1.0),   # blue — your side
+	1: Color(1.0, 0.3, 0.35),  # red — the enemy side
+}
+
 func _ready():
 	team_size = get_tree().root.get_meta("team_size", 1)
 	# Per-slot comps (set by CharSelect). Fall back to the legacy single-class
@@ -54,7 +66,13 @@ func _ready():
 		var e = _make_fighter(_class_for_slot(player_classes, i), i == 0)
 		e.team_id = 0
 		e.global_position = player_positions[i]
+		# _spawn_fighter() calls add_child(), which is what actually fires
+		# this node's _ready() (Node lifecycle, not .new()) — that's where
+		# each class sets its own signature base_color, so the team-color
+		# override has to happen AFTER _spawn_fighter(), not before, or the
+		# class's own _ready() would immediately clobber it.
 		_spawn_fighter(e)
+		e.base_color = TEAM_COLORS[0]
 		if i == 0:
 			player = e
 
@@ -63,6 +81,7 @@ func _ready():
 		e.team_id = 1
 		e.global_position = enemy_positions[i]
 		_spawn_fighter(e)
+		e.base_color = TEAM_COLORS[1]
 
 	_update_targeting()
 
@@ -307,6 +326,12 @@ func build_ui():
 		bar.position = Vector2(x, y)
 		bar.size = Vector2(220, 22)
 		bar.show_percentage = false
+		# Tint just the fill (not the whole bar via modulate, which would also
+		# wash out the dark background track) so team color reads clearly
+		# against a normal-looking HP bar.
+		var fill_style := StyleBoxFlat.new()
+		fill_style.bg_color = TEAM_COLORS[f.team_id]
+		bar.add_theme_stylebox_override("fill", fill_style)
 		canvas.add_child(bar)
 		hp_bars.append(bar)
 

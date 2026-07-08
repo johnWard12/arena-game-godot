@@ -75,8 +75,12 @@ func ai_decide():
 		try_auto(opponent)
 		return
 
-	# dash to close gap when kiting
-	if is_kiter and d > 420 and dash_charges > 0 and randf() < 0.6:
+	# Dash to close gap — no longer kiter-only. Bruiser only has 1 dash
+	# charge (vs Duelist's 2), so this stays a bit more conservative, but
+	# it should still fire against a plain melee opponent who's out of
+	# Shatter/auto range, not just when chasing a kiter.
+	var dash_close_range = 420 if is_kiter else 240
+	if d > dash_close_range and dash_charges > 0 and randf() < (0.6 if is_kiter else 0.4):
 		var toward = (opponent.global_position - global_position).normalized()
 		try_dash(toward)
 		return

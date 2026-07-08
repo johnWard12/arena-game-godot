@@ -13,13 +13,13 @@ const DASH_DUR = 0.13
 const CARRY = 0.7
 
 const AUTO_CD = 0.55
-const AUTO_DMG = 6.5
+const AUTO_DMG = 7.5
 const AUTO_RANGE = 150.0
 
 const A1_CAST = 0.09
 const A1_RECOVERY = 0.13
 const A1_CD = 1.8
-const A1_DMG = 15.0
+const A1_DMG = 17.25
 const A1_RANGE = 145.0
 const A1_SLOW_DUR = 2.0
 const A1_SLOW_PCT = 0.30
@@ -30,7 +30,7 @@ const A2_CAST = 0.14
 const A2_RECOVERY = 0.22
 const A2_MISS_RECOVERY = 0.45
 const A2_CD = 6.5
-const A2_DMG = 25.5
+const A2_DMG = 29.3
 const A2_RANGE = 150.0
 const A2_LUNGE_DIST = 270.0
 const A2_LUNGE_DUR = 0.13
@@ -61,14 +61,15 @@ const BLOODLUST_DUR          = 1.5
 const BLOODLUST_ATKSPD_MULT  = 1.10
 const BLOODLUST_MOVESPD_MULT = 1.10
 
-# F — Sword Throw: thrown blade, low damage, slows on hit
+# F — Sword Throw: thrown blade, low damage, slows on hit. Widened hitbox
+# (16->20) makes it noticeably easier to actually land as a skill-shot.
 const SWORD_THROW_CAST     = 0.12
 const SWORD_THROW_RECOVERY = 0.18
 const SWORD_THROW_CD       = 4.0
 const SWORD_THROW_SPEED    = 1400.0
-const SWORD_THROW_RADIUS   = 16.0
-const SWORD_THROW_DMG_BASE          = 7.5
-const SWORD_THROW_DMG_MISSING_BONUS = 10.0
+const SWORD_THROW_RADIUS   = 20.0
+const SWORD_THROW_DMG_BASE          = 9.5
+const SWORD_THROW_DMG_MISSING_BONUS = 12.65
 const SWORD_THROW_SLOW_DUR = 2.0
 const SWORD_THROW_SLOW_PCT = 0.30
 
@@ -88,13 +89,13 @@ const KNOCKUP_DUR = 1.0
 # Bladestorm (Duelist R)
 const BLADESTORM_DUR          = 1.5
 const BLADESTORM_HIT_INTERVAL = 0.30
-const BLADESTORM_DMG          = 17.5
+const BLADESTORM_DMG          = 20.1
 const BLADESTORM_RANGE        = 170.0
 
 # Iron Resolve (Duelist Shift) — converts current combo stacks into a
 # temporary flat damage-reduction buff, consuming the stacks.
-const IRON_RESOLVE_CD        = 7.0
-const IRON_RESOLVE_DUR       = 2.0
+const IRON_RESOLVE_CD        = 9.0
+const IRON_RESOLVE_DUR       = 3.0
 const IRON_RESOLVE_PER_STACK = 0.10
 
 # ---- State ----

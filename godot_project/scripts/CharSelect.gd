@@ -49,12 +49,12 @@ const CLASSES = [
 		"hp":    "HP  202.5",
 		"lines": ["Melee glass cannon.", "Blood-lust on parry.", "", "Auto       LMB", "Strike     E", "Lunge      Q", "Throw      F", "Iron Resolve Shift", "Bladestorm R"],
 		"ability_descs": [
-			"6.5 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
-			"15 dmg stab. Slows 30% for 2s and reduces their healing received 30% for 3s. 1.8s cooldown, 145 range, 0.09s wind-up.",
-			"Dash up to 270, strike for 25.5 dmg and stun 0.5s. 6.5s cooldown, 150 range.",
-			"7.5 dmg (up to 17.5 vs a low-HP target). Slows 30% for 2s. 4s cooldown.",
-			"Converts current combo stacks into damage reduction (10% per stack, up to 30%) for 2s, consuming them. 7s cooldown.",
-			"Spin 1.5s, hitting foes within 170 range for 17.5 dmg every 0.3s (up to 5 hits, 87.5 total). Slow-immune while active. Builds on a 14s charge meter.",
+			"7.5 dmg. 0.55s cooldown, 150 range. Basic swing, hold to auto-repeat.",
+			"17.25 dmg stab. Slows 30% for 2s and reduces their healing received 30% for 3s. 1.8s cooldown, 145 range, 0.09s wind-up.",
+			"Dash up to 270, strike for 29.3 dmg and stun 0.5s. 6.5s cooldown, 150 range.",
+			"9.5 dmg (up to 22.15 vs a low-HP target). Slows 30% for 2s. 4s cooldown.",
+			"Converts current combo stacks into damage reduction (10% per stack, up to 30%) for 3s, consuming them. 9s cooldown.",
+			"Spin 1.5s, hitting foes within 170 range for 20.1 dmg every 0.3s (up to 5 hits, 100.5 total). Slow-immune while active. Builds on a 14s charge meter.",
 		]
 	},
 	{
