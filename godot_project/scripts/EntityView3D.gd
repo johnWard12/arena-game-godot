@@ -223,10 +223,10 @@ func _attach_bruiser_shield():
 	shield.rotation_degrees = Vector3(0, 90, 90)
 
 	# Sized in the model's own native (pre-scale) units so it comes out to
-	# roughly a 0.32m real-world radius once the model's uniform scale
+	# roughly a 0.38m real-world radius once the model's uniform scale
 	# (target_height / measured_height, ~0.7 for the Monk) is applied.
-	var r := 0.46
-	var thickness := 0.11
+	var r := 0.56
+	var thickness := 0.12
 
 	var disc := MeshInstance3D.new()
 	var disc_mesh := CylinderMesh.new()
@@ -235,30 +235,11 @@ func _attach_bruiser_shield():
 	disc_mesh.height = thickness
 	disc.mesh = disc_mesh
 	var disc_mat := StandardMaterial3D.new()
-	disc_mat.albedo_color = Color(0.32, 0.33, 0.37)
+	disc_mat.albedo_color = Color(0.72, 0.73, 0.76)
 	disc_mat.metallic = 0.6
-	disc_mat.roughness = 0.4
+	disc_mat.roughness = 0.35
 	disc.material_override = disc_mat
 	shield.add_child(disc)
-
-	# Team-colored rim — doubles as another at-a-glance team marker,
-	# consistent with the ground ring / HP bar (set once at attach time
-	# since team color never changes mid-match, no per-frame update needed).
-	var rim := MeshInstance3D.new()
-	var rim_mesh := TorusMesh.new()
-	rim_mesh.inner_radius = r * 0.88
-	rim_mesh.outer_radius = r
-	rim.mesh = rim_mesh
-	rim.rotation_degrees = Vector3(90, 0, 0)
-	rim.position.y = thickness * 0.5 + 0.01
-	var rim_mat := StandardMaterial3D.new()
-	rim_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	rim_mat.albedo_color = entity.base_color
-	rim_mat.emission_enabled = true
-	rim_mat.emission = entity.base_color
-	rim_mat.emission_energy_multiplier = 1.4
-	rim.material_override = rim_mat
-	shield.add_child(rim)
 
 	var boss := MeshInstance3D.new()
 	var boss_mesh := CylinderMesh.new()
@@ -268,9 +249,9 @@ func _attach_bruiser_shield():
 	boss.mesh = boss_mesh
 	boss.position.y = thickness * 0.5
 	var boss_mat := StandardMaterial3D.new()
-	boss_mat.albedo_color = Color(0.5, 0.5, 0.55)
+	boss_mat.albedo_color = Color(0.85, 0.85, 0.88)
 	boss_mat.metallic = 0.7
-	boss_mat.roughness = 0.3
+	boss_mat.roughness = 0.25
 	boss.material_override = boss_mat
 	shield.add_child(boss)
 
@@ -372,8 +353,8 @@ func _build_bladestorm_fx():
 	# narrower fan instead of a complete ring around the character.
 	pm.spread = 180.0
 	pm.flatness = 1.0
-	pm.initial_velocity_min = 3.5
-	pm.initial_velocity_max = 5.5
+	pm.initial_velocity_min = 5.5
+	pm.initial_velocity_max = 8.0
 	pm.gravity = Vector3.ZERO
 	pm.scale_min = 1.0
 	pm.scale_max = 1.0
@@ -381,7 +362,7 @@ func _build_bladestorm_fx():
 	pm.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
 	_bladestorm_particles.process_material = pm
 	var quad := QuadMesh.new()
-	quad.size = Vector2(0.05, 0.38)
+	quad.size = Vector2(0.1, 0.42)
 	var pmat := StandardMaterial3D.new()
 	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	pmat.albedo_color = Color(1.0, 0.9, 0.3)
