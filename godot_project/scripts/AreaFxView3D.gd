@@ -133,29 +133,50 @@ func _build_circle():
 		"void": _build_void_extras(r)
 		"quake": _build_quake_extras(r)
 
-# Cleric — a slowly-orbiting ring of vertical light pillars. Verticality is
-# the holy signature; no other zone style leaves the ground plane.
+# Cleric — Purify-matched look (per user feedback): thin streaks of light
+# rising across the whole zone plus a slowly-spinning ground sun-wheel.
+# The earlier tall pillars + central sky-beam read as "too crazy" — this is
+# gentle sanctified ground instead of a light show.
 func _build_holy_extras(r: float):
+	# replace the generic rising motes with Purify-style thin light streaks
+	if _particles != null:
+		_particles.queue_free()
+	_particles = GPUParticles3D.new()
+	_particles.position = Vector3(0, 0.1, 0)
+	_particles.amount = 30
+	_particles.lifetime = 0.6
+	_particles.emitting = true
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_RING
+	pm.emission_ring_axis = Vector3(0, 1, 0)
+	pm.emission_ring_radius = r * 0.85
+	pm.emission_ring_inner_radius = 0.0
+	pm.emission_ring_height = 0.05
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 6.0
+	pm.initial_velocity_min = 1.4
+	pm.initial_velocity_max = 2.4
+	pm.gravity = Vector3.ZERO
+	pm.color_ramp = _fade_ramp()
+	_particles.process_material = pm
+	var q2 := QuadMesh.new()
+	q2.size = Vector2(0.035, 0.42)
+	var qmat := StandardMaterial3D.new()
+	qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	qmat.vertex_color_use_as_albedo = true
+	qmat.emission_enabled = true
+	qmat.emission = _color
+	qmat.emission_energy_multiplier = 2.0
+	q2.material = qmat
+	_particles.draw_pass_1 = q2
+	add_child(_particles)
+
+	# spinning sun-wheel of flat spokes on the ground — keeps the circle
+	# reading as a holy sigil without any tall vertical elements
 	_spin = Node3D.new()
 	add_child(_spin)
-	for i in 6:
-		var a = i * TAU / 6.0
-		var pillar := MeshInstance3D.new()
-		var cyl := CylinderMesh.new()
-		cyl.top_radius = 0.035
-		cyl.bottom_radius = 0.06
-		cyl.height = 1.7
-		pillar.mesh = cyl
-		var mat = _make_mat(0.3)
-		mat.emission_energy_multiplier = 2.0
-		pillar.material_override = mat
-		pillar.position = Vector3(cos(a) * r * 0.62, 0.85, sin(a) * r * 0.62)
-		_spin.add_child(pillar)
-		_extra_mats.append(mat)
-		_extra_alphas.append(0.3)
-
-	# spinning sun-wheel of flat spokes on the ground — turns the plain
-	# circle into a rotating solar sigil
 	for i in 8:
 		var holder := Node3D.new()
 		holder.rotation.y = i * TAU / 8.0
@@ -172,21 +193,6 @@ func _build_holy_extras(r: float):
 		holder.add_child(spoke)
 		_extra_mats.append(smat)
 		_extra_alphas.append(0.5)
-
-	# central beam of light from the sky
-	var beam := MeshInstance3D.new()
-	var bcyl := CylinderMesh.new()
-	bcyl.top_radius = r * 0.10
-	bcyl.bottom_radius = r * 0.17
-	bcyl.height = 3.2
-	beam.mesh = bcyl
-	var bmat = _make_mat(0.34)
-	bmat.emission_energy_multiplier = 2.4
-	beam.material_override = bmat
-	beam.position.y = 1.6
-	add_child(beam)
-	_extra_mats.append(bmat)
-	_extra_alphas.append(0.34)
 
 # Mage — a bright center column that spikes and fades plus a one-shot ring
 # of radially-flying glints: reads as an arcane detonation.
