@@ -48,10 +48,14 @@ var _target_r := 0.0
 # "quake"  — one-shot arcing rock debris, the only style whose particles
 #            obey gravity (Bruiser)
 var _style := ""
-var _spin: Node3D
+var _spin: Node3D    # slow forward spinner (holy pillars + sun-wheel)
+var _spin2: Node3D   # fast reverse spinner (arcane rune dashes)
 var _extra_mats: Array[StandardMaterial3D] = []
 var _extra_alphas: Array[float] = []
 var _void_core: MeshInstance3D
+var _sweep: MeshInstance3D   # rect: traveling light wave
+var _sweep_mat: StandardMaterial3D
+var _rect_len := 0.0
 
 func setup(fx: Dictionary):
 	_shape = fx["shape"]
@@ -150,6 +154,40 @@ func _build_holy_extras(r: float):
 		_extra_mats.append(mat)
 		_extra_alphas.append(0.3)
 
+	# spinning sun-wheel of flat spokes on the ground — turns the plain
+	# circle into a rotating solar sigil
+	for i in 8:
+		var holder := Node3D.new()
+		holder.rotation.y = i * TAU / 8.0
+		_spin.add_child(holder)
+		var spoke := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(r * 0.42, 0.09)
+		spoke.mesh = q
+		spoke.rotation.x = -PI / 2.0
+		spoke.position = Vector3(r * 0.34, 0.05, 0)
+		var smat = _make_mat(0.5)
+		smat.emission_energy_multiplier = 1.8
+		spoke.material_override = smat
+		holder.add_child(spoke)
+		_extra_mats.append(smat)
+		_extra_alphas.append(0.5)
+
+	# central beam of light from the sky
+	var beam := MeshInstance3D.new()
+	var bcyl := CylinderMesh.new()
+	bcyl.top_radius = r * 0.10
+	bcyl.bottom_radius = r * 0.17
+	bcyl.height = 3.2
+	beam.mesh = bcyl
+	var bmat = _make_mat(0.34)
+	bmat.emission_energy_multiplier = 2.4
+	beam.material_override = bmat
+	beam.position.y = 1.6
+	add_child(beam)
+	_extra_mats.append(bmat)
+	_extra_alphas.append(0.34)
+
 # Mage — a bright center column that spikes and fades plus a one-shot ring
 # of radially-flying glints: reads as an arcane detonation.
 func _build_arcane_extras(r: float):
@@ -187,6 +225,27 @@ func _build_arcane_extras(r: float):
 	burst.process_material = pm
 	burst.draw_pass_1 = _glint_quad(0.09)
 	add_child(burst)
+
+	# fast counter-rotating ring of rune dashes — the spell-circle signature
+	# that makes it read as arcane rather than a plain expanding ring
+	_spin2 = Node3D.new()
+	add_child(_spin2)
+	for i in 10:
+		var holder := Node3D.new()
+		holder.rotation.y = i * TAU / 10.0
+		_spin2.add_child(holder)
+		var dash := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(0.10, r * 0.30)
+		dash.mesh = q
+		dash.rotation.x = -PI / 2.0
+		dash.position = Vector3(r * 0.72, 0.05, 0)
+		var dmat = _make_mat(0.6)
+		dmat.emission_energy_multiplier = 2.0
+		dash.material_override = dmat
+		holder.add_child(dash)
+		_extra_mats.append(dmat)
+		_extra_alphas.append(0.6)
 
 # Mage ult rift — dark hovering core wrapped in a glow shell, with particles
 # spiraling INWARD from well outside the marker (negative radial accel +
@@ -267,6 +326,33 @@ func _build_quake_extras(r: float):
 	box.material = rock_mat
 	rocks.draw_pass_1 = box
 	add_child(rocks)
+
+	# jagged dark ground cracks radiating from the impact point
+	var im := ImmediateMesh.new()
+	var crack := MeshInstance3D.new()
+	crack.mesh = im
+	var cmat := StandardMaterial3D.new()
+	cmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	cmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	cmat.albedo_color = Color(0.08, 0.05, 0.03, 0.7)
+	cmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	crack.material_override = cmat
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1337
+	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in 7:
+		var a = i * TAU / 7.0 + rng.randf_range(-0.2, 0.2)
+		var tip = rng.randf_range(r * 0.55, r * 0.95)
+		var base_w = rng.randf_range(0.10, 0.2)
+		var dir = Vector3(cos(a), 0, sin(a))
+		var perp = Vector3(-dir.z, 0, dir.x)
+		im.surface_add_vertex(perp * base_w + Vector3(0, 0.045, 0))
+		im.surface_add_vertex(-perp * base_w + Vector3(0, 0.045, 0))
+		im.surface_add_vertex(dir * tip + Vector3(0, 0.045, 0))
+	im.surface_end()
+	add_child(crack)
+	_extra_mats.append(cmat)
+	_extra_alphas.append(0.7)
 
 func _fade_ramp() -> GradientTexture1D:
 	var ramp := Gradient.new()
@@ -392,6 +478,51 @@ func _build_rect():
 		add_child(box)
 		_border.append(box)
 
+	# traveling light wave — a bright bar sweeping from the caster's edge to
+	# the far end, so the cast reads as a directional WAVE of light passing
+	# over allies rather than a static glowing box
+	_rect_len = length
+	_sweep = MeshInstance3D.new()
+	var sq := QuadMesh.new()
+	sq.size = Vector2(width, 0.55)
+	_sweep.mesh = sq
+	_sweep.rotation.x = -PI / 2.0
+	_sweep_mat = _make_mat(0.75)
+	_sweep_mat.emission_energy_multiplier = 3.0
+	_sweep.material_override = _sweep_mat
+	_sweep.position = Vector3(0, 0.06, 0)
+	add_child(_sweep)
+
+	# rising light streaks across the whole area
+	_particles = GPUParticles3D.new()
+	_particles.position = Vector3(0, 0.1, -length * 0.5)
+	_particles.amount = 26
+	_particles.lifetime = 0.5
+	_particles.emitting = true
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(width * 0.45, 0.02, length * 0.45)
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 6.0
+	pm.initial_velocity_min = 1.4
+	pm.initial_velocity_max = 2.4
+	pm.gravity = Vector3.ZERO
+	pm.color_ramp = _fade_ramp()
+	_particles.process_material = pm
+	var q2 := QuadMesh.new()
+	q2.size = Vector2(0.035, 0.42)
+	var qmat := StandardMaterial3D.new()
+	qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	qmat.vertex_color_use_as_albedo = true
+	qmat.emission_enabled = true
+	qmat.emission = _color
+	qmat.emission_energy_multiplier = 2.0
+	q2.material = qmat
+	_particles.draw_pass_1 = q2
+	add_child(_particles)
+
 func _process(delta):
 	_age += delta
 	var remain = _duration - _age
@@ -425,10 +556,12 @@ func _animate_circle(t: float, remain: float):
 	_ring2.rotation.y += get_process_delta_time() * 0.35
 	_disc_mat.albedo_color.a = 0.12 * fade
 
-	# style extras: orbit the holy pillars, pulse the void core, and fade
-	# every extra material out with the zone
+	# style extras: orbit the holy pillars/sun-wheel, counter-spin the rune
+	# dashes, pulse the void core, and fade every extra out with the zone
 	if _spin != null:
 		_spin.rotation.y += get_process_delta_time() * 0.9
+	if _spin2 != null:
+		_spin2.rotation.y -= get_process_delta_time() * 2.2
 	for i in _extra_mats.size():
 		_extra_mats[i].albedo_color.a = _extra_alphas[i] * fade
 	if _void_core != null:
@@ -448,3 +581,8 @@ func _animate_rect(remain: float):
 	_disc_mat.albedo_color.a = 0.28 * mult
 	_border_mat.albedo_color.a = 0.95 * mult * flash
 	_border_mat.emission_energy_multiplier = 2.2 * mult * flash
+	if _sweep != null:
+		var sweep_t = clamp(_age / max(0.05, _duration * 0.7), 0.0, 1.0)
+		_sweep.position.z = -_rect_len * sweep_t
+		_sweep_mat.albedo_color.a = 0.75 * mult
+		_sweep_mat.emission_energy_multiplier = 3.0 * mult
