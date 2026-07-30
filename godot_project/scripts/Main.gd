@@ -534,6 +534,13 @@ func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 	entity.heal(entity, HEALTH_PACK_HEAL)
 	entity.hit_flash_left = 0.18
 	FX.heal_sparkle(self, entity.global_position)
+	# 3D green burst at the pedestal so the pickup moment reads in-world,
+	# not just as a 2D sparkle overlay
+	var av = AreaFxView3D.new()
+	world_3d.add_child(av)
+	av.setup({"shape": "circle", "pos": pack["pos"], "facing": Vector2.RIGHT,
+		"size": Vector2(70.0, 0.0), "duration": 0.4, "color": Color(0.25, 1.0, 0.5),
+		"anim": "expand", "particles": "rise"})
 	pack["active"] = false
 	pack["respawn_left"] = HEALTH_PACK_RESPAWN
 	return true

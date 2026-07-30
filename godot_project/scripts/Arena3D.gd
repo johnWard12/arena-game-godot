@@ -55,6 +55,7 @@ var _pack_glows: Array[MeshInstance3D] = []
 var _pack_pivots: Array[Node3D] = []
 var _pack_base_y: Array[float] = []
 var _torch_lights: Array[OmniLight3D] = []
+var _banners: Array[MeshInstance3D] = []
 var _time := 0.0
 
 func setup(rect: Rect2, obstacles: Array[Rect2], packs: Array):
@@ -69,6 +70,9 @@ func setup(rect: Rect2, obstacles: Array[Rect2], packs: Array):
 	_build_torches()
 	_build_center_emblem()
 	_build_floor_rocks()
+	_build_banners()
+	_build_floor_wear()
+	_build_ambient_motes()
 	_build_lighting()
 
 func _make_stone_material(base_color: Color, seed_val: int, uv_scale: float, roughness: float = 0.92) -> StandardMaterial3D:
@@ -314,6 +318,10 @@ func _build_torches():
 		arena_rect.position + Vector2(margin, arena_rect.size.y - margin),
 		arena_rect.position + Vector2(arena_rect.size.x - margin, arena_rect.size.y - margin),
 	]
+	# plus two braziers flanking the back-wall gate
+	var cx = arena_rect.position.x + arena_rect.size.x * 0.5
+	corners_2d.append(Vector2(cx - 200.0, arena_rect.position.y + 70.0))
+	corners_2d.append(Vector2(cx + 200.0, arena_rect.position.y + 70.0))
 	for c in corners_2d:
 		_build_torch(c)
 
@@ -459,6 +467,124 @@ func _process(delta):
 	for i in _torch_lights.size():
 		var flicker = 2.0 + sin(_time * 9.0 + i * 2.1) * 0.2 + sin(_time * 23.0 + i) * 0.1
 		_torch_lights[i].light_energy = flicker
+	for i in _banners.size():
+		_banners[i].rotation.x = sin(_time * 1.1 + i * 1.4) * 0.06
+
+# Heraldic cloth banners hung along the back wall — procedural tapered
+# shapes (rect body + V-notch tail) so colors and scale are fully
+# controlled, alternating deep red/blue, each with a dark crossbar and a
+# gentle wind sway driven from _process().
+func _build_banners():
+	var half = arena_rect.size * 0.5 / CoordUtil.SIM_SCALE
+	var base = CoordUtil.to_world(arena_rect.position + arena_rect.size * 0.5)
+	var z = -half.y - WALL_THICKNESS * 0.7 + 0.18
+	var cols = [Color(0.55, 0.12, 0.14), Color(0.16, 0.25, 0.55)]
+	var count = 6
+	for i in count:
+		var t = (i + 0.5) / count
+		var x = lerpf(-half.x * 0.9, half.x * 0.9, t)
+		if abs(x) < 1.7:
+			continue  # keep the center gate clear
+		var banner := MeshInstance3D.new()
+		banner.mesh = _make_banner_mesh(0.52, 1.5)
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = cols[i % 2]
+		mat.roughness = 1.0
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		banner.material_override = mat
+		banner.position = base + Vector3(x, 2.5, z)
+		add_child(banner)
+		_banners.append(banner)
+
+		var bar := MeshInstance3D.new()
+		var bar_mesh := BoxMesh.new()
+		bar_mesh.size = Vector3(0.66, 0.05, 0.05)
+		bar.mesh = bar_mesh
+		var bar_mat := StandardMaterial3D.new()
+		bar_mat.albedo_color = Color(0.2, 0.14, 0.1)
+		bar.material_override = bar_mat
+		bar.position = base + Vector3(x, 2.52, z)
+		add_child(bar)
+
+func _make_banner_mesh(w: float, h: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hw = w * 0.5
+	var body_bottom = -h * 0.72
+	# body
+	st.add_vertex(Vector3(-hw, 0, 0))
+	st.add_vertex(Vector3(hw, 0, 0))
+	st.add_vertex(Vector3(hw, body_bottom, 0))
+	st.add_vertex(Vector3(-hw, 0, 0))
+	st.add_vertex(Vector3(hw, body_bottom, 0))
+	st.add_vertex(Vector3(-hw, body_bottom, 0))
+	# two tail points leaving a V-notch
+	st.add_vertex(Vector3(-hw, body_bottom, 0))
+	st.add_vertex(Vector3(0, body_bottom, 0))
+	st.add_vertex(Vector3(-hw * 0.6, -h, 0))
+	st.add_vertex(Vector3(0, body_bottom, 0))
+	st.add_vertex(Vector3(hw, body_bottom, 0))
+	st.add_vertex(Vector3(hw * 0.6, -h, 0))
+	return st.commit()
+
+# Large, very faint dark discs scattered on the floor — wear stains that
+# break up the stone plane's uniformity without adding geometry detail.
+func _build_floor_wear():
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 5:
+		var pos2d = arena_rect.position + Vector2(
+			rng.randf_range(160, arena_rect.size.x - 160),
+			rng.randf_range(160, arena_rect.size.y - 160))
+		var disc := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		var radius = rng.randf_range(1.2, 2.6)
+		cyl.top_radius = radius
+		cyl.bottom_radius = radius
+		cyl.height = 0.004
+		disc.mesh = cyl
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.albedo_color = Color(0, 0, 0, rng.randf_range(0.08, 0.16))
+		disc.material_override = mat
+		disc.position = CoordUtil.to_world(pos2d, 0.012)
+		add_child(disc)
+
+# Slow golden dust motes drifting through the air over the whole arena —
+# cheap volumetric feel that makes the lighting read as physical.
+func _build_ambient_motes():
+	var half = arena_rect.size * 0.5 / CoordUtil.SIM_SCALE
+	var m := GPUParticles3D.new()
+	m.position = CoordUtil.to_world(arena_rect.position + arena_rect.size * 0.5) + Vector3(0, 1.6, 0)
+	m.amount = 36
+	m.lifetime = 7.0
+	m.preprocess = 7.0
+	m.emitting = true
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(half.x * 0.9, 1.3, half.y * 0.9)
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 180.0
+	pm.initial_velocity_min = 0.03
+	pm.initial_velocity_max = 0.12
+	pm.gravity = Vector3(0.015, 0.01, 0)
+	pm.scale_min = 0.6
+	pm.scale_max = 1.2
+	m.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.045, 0.045)
+	var qmat := StandardMaterial3D.new()
+	qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	qmat.albedo_color = Color(1.0, 0.9, 0.65, 0.16)
+	qmat.emission_enabled = true
+	qmat.emission = Color(1.0, 0.9, 0.65)
+	qmat.emission_energy_multiplier = 0.7
+	quad.material = qmat
+	m.draw_pass_1 = quad
+	add_child(m)
 
 func _build_lighting():
 	var sun := DirectionalLight3D.new()

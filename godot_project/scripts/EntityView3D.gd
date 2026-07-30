@@ -1165,6 +1165,43 @@ func _animate_death(delta: float):
 		for mat in _char_mats:
 			mat.emission_enabled = false
 		_slash.visible = false
+		# one-shot team-color shatter burst at the moment of death, so a
+		# kill lands with a 3D punch (the dissolve alone reads too gentle)
+		var burst := GPUParticles3D.new()
+		burst.amount = 24
+		burst.lifetime = 0.6
+		burst.one_shot = true
+		burst.explosiveness = 1.0
+		burst.emitting = true
+		burst.position = Vector3(0, 0.8, 0)
+		var pm := ParticleProcessMaterial.new()
+		pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE_SURFACE
+		pm.emission_sphere_radius = 0.3
+		pm.initial_velocity_min = 0.1
+		pm.initial_velocity_max = 0.3
+		pm.radial_accel = Vector2(6.0, 9.0)
+		pm.gravity = Vector3(0, -3.0, 0)
+		var col = entity.base_color
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(col.r, col.g, col.b, 0.9))
+		ramp.set_color(1, Color(col.r, col.g, col.b, 0.0))
+		var ramp_tex := GradientTexture1D.new()
+		ramp_tex.gradient = ramp
+		pm.color_ramp = ramp_tex
+		burst.process_material = pm
+		var quad := QuadMesh.new()
+		quad.size = Vector2(0.09, 0.09)
+		var qmat := StandardMaterial3D.new()
+		qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		qmat.vertex_color_use_as_albedo = true
+		qmat.emission_enabled = true
+		qmat.emission = col
+		qmat.emission_energy_multiplier = 2.0
+		quad.material = qmat
+		burst.draw_pass_1 = quad
+		add_child(burst)
 	visible = true
 	position = CoordUtil.to_world(entity.global_position)
 	_death_timer += delta
