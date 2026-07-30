@@ -38,6 +38,21 @@ var _border: Array[MeshInstance3D] = []
 var _border_mat: StandardMaterial3D
 var _target_r := 0.0
 
+# Per-class visual identity ("style" key): every zone used to be the same
+# ring+disc+motes in a different color, so all AoEs read identically.
+# "holy"   — orbiting vertical light pillars (Cleric: the only style that
+#            leaves the ground)
+# "arcane" — center flash column + one-shot radial glint detonation (Mage)
+# "void"   — dark hovering core + particles spiraling INWARD, matching the
+#            pull (Mage ult rift)
+# "quake"  — one-shot arcing rock debris, the only style whose particles
+#            obey gravity (Bruiser)
+var _style := ""
+var _spin: Node3D
+var _extra_mats: Array[StandardMaterial3D] = []
+var _extra_alphas: Array[float] = []
+var _void_core: MeshInstance3D
+
 func setup(fx: Dictionary):
 	_shape = fx["shape"]
 	_size = fx["size"]
@@ -45,6 +60,7 @@ func setup(fx: Dictionary):
 	_color = fx["color"]
 	_anim_style = fx.get("anim", "pulse")
 	_particle_style = fx.get("particles", "rise")
+	_style = fx.get("style", "")
 	position = CoordUtil.to_world(fx["pos"], 0.03)
 
 	var facing: Vector2 = fx["facing"]
@@ -106,6 +122,173 @@ func _build_circle():
 		_build_falling_particles(r)
 	else:
 		_build_rising_particles(r)
+
+	match _style:
+		"holy": _build_holy_extras(r)
+		"arcane": _build_arcane_extras(r)
+		"void": _build_void_extras(r)
+		"quake": _build_quake_extras(r)
+
+# Cleric — a slowly-orbiting ring of vertical light pillars. Verticality is
+# the holy signature; no other zone style leaves the ground plane.
+func _build_holy_extras(r: float):
+	_spin = Node3D.new()
+	add_child(_spin)
+	for i in 6:
+		var a = i * TAU / 6.0
+		var pillar := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.035
+		cyl.bottom_radius = 0.06
+		cyl.height = 1.7
+		pillar.mesh = cyl
+		var mat = _make_mat(0.3)
+		mat.emission_energy_multiplier = 2.0
+		pillar.material_override = mat
+		pillar.position = Vector3(cos(a) * r * 0.62, 0.85, sin(a) * r * 0.62)
+		_spin.add_child(pillar)
+		_extra_mats.append(mat)
+		_extra_alphas.append(0.3)
+
+# Mage — a bright center column that spikes and fades plus a one-shot ring
+# of radially-flying glints: reads as an arcane detonation.
+func _build_arcane_extras(r: float):
+	var column := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = r * 0.10
+	cyl.bottom_radius = r * 0.16
+	cyl.height = 2.4
+	column.mesh = cyl
+	var cmat = _make_mat(0.55)
+	cmat.emission_energy_multiplier = 2.6
+	column.material_override = cmat
+	column.position.y = 1.2
+	add_child(column)
+	_extra_mats.append(cmat)
+	_extra_alphas.append(0.55)
+
+	var burst := GPUParticles3D.new()
+	burst.position.y = 0.4
+	burst.amount = 26
+	burst.lifetime = 0.5
+	burst.one_shot = true
+	burst.explosiveness = 1.0
+	burst.emitting = true
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE_SURFACE
+	pm.emission_sphere_radius = max(0.2, r * 0.2)
+	pm.initial_velocity_min = 0.0
+	pm.initial_velocity_max = 0.1
+	pm.radial_accel = Vector2(14.0, 18.0)
+	pm.gravity = Vector3.ZERO
+	pm.scale_min = 0.5
+	pm.scale_max = 1.1
+	pm.color_ramp = _fade_ramp()
+	burst.process_material = pm
+	burst.draw_pass_1 = _glint_quad(0.09)
+	add_child(burst)
+
+# Mage ult rift — dark hovering core wrapped in a glow shell, with particles
+# spiraling INWARD from well outside the marker (negative radial accel +
+# tangential swirl), matching the ability's actual pull.
+func _build_void_extras(r: float):
+	_void_core = MeshInstance3D.new()
+	var s := SphereMesh.new()
+	s.radius = r * 0.4
+	s.height = r * 0.8
+	_void_core.mesh = s
+	var core_mat := StandardMaterial3D.new()
+	core_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	core_mat.albedo_color = Color(0.06, 0.0, 0.12)
+	_void_core.material_override = core_mat
+	_void_core.position.y = 0.5
+	add_child(_void_core)
+
+	var shell := MeshInstance3D.new()
+	var s2 := SphereMesh.new()
+	s2.radius = r * 0.52
+	s2.height = r * 1.04
+	shell.mesh = s2
+	var shell_mat = _make_mat(0.25)
+	shell_mat.emission_energy_multiplier = 1.8
+	shell.material_override = shell_mat
+	shell.position.y = 0.5
+	add_child(shell)
+	_extra_mats.append(shell_mat)
+	_extra_alphas.append(0.25)
+
+	var swirl := GPUParticles3D.new()
+	swirl.position.y = 0.4
+	swirl.amount = 30
+	swirl.lifetime = 0.8
+	swirl.emitting = true
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_RING
+	pm.emission_ring_axis = Vector3(0, 1, 0)
+	pm.emission_ring_radius = r * 2.2
+	pm.emission_ring_inner_radius = r * 1.6
+	pm.emission_ring_height = 0.3
+	pm.initial_velocity_min = 0.0
+	pm.initial_velocity_max = 0.1
+	pm.radial_accel = Vector2(-15.0, -13.0)
+	pm.tangential_accel = Vector2(4.0, 6.0)
+	pm.gravity = Vector3.ZERO
+	pm.color_ramp = _fade_ramp()
+	swirl.process_material = pm
+	swirl.draw_pass_1 = _glint_quad(0.08)
+	add_child(swirl)
+
+# Bruiser — one-shot arcing rock debris: the earthy, physical signature
+# (the only zone style whose particles obey gravity).
+func _build_quake_extras(r: float):
+	var rocks := GPUParticles3D.new()
+	rocks.position.y = 0.1
+	rocks.amount = 22
+	rocks.lifetime = 0.7
+	rocks.one_shot = true
+	rocks.explosiveness = 1.0
+	rocks.emitting = true
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = r * 0.5
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 40.0
+	pm.initial_velocity_min = 2.0
+	pm.initial_velocity_max = 4.2
+	pm.gravity = Vector3(0, -11.0, 0)
+	pm.scale_min = 0.6
+	pm.scale_max = 1.4
+	rocks.process_material = pm
+	var box := BoxMesh.new()
+	box.size = Vector3(0.09, 0.09, 0.09)
+	var rock_mat := StandardMaterial3D.new()
+	rock_mat.albedo_color = Color(0.45, 0.35, 0.25)
+	rock_mat.roughness = 1.0
+	box.material = rock_mat
+	rocks.draw_pass_1 = box
+	add_child(rocks)
+
+func _fade_ramp() -> GradientTexture1D:
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(_color.r, _color.g, _color.b, 0.9))
+	ramp.set_color(1, Color(_color.r, _color.g, _color.b, 0.0))
+	var tex := GradientTexture1D.new()
+	tex.gradient = ramp
+	return tex
+
+func _glint_quad(size: float) -> QuadMesh:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(size, size)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.vertex_color_use_as_albedo = true
+	mat.emission_enabled = true
+	mat.emission = _color
+	mat.emission_energy_multiplier = 1.8
+	quad.material = mat
+	return quad
 
 func _build_rising_particles(r: float):
 	_particles = GPUParticles3D.new()
@@ -241,6 +424,15 @@ func _animate_circle(t: float, remain: float):
 	_ring2_mat.albedo_color.a = (0.35 + pulse * 0.25) * fade
 	_ring2.rotation.y += get_process_delta_time() * 0.35
 	_disc_mat.albedo_color.a = 0.12 * fade
+
+	# style extras: orbit the holy pillars, pulse the void core, and fade
+	# every extra material out with the zone
+	if _spin != null:
+		_spin.rotation.y += get_process_delta_time() * 0.9
+	for i in _extra_mats.size():
+		_extra_mats[i].albedo_color.a = _extra_alphas[i] * fade
+	if _void_core != null:
+		_void_core.scale = Vector3.ONE * (0.9 + 0.1 * sin(t * 9.0))
 
 func _animate_rect(remain: float):
 	const INTRO := 0.12

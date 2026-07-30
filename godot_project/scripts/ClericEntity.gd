@@ -165,7 +165,7 @@ func try_a2(opp: Entity):
 	consecrate_time_left = CONSECRATE_DUR
 	consecrate_tick_timer = 0.0
 	FX.impact_burst(get_parent(), consecrate_pos, Color(0.95, 0.9, 0.55), 18, 180.0)
-	_spawn_zone_fx(consecrate_pos, CONSECRATE_RADIUS, CONSECRATE_DUR, Color(0.95, 0.85, 0.4))
+	_spawn_zone_fx(consecrate_pos, CONSECRATE_RADIUS, CONSECRATE_DUR, Color(0.95, 0.85, 0.4), "pulse", "rise", "holy")
 	cd_a2 = CONSECRATE_CD
 	commit_ability()
 
@@ -228,9 +228,9 @@ func try_ult(_opp: Entity):
 	# Activation moment needs to read as clearly as a big ultimate should —
 	# the persistent ring/beam (EntityView3D._update_bond_fx) shows it's
 	# ongoing, but this marks the exact instant it went off.
-	_spawn_zone_fx(global_position, 90.0, 0.6, Color(1.0, 0.92, 0.55))
+	_spawn_zone_fx(global_position, 90.0, 0.6, Color(1.0, 0.92, 0.55), "pulse", "rise", "holy")
 	if partner != null:
-		_spawn_zone_fx(partner.global_position, 90.0, 0.6, Color(1.0, 0.92, 0.55))
+		_spawn_zone_fx(partner.global_position, 90.0, 0.6, Color(1.0, 0.92, 0.55), "pulse", "rise", "holy")
 	commit_ability()
 
 func resolve_ult(_opp: Entity):

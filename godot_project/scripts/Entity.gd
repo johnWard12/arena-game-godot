@@ -1210,11 +1210,11 @@ func _place_trap(pos: Vector2, radius: float, arm_delay: float, lifetime: float,
 # that point on. Fixes the class of bug where a ground effect visually drags
 # along behind whoever cast it because it was rendered relative to their
 # current position instead of where it was actually placed.
-func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color, anim: String = "pulse", particles: String = "rise"):
+func _spawn_zone_fx(pos: Vector2, radius: float, duration: float, color: Color, anim: String = "pulse", particles: String = "rise", style: String = ""):
 	area_fx_spawned.emit({
 		"shape": "circle", "pos": pos, "facing": Vector2.RIGHT,
 		"size": Vector2(radius, 0.0), "duration": duration, "color": color, "anim": anim,
-		"particles": particles,
+		"particles": particles, "style": style,
 	})
 
 # A brief rectangular cast flash (e.g. Purify) so a skill-shot's true hit

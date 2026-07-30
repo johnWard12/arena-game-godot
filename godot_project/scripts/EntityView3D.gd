@@ -96,6 +96,12 @@ var _freeze_shards: Array[MeshInstance3D] = []
 var _bloodlust_particles: GPUParticles3D
 
 var _bladestorm_particles: GPUParticles3D
+var _bladestorm_light: OmniLight3D
+
+# Gesture fallback for instant abilities (see _update_animation): commit
+# tracking to detect an ability firing with no cast and no swing of its own.
+var _last_commit := 0.0
+var _gesture_left := 0.0
 
 var _shift_style := ""
 var _shift_dome: MeshInstance3D
@@ -805,7 +811,20 @@ func _update_status_fx(delta: float):
 	_bloodlust_particles.emitting = entity.bloodlust_time_left > 0
 
 	if _bladestorm_particles != null:
-		_bladestorm_particles.emitting = entity.bladestorm_time_left > 0
+		var storming = entity.bladestorm_time_left > 0
+		_bladestorm_particles.emitting = storming
+		# Real light while the ult spins so the storm illuminates the arena
+		# around the Duelist (lazily created the first time it's needed).
+		if _bladestorm_light == null and storming:
+			_bladestorm_light = OmniLight3D.new()
+			_bladestorm_light.light_color = Color(1.0, 0.85, 0.4)
+			_bladestorm_light.light_energy = 2.2
+			_bladestorm_light.omni_range = 3.5
+			_bladestorm_light.shadow_enabled = false
+			_bladestorm_light.position = Vector3(0, 1.0, 0)
+			add_child(_bladestorm_light)
+		if _bladestorm_light != null:
+			_bladestorm_light.visible = storming
 
 	var shift_active = entity.get_shift_active()
 	if _shift_ring != null:
@@ -935,6 +954,20 @@ func _update_animation():
 		return
 	if entity.stunned_time_left > 0:
 		_play("RecieveHit", 0.1)
+		return
+
+	# One-shot gesture for instant abilities that have no cast and no swing
+	# of their own (Warcry, Unbreakable, Ward, Consecrate, Barrier, Iron
+	# Resolve, Camouflage...) — without this they fired with zero body
+	# language. A rising ability_commit_time_left is the tell that one of
+	# them just went off (swing/cast abilities never reach here mid-action
+	# thanks to the earlier branches).
+	_gesture_left = max(0.0, _gesture_left - get_process_delta_time())
+	if entity.ability_commit_time_left > _last_commit + 0.001 and entity.casting == null:
+		_gesture_left = 0.35
+		_force_play(_cfg["cast_anim"], 0.06)
+	_last_commit = entity.ability_commit_time_left
+	if _gesture_left > 0:
 		return
 
 	var max_speed = entity.speed_override if entity.speed_override > 0.0 else Entity.MAX_SPEED
