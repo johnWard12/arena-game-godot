@@ -412,19 +412,46 @@ func _build_bladestorm_fx():
 	pm.color = Color(1.0, 0.22, 0.22)
 	pm.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
 	_bladestorm_particles.process_material = pm
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.17, 0.95)
 	var pmat := StandardMaterial3D.new()
 	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	pmat.albedo_color = Color(1.0, 0.3, 0.3)
 	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pmat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	pmat.vertex_color_use_as_albedo = true
 	pmat.emission_enabled = true
 	pmat.emission = Color(1.0, 0.12, 0.18)
 	pmat.emission_energy_multiplier = 3.0
-	quad.material = pmat
-	_bladestorm_particles.draw_pass_1 = quad
+	_bladestorm_particles.draw_pass_1 = _make_blade_mesh(pmat)
 	add_child(_bladestorm_particles)
+
+# A flat sword silhouette — blade, tapered tip, crossguard, grip — built as
+# one ArrayMesh for the storm's particle draw pass. +Y is the direction of
+# flight, so align-to-velocity sends every sword flying point-first.
+func _make_blade_mesh(mat: Material) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var quads = [
+		# blade body
+		[Vector2(-0.09, 0.18), Vector2(0.09, 0.18), Vector2(0.055, 0.92), Vector2(-0.055, 0.92)],
+		# crossguard
+		[Vector2(-0.22, 0.10), Vector2(0.22, 0.10), Vector2(0.22, 0.20), Vector2(-0.22, 0.20)],
+		# grip + pommel
+		[Vector2(-0.045, -0.16), Vector2(0.045, -0.16), Vector2(0.045, 0.10), Vector2(-0.045, 0.10)],
+	]
+	for q in quads:
+		st.add_vertex(Vector3(q[0].x, q[0].y, 0))
+		st.add_vertex(Vector3(q[1].x, q[1].y, 0))
+		st.add_vertex(Vector3(q[2].x, q[2].y, 0))
+		st.add_vertex(Vector3(q[0].x, q[0].y, 0))
+		st.add_vertex(Vector3(q[2].x, q[2].y, 0))
+		st.add_vertex(Vector3(q[3].x, q[3].y, 0))
+	# tapered point
+	st.add_vertex(Vector3(-0.055, 0.92, 0))
+	st.add_vertex(Vector3(0.055, 0.92, 0))
+	st.add_vertex(Vector3(0.0, 1.25, 0))
+	var mesh := st.commit()
+	mesh.surface_set_material(0, mat)
+	return mesh
 
 # Shift (Iron Resolve / Barrier / Unbreakable) — one shared "shield up"
 # Each class's Shift payoff is mechanically different (a defensive buff, an

@@ -864,6 +864,9 @@ func _get_hud_screen_correction() -> Vector2:
 
 # ---- Sword swing ----
 func start_swing(arc_span_deg: float, duration: float):
+	# Attacking reveals a cloaked attacker (Ranger's Camouflage) — same rule
+	# on every offensive choke point: swings, projectiles, traps, Rain.
+	invisible_time_left = 0.0
 	swing_total = duration
 	swing_time_left = duration
 	swing_arc_span = deg_to_rad(arc_span_deg)
@@ -1173,6 +1176,8 @@ func resolve_a3(opp: Entity):
 	commit_ability()
 
 func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, col: Color, vis_r: float, slow: float = 0.0, slow_amount: float = 0.5, track: bool = false, pierce: bool = false, kind: String = "orb", is_heal: bool = false, heal_enemy_dmg: float = 0.0, heal_enemy_slow_dur: float = 0.0, heal_enemy_slow_pct: float = 0.5):
+	# Attacking reveals a cloaked attacker (see start_swing()).
+	invisible_time_left = 0.0
 	var proj = load("res://scripts/Projectile.gd").new()
 	proj.global_position = global_position + dir * (RADIUS + vis_r + 2.0)
 	proj.velocity = dir * speed
@@ -1195,6 +1200,8 @@ func _fire(dir: Vector2, speed: float, radius: float, dmg: float, tgt: Entity, c
 	projectile_spawned.emit(proj)
 
 func _place_trap(pos: Vector2, radius: float, arm_delay: float, lifetime: float, root_duration: float, col: Color):
+	# Attacking reveals a cloaked attacker (see start_swing()).
+	invisible_time_left = 0.0
 	var trap = load("res://scripts/Trap.gd").new()
 	trap.global_position = pos
 	trap.owner_entity = self
