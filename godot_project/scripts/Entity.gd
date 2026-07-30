@@ -1504,6 +1504,11 @@ func _draw():
 	if use_3d_view:
 		if not alive:
 			return
+		# A cloaked ENEMY (relative to the human player's team 0) draws no
+		# overhead HUD either — an HP bar floating over "nothing" would give
+		# the position away. Own-team cloaks keep their overlay.
+		if invisible_time_left > 0 and team_id != 0:
+			return
 		draw_set_transform(_get_hud_screen_correction())
 		_draw_3d_extras(now)
 		_draw_hud(now, get_status_accent(base_color))

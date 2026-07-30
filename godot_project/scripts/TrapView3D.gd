@@ -88,6 +88,11 @@ func _process(delta):
 		return
 	position = CoordUtil.to_world(trap.global_position, 0.05)
 
+	# Enemy traps (relative to the human player's team 0) are fully hidden —
+	# stepping on one is the discovery. The snap animation always shows.
+	visible = trap.owner_entity == null or not is_instance_valid(trap.owner_entity) \
+		or trap.owner_entity.team_id == 0
+
 	var target_tilt = TOOTH_READY if trap.armed else TOOTH_SPLAYED
 	for tooth in _teeth:
 		tooth.rotation.z = lerpf(tooth.rotation.z, target_tilt, minf(1.0, delta * 10.0))
@@ -112,6 +117,7 @@ func _snap_anim(delta: float):
 	if not _snap:
 		_snap = true
 		_snap_t = 0.0
+		visible = true  # a hidden enemy trap reveals itself the moment it fires
 	_snap_t += delta
 	var t = _snap_t / SNAP_DUR
 	if t >= 1.0:

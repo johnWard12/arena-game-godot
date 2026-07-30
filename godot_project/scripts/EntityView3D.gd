@@ -400,18 +400,23 @@ func _build_bladestorm_fx():
 	pm.gravity = Vector3.ZERO
 	pm.scale_min = 1.0
 	pm.scale_max = 1.0
-	pm.color = Color(1.0, 0.88, 0.2)
+	# Blood-red blades (was gold energy motes) — with align-to-velocity each
+	# elongated quad flies point-first, reading as swords hurled out of the
+	# spin in a full 360.
+	pm.color = Color(1.0, 0.22, 0.22)
 	pm.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
 	_bladestorm_particles.process_material = pm
+	_bladestorm_particles.amount = 34
 	var quad := QuadMesh.new()
-	quad.size = Vector2(0.1, 0.42)
+	quad.size = Vector2(0.09, 0.62)
 	var pmat := StandardMaterial3D.new()
 	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	pmat.albedo_color = Color(1.0, 0.9, 0.3)
+	pmat.albedo_color = Color(1.0, 0.3, 0.3)
 	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pmat.vertex_color_use_as_albedo = true
 	pmat.emission_enabled = true
-	pmat.emission = Color(1.0, 0.85, 0.25)
-	pmat.emission_energy_multiplier = 2.6
+	pmat.emission = Color(1.0, 0.12, 0.18)
+	pmat.emission_energy_multiplier = 3.0
 	quad.material = pmat
 	_bladestorm_particles.draw_pass_1 = quad
 	add_child(_bladestorm_particles)
@@ -899,7 +904,11 @@ func _process(delta):
 		return
 	_was_alive = true
 	_death_timer = 0.0
-	visible = true
+	# True stealth: a cloaked ENEMY (relative to the human player's team 0)
+	# disappears entirely — model, ring, trails, everything under this view.
+	# Your own team's cloaked Ranger stays visible as a translucent ghost
+	# (see _update_char_flash).
+	visible = not (entity.invisible_time_left > 0 and entity.team_id != 0)
 	scale = Vector3.ONE
 	rotation = Vector3.ZERO
 
@@ -947,7 +956,7 @@ func _update_status_fx(delta: float):
 		# around the Duelist (lazily created the first time it's needed).
 		if _bladestorm_light == null and storming:
 			_bladestorm_light = OmniLight3D.new()
-			_bladestorm_light.light_color = Color(1.0, 0.85, 0.4)
+			_bladestorm_light.light_color = Color(1.0, 0.25, 0.25)
 			_bladestorm_light.light_energy = 2.2
 			_bladestorm_light.omni_range = 3.5
 			_bladestorm_light.shadow_enabled = false

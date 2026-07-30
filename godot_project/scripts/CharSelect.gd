@@ -96,9 +96,9 @@ const CLASSES = [
 		"ability_descs": [
 			"7.5 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
 			"22.4 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
-			"Throws a large trap 110 out that arms in 0.5s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
+			"Throws a large trap 110 out that arms in 0.5s, then roots the first enemy to cross it for 1.2s. Invisible to the enemy team. 7s cooldown.",
 			"15 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
-			"Vanish from AI targeting for 3s (a human player tracking you can still hit you). 10s cooldown.",
+			"Turn fully invisible to the enemy team for 3s (allies still see you as a ghost). 10s cooldown.",
 			"Targets a zone that rains arrows for 2s, ticking 13.1 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
 		]
 	},
