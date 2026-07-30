@@ -255,7 +255,7 @@ func _draw():
 	var strips = 36
 	for i in strips:
 		var t0 = float(i) / strips
-		draw_rect(Rect2(0, H * t0, W, H / strips + 1), top_col.lerp(bot_col, t0))
+		draw_rect(Rect2(0, H * t0, W, H / float(strips) + 1.0), top_col.lerp(bot_col, t0))
 
 	_draw_text("ARENA PROTOTYPE", Vector2(W * 0.5, 46), 20, Color(0.85, 0.72, 0.45, 0.75), true)
 	_draw_text("CHOOSE YOUR FIGHTERS", Vector2(W * 0.5, 82), 36, Color(0.96, 0.97, 1.0), true)
