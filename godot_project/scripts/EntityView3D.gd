@@ -392,17 +392,22 @@ func _build_bladestorm_fx():
 	# forward ones) skewed the whole storm toward his front while moving.
 	_bladestorm_particles.local_coords = true
 	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = 0.12
-	pm.direction = Vector3(0, 1, 0)
-	# spread=180 (the max) covers the full sphere of possible directions
-	# before flatness=1.0 collapses that down onto the horizontal plane —
-	# spread=90 alone left a directional bias toward "up" that read as a
-	# narrower fan instead of a complete ring around the character.
-	pm.spread = 180.0
-	pm.flatness = 1.0
-	pm.initial_velocity_min = 4.5
-	pm.initial_velocity_max = 6.0
+	# Direction/spread/flatness turned out NOT to give an isotropic
+	# horizontal fan — the distribution concentrates in one local plane, and
+	# since this node rotates with facing (and local_coords is on), that
+	# plane tracked the character's facing: blades only flew ahead/behind.
+	# Instead: spawn each blade on a small uniform RING around the character
+	# with zero initial velocity, and let a strong radial acceleration fling
+	# it straight outward along its own spawn direction — geometrically
+	# uniform 360 coverage no matter which way he faces or moves.
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_RING
+	pm.emission_ring_axis = Vector3(0, 1, 0)
+	pm.emission_ring_radius = 0.3
+	pm.emission_ring_inner_radius = 0.25
+	pm.emission_ring_height = 0.1
+	pm.initial_velocity_min = 0.0
+	pm.initial_velocity_max = 0.0
+	pm.radial_accel = Vector2(30.0, 40.0)
 	pm.gravity = Vector3.ZERO
 	pm.scale_min = 1.0
 	pm.scale_max = 1.0
