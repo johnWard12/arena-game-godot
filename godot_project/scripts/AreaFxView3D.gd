@@ -194,23 +194,11 @@ func _build_holy_extras(r: float):
 		_extra_mats.append(smat)
 		_extra_alphas.append(0.5)
 
-# Mage — a bright center column that spikes and fades plus a one-shot ring
-# of radially-flying glints: reads as an arcane detonation.
+# Mage — a one-shot ring of radially-flying glints plus a counter-rotating
+# rune-dash circle: reads as an arcane detonation. (Its center flash column
+# was cut alongside Consecrate's sky-beam — the tall-pillar look read as
+# too busy in play.)
 func _build_arcane_extras(r: float):
-	var column := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = r * 0.10
-	cyl.bottom_radius = r * 0.16
-	cyl.height = 2.4
-	column.mesh = cyl
-	var cmat = _make_mat(0.55)
-	cmat.emission_energy_multiplier = 2.6
-	column.material_override = cmat
-	column.position.y = 1.2
-	add_child(column)
-	_extra_mats.append(cmat)
-	_extra_alphas.append(0.55)
-
 	var burst := GPUParticles3D.new()
 	burst.position.y = 0.4
 	burst.amount = 26
