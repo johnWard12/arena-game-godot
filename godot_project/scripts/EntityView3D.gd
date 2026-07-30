@@ -382,9 +382,14 @@ func _build_bloodlust_particles():
 func _build_bladestorm_fx():
 	_bladestorm_particles = GPUParticles3D.new()
 	_bladestorm_particles.position = Vector3(0, 0.9, 0)
-	_bladestorm_particles.amount = 26
-	_bladestorm_particles.lifetime = 0.4
+	_bladestorm_particles.amount = 14
+	_bladestorm_particles.lifetime = 0.5
 	_bladestorm_particles.emitting = false
+	# local_coords: blades simulate in the character's own space, so the ring
+	# stays perfectly centered on him even at full sprint. In world space,
+	# his movement speed added to backward-flying blades (and subtracted from
+	# forward ones) skewed the whole storm toward his front while moving.
+	_bladestorm_particles.local_coords = true
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
 	pm.emission_sphere_radius = 0.12
@@ -395,20 +400,20 @@ func _build_bladestorm_fx():
 	# narrower fan instead of a complete ring around the character.
 	pm.spread = 180.0
 	pm.flatness = 1.0
-	pm.initial_velocity_min = 5.5
-	pm.initial_velocity_max = 8.0
+	pm.initial_velocity_min = 4.5
+	pm.initial_velocity_max = 6.0
 	pm.gravity = Vector3.ZERO
 	pm.scale_min = 1.0
 	pm.scale_max = 1.0
 	# Blood-red blades (was gold energy motes) — with align-to-velocity each
 	# elongated quad flies point-first, reading as swords hurled out of the
-	# spin in a full 360.
+	# spin in a full 360. Fewer, bigger blades read as swords instead of
+	# shrapnel.
 	pm.color = Color(1.0, 0.22, 0.22)
 	pm.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
 	_bladestorm_particles.process_material = pm
-	_bladestorm_particles.amount = 34
 	var quad := QuadMesh.new()
-	quad.size = Vector2(0.09, 0.62)
+	quad.size = Vector2(0.17, 0.95)
 	var pmat := StandardMaterial3D.new()
 	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	pmat.albedo_color = Color(1.0, 0.3, 0.3)
