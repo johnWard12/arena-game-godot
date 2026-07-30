@@ -75,11 +75,13 @@ func _make_stone_material(base_color: Color, seed_val: int, uv_scale: float, rou
 	var noise := FastNoiseLite.new()
 	noise.seed = seed_val
 	noise.frequency = 0.045
-	noise.fractal_octaves = 3
+	noise.fractal_octaves = 4
 
+	# 512px maps (up from 256) — at the floor's uv scale the old textures
+	# went visibly soft; this is the biggest sharpness win on large surfaces.
 	var albedo_tex := NoiseTexture2D.new()
-	albedo_tex.width = 256
-	albedo_tex.height = 256
+	albedo_tex.width = 512
+	albedo_tex.height = 512
 	albedo_tex.noise = noise
 	albedo_tex.seamless = true
 
@@ -88,8 +90,8 @@ func _make_stone_material(base_color: Color, seed_val: int, uv_scale: float, rou
 	# had any bump at all. Sharing the noise source means the bumps align
 	# with the color variation instead of reading as two unrelated patterns.
 	var normal_tex := NoiseTexture2D.new()
-	normal_tex.width = 256
-	normal_tex.height = 256
+	normal_tex.width = 512
+	normal_tex.height = 512
 	normal_tex.noise = noise
 	normal_tex.seamless = true
 	normal_tex.as_normal_map = true
@@ -345,8 +347,8 @@ func _build_torch(pos2d: Vector2):
 	var light := OmniLight3D.new()
 	light.position = base_pos + Vector3(0, 1.45, 0)
 	light.light_color = TORCH_COLOR
-	light.light_energy = 1.8
-	light.omni_range = 4.5
+	light.light_energy = 2.0
+	light.omni_range = 5.2
 	add_child(light)
 	_torch_lights.append(light)
 
@@ -455,74 +457,86 @@ func _process(delta):
 				var gem_mat: StandardMaterial3D = _pack_meshes[i].material_override
 				gem_mat.emission_energy_multiplier = 1.8 + pulse * 1.0
 	for i in _torch_lights.size():
-		var flicker = 1.6 + sin(_time * 9.0 + i * 2.1) * 0.15 + sin(_time * 23.0 + i) * 0.08
+		var flicker = 2.0 + sin(_time * 9.0 + i * 2.1) * 0.2 + sin(_time * 23.0 + i) * 0.1
 		_torch_lights[i].light_energy = flicker
 
 func _build_lighting():
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-50, -35, 0)
-	sun.light_energy = 1.0
-	sun.light_color = Color(1.0, 0.95, 0.85)
-	# Re-enabled now that the front/side geometry is a short lip (0.4m).
-	# The crenellated back wall/towers are fine-detail repeating geometry
-	# that can alias into speckled shadow noise at default shadow settings,
-	# so blur+bias are pushed up to soften that rather than disabling
-	# shadows outright (which was the earlier fix for a different problem —
-	# a single huge flat quad's stretched shadow).
+	sun.light_energy = 1.25
+	sun.light_color = Color(1.0, 0.93, 0.80)
+	# The camera is a fixed orthographic frame over a ~21m arena, so a single
+	# ORTHOGONAL shadow split beats the default 4-way PSSM here on both
+	# quality and cost: all 4096 shadow texels (see project.godot) cover one
+	# tight range instead of being split across cascades tuned for a moving
+	# perspective camera. max_distance only needs to reach past the far wall.
 	sun.shadow_enabled = true
-	sun.shadow_blur = 1.5
-	sun.shadow_bias = 0.15
-	sun.shadow_normal_bias = 2.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_max_distance = 45.0
+	sun.shadow_blur = 1.2
+	sun.shadow_bias = 0.1
+	sun.shadow_normal_bias = 1.8
 	add_child(sun)
+
+	# Cool rim/fill from behind (no shadows — it's a cheap accent, not a real
+	# light source): edges characters and props in faint blue so they separate
+	# from the warm floor. Classic warm-key/cool-rim stage lighting.
+	var rim := DirectionalLight3D.new()
+	rim.rotation_degrees = Vector3(-30, 158, 0)
+	rim.light_energy = 0.5
+	rim.light_color = Color(0.55, 0.7, 1.0)
+	rim.light_specular = 0.8
+	rim.shadow_enabled = false
+	add_child(rim)
 
 	var env_node := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.08, 0.08, 0.14)
-	sky_mat.sky_horizon_color = Color(0.30, 0.22, 0.16)
+	# Dusk gradient with a hot horizon band — only a strip of sky is visible
+	# above the back wall, so the horizon does all the visual work.
+	sky_mat.sky_top_color = Color(0.09, 0.11, 0.20)
+	sky_mat.sky_horizon_color = Color(0.66, 0.38, 0.20)
+	sky_mat.sky_curve = 0.12
 	sky_mat.ground_bottom_color = Color(0.06, 0.05, 0.04)
-	sky_mat.ground_horizon_color = Color(0.22, 0.17, 0.12)
+	sky_mat.ground_horizon_color = Color(0.55, 0.33, 0.18)
 	sky.sky_material = sky_mat
 	env.sky = sky
-	# Ambient from a fixed neutral color rather than the sky — deriving it
-	# from the sky's warm horizon color was tinting every material toward
-	# the same brown regardless of its actual albedo, crushing the contrast
-	# between floor/wall/obstacle.
+	# Ambient from a fixed color rather than the sky (a sky-derived warm
+	# ambient tinted everything brown) — but tipped slightly COOL, so shadowed
+	# faces contrast in color temperature against the warm sun instead of
+	# just being darker versions of the same tone.
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.55, 0.55, 0.58)
-	env.ambient_light_energy = 0.5
-	# Fog was the main culprit for the "everything looks the same" wash —
-	# at this arena's ~37m scale, 0.02 density was strong enough to tint
-	# every surface toward fog_light_color regardless of distance. Cut by
-	# 5x and desaturated toward neutral so it only adds faint depth cueing.
+	env.ambient_light_color = Color(0.50, 0.54, 0.64)
+	env.ambient_light_energy = 0.55
+	# Fog kept to a faint depth cue only (0.02 used to wash everything flat).
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.5, 0.48, 0.46)
 	env.fog_density = 0.004
+	# Slightly stronger, tighter glow — with ACES below, emissives (torches,
+	# health gems, projectiles, ability FX) roll off into a graded halo
+	# instead of clipping to flat white.
 	env.glow_enabled = true
-	env.glow_intensity = 0.4
-	env.glow_bloom = 0.06
-	env.glow_hdr_threshold = 1.1
+	env.glow_intensity = 0.6
+	env.glow_bloom = 0.03
+	env.glow_hdr_threshold = 1.0
 
-	# SSAO was cut — it's one of the more GPU-expensive post-process effects
-	# and, combined with 4x MSAA and a 4096 shadow map, made the game
-	# noticeably laggy/jittery. The normal maps + tonemap + color grading
-	# below do most of the visual work at a much lower cost; re-add SSAO
-	# later if performance allows.
+	# SSAO stays off — it was measurably laggy on this machine combined with
+	# MSAA + big shadow maps (see git history). The rim light + normal maps
+	# carry the depth cues at a fraction of the cost.
 	env.ssao_enabled = false
 
-	# Filmic tonemapping gives much better highlight rolloff than the
-	# default Linear mode, which matters here since several elements are
-	# emissive/bloom-lit (torches, health packs, the center ring) — Linear
-	# tends to blow those out to flat white instead of a graded glow.
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# ACES tonemap — noticeably better highlight rolloff and midtone punch
+	# than Filmic for a scene lit by one strong key plus emissive accents.
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_white = 6.0
 
 	# A small color-grading pass for a less flat, more "produced" look.
 	env.adjustment_enabled = true
-	env.adjustment_brightness = 1.0
-	env.adjustment_contrast = 1.08
-	env.adjustment_saturation = 1.12
+	env.adjustment_brightness = 1.02
+	env.adjustment_contrast = 1.05
+	env.adjustment_saturation = 1.15
 
 	env_node.environment = env
 	add_child(env_node)

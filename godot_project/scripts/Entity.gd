@@ -1226,6 +1226,11 @@ func _spawn_rect_fx(pos: Vector2, facing_dir: Vector2, length: float, width: flo
 	})
 
 # ---- Drawing helpers ----
+# Scratch stylebox shared by every entity's overhead HUD (rounded bars).
+# Static + mutated right before each draw_style_box() call — safe because
+# canvas draws are immediate.
+static var _hud_style := StyleBoxFlat.new()
+
 func _draw_hud(now: int, accent: Color):
 	# hit flash
 	if hit_flash_left > 0:
@@ -1241,16 +1246,26 @@ func _draw_hud(now: int, accent: Color):
 		var pulse = 0.5 + 0.4 * sin(now * 0.02)
 		draw_arc(Vector2.ZERO, RADIUS + 9, 0, TAU, 40, Color(0.55, 0.75, 1.0, pulse), 3.0)
 
-	# HP bar above head
+	# HP bar above head — rounded and outlined, with a subtle gloss line so
+	# it reads crisply against the bright 3D scene at a glance.
 	var hp_pct = hp / max_hp
-	var bw = 54.0
-	var bh = 7.0
+	var bw = 58.0
+	var bh = 8.0
 	var bx = -bw * 0.5
 	var by = -(RADIUS + 36.0)
-	draw_rect(Rect2(bx - 1, by - 1, bw + 2, bh + 2), Color(0.04, 0.04, 0.07))
-	draw_rect(Rect2(bx, by, bw, bh), Color(0.15, 0.15, 0.2))
+	_hud_style.set_corner_radius_all(3)
+	_hud_style.set_border_width_all(1)
+	_hud_style.border_color = Color(0.02, 0.02, 0.05, 0.9)
+	_hud_style.bg_color = Color(0.10, 0.11, 0.16, 0.92)
+	draw_style_box(_hud_style, Rect2(bx - 1, by - 1, bw + 2, bh + 2))
 	var fill_col = accent if hp_pct > 0.35 else Color(0.9, 0.2, 0.15)
-	draw_rect(Rect2(bx, by, bw * hp_pct, bh), fill_col)
+	if hp_pct > 0.01:
+		_hud_style.set_corner_radius_all(2)
+		_hud_style.set_border_width_all(0)
+		_hud_style.bg_color = fill_col
+		draw_style_box(_hud_style, Rect2(bx, by, bw * hp_pct, bh))
+		if bw * hp_pct > 4.0:
+			draw_rect(Rect2(bx + 1, by + 1, bw * hp_pct - 2, 2.0), Color(1, 1, 1, 0.25))
 
 	# Shield overlay (Barrier / Guardian Ward) — a bright segment tacked on
 	# past the HP fill, same px-per-hp scale, so an ally can see exactly how
@@ -1305,8 +1320,15 @@ func _draw_hud(now: int, accent: Color):
 	if casting != null:
 		var pct = 1.0 - (casting["time_left"] / casting["total"])
 		var bar_y = -RADIUS - 18.0
-		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48, 5)), Color(0.06, 0.06, 0.10))
-		draw_rect(Rect2(Vector2(-24, bar_y), Vector2(48 * pct, 5)), Color(1, 0.82, 0.4))
+		_hud_style.set_corner_radius_all(2)
+		_hud_style.set_border_width_all(1)
+		_hud_style.border_color = Color(0.02, 0.02, 0.05, 0.85)
+		_hud_style.bg_color = Color(0.07, 0.07, 0.11, 0.95)
+		draw_style_box(_hud_style, Rect2(-25, bar_y - 1, 50, 7))
+		if pct > 0.02:
+			_hud_style.set_border_width_all(0)
+			_hud_style.bg_color = Color(1, 0.82, 0.4)
+			draw_style_box(_hud_style, Rect2(-24, bar_y, 48 * pct, 5))
 
 	# combo pips — one small icon per stack, below the feet (everything
 	# above the head is already stacked with the HP bar/cast bar/status
