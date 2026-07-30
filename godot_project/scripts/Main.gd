@@ -32,6 +32,9 @@ var cd_hud: Node2D   # custom-drawn cooldown panel
 # mutated right before each draw_style_box() call, which is safe because
 # canvas draws are immediate.
 var _hud_style := StyleBoxFlat.new()
+# Emboldened variation of the fallback font — the plain weight reads thin
+# and slightly mushy over a bright 3D scene.
+var _hud_font: FontVariation
 
 var world_3d: Node3D
 var camera3d: Camera3D
@@ -337,6 +340,10 @@ void fragment() {
 	vignette.material = vig_mat
 	vignette_layer.add_child(vignette)
 
+	_hud_font = FontVariation.new()
+	_hud_font.base_font = ThemeDB.fallback_font
+	_hud_font.variation_embolden = 0.5
+
 	var canvas = CanvasLayer.new()
 	add_child(canvas)
 
@@ -391,6 +398,7 @@ void fragment() {
 		var prefix = "" if f == player else ("ALLY " if side == 0 else "BOT ")
 		label.text = prefix + cls_name
 		label.position = Vector2(x + 2, y + 24)
+		label.add_theme_font_override("font", _hud_font)
 		label.add_theme_font_size_override("font_size", 13)
 		label.add_theme_color_override("font_color", Color(0.92, 0.94, 0.99))
 		label.add_theme_color_override("font_outline_color", Color(0.02, 0.03, 0.05, 0.9))
@@ -411,6 +419,7 @@ void fragment() {
 	win_label.position = Vector2(0, 430)
 	win_label.size = Vector2(1920, 140)
 	win_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	win_label.add_theme_font_override("font", _hud_font)
 	win_label.add_theme_font_size_override("font_size", 68)
 	win_label.add_theme_color_override("font_outline_color", Color(0.02, 0.02, 0.05, 0.95))
 	win_label.add_theme_constant_override("outline_size", 12)
@@ -591,7 +600,7 @@ func _draw_heal_dampen_indicator():
 	if dampen_pct <= 0.0:
 		return
 
-	var font = ThemeDB.fallback_font
+	var font = _hud_font if _hud_font != null else ThemeDB.fallback_font
 	var cx = 1860.0
 	var cy = 210.0
 	var r  = 18.0
@@ -623,7 +632,7 @@ func _draw_heal_dampen_indicator():
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col)
 
 func _draw_cooldown_hud():
-	var font    = ThemeDB.fallback_font
+	var font    = _hud_font if _hud_font != null else ThemeDB.fallback_font
 	var defs    = _get_ability_defs()
 	var n       = defs.size()
 	var slot_w  = 112.0

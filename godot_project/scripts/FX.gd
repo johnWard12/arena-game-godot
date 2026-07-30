@@ -22,11 +22,20 @@ static func _to_screen(parent: Node, pos: Vector2) -> Vector2:
 		return pos  # no 3D camera (e.g. a pure-2D context) — use coords as-is
 	return cam.unproject_position(CoordUtil.to_world(pos, _FX_HEIGHT))
 
-static func _spawn(parent: Node, pos: Vector2, lifetime: float) -> CPUParticles2D:
+# Shared additive canvas material — bursts render as LIGHT over the bright
+# 3D scene (glowing sparks) instead of opaque confetti squares.
+static var _add_mat: CanvasItemMaterial
+
+static func _spawn(parent: Node, pos: Vector2, lifetime: float, additive: bool = true) -> CPUParticles2D:
 	if parent == null:
 		return null
+	if _add_mat == null:
+		_add_mat = CanvasItemMaterial.new()
+		_add_mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	var p = CPUParticles2D.new()
 	parent.add_child(p)
+	if additive:
+		p.material = _add_mat
 	p.global_position = _to_screen(parent, pos)
 	p.z_index = 50
 	p.emitting = false
@@ -75,8 +84,8 @@ static func death_shatter(parent: Node, pos: Vector2, color: Color) -> void:
 	p.scale_amount_max = 6.5
 	p.color = color
 	p.emitting = true
-	# secondary pale dust puff for grit
-	var d = _spawn(parent, pos, 0.6)
+	# secondary pale dust puff for grit — normal blend, dust isn't light
+	var d = _spawn(parent, pos, 0.6, false)
 	if d != null:
 		d.amount = 14
 		d.lifetime = 0.55

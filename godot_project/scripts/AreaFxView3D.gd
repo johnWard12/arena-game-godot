@@ -76,6 +76,16 @@ func setup(fx: Dictionary):
 	else:
 		_build_rect()
 
+	# Zone FX are ground-hugging emissive visuals — none of it should render
+	# into the shadow map (wrong look + wasted shadow-pass draw calls).
+	_no_shadows(self)
+
+static func _no_shadows(node: Node):
+	if node is GeometryInstance3D:
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for c in node.get_children():
+		_no_shadows(c)
+
 func _make_mat(alpha: float) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED

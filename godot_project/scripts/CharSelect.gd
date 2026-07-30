@@ -140,6 +140,17 @@ var tooltip_col  := Color.WHITE
 # before each draw, which is safe because canvas draws are immediate.
 var _sb := StyleBoxFlat.new()
 
+# Emboldened fallback font (see Main.gd's _hud_font) — lazily built since
+# ThemeDB may not be ready at member-init time.
+var _font: FontVariation
+
+func _ui_font() -> Font:
+	if _font == null:
+		_font = FontVariation.new()
+		_font.base_font = ThemeDB.fallback_font
+		_font.variation_embolden = 0.5
+	return _font
+
 func _round_rect(rect: Rect2, bg: Color, border: Color, border_w: int, radius: int):
 	_sb.bg_color = bg
 	_sb.set_corner_radius_all(radius)
@@ -326,7 +337,7 @@ func _draw_slot_chips(side: int, slots: Array, active: int):
 			Color(1, 1, 1, 0.95 if is_active else 0.7), true)
 
 func _draw_tooltip():
-	var font    = ThemeDB.fallback_font
+	var font    = _ui_font()
 	var size    = 13
 	var padding = 12.0
 	var max_w   = 340.0
@@ -447,7 +458,7 @@ func _build_kit_tooltip(c: Dictionary) -> String:
 	return "\n\n".join(parts)
 
 func _draw_text(text: String, pos: Vector2, size: int, col: Color, centered: bool):
-	var font = ThemeDB.fallback_font
+	var font = _ui_font()
 	if centered:
 		var sw = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 		draw_string(font, Vector2(pos.x - sw * 0.5, pos.y + size * 0.35), text,

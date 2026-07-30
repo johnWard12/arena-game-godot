@@ -118,6 +118,18 @@ func setup(p: Projectile):
 		add_child(seg)
 		_trail_meshes.append(seg)
 
+	# None of this view's geometry should render into the shadow map — it's
+	# all emissive light FX (a glowing bolt casting a solid shadow is both
+	# wrong and wasted shadow-pass draw calls, especially with several
+	# projectiles alive at once).
+	_no_shadows(self)
+
+static func _no_shadows(node: Node):
+	if node is GeometryInstance3D:
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for c in node.get_children():
+		_no_shadows(c)
+
 func _unshaded_mat(col: Color, energy: float, alpha: float = 1.0) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED

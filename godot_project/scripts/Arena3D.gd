@@ -306,6 +306,7 @@ func _build_health_packs():
 		glow_mat.emission = HEALTH_COLOR
 		glow_mat.emission_energy_multiplier = 1.0
 		glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		glow.material_override = glow_mat
 		pivot.add_child(glow)
 		_pack_glows.append(glow)
@@ -385,6 +386,7 @@ func _build_torch(pos2d: Vector2):
 	fire_mat.emission_energy_multiplier = 2.0
 	fire_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	quad.material = fire_mat
+	fire.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	fire.draw_pass_1 = quad
 	add_child(fire)
 
@@ -583,6 +585,7 @@ func _build_ambient_motes():
 	qmat.emission = Color(1.0, 0.9, 0.65)
 	qmat.emission_energy_multiplier = 0.7
 	quad.material = qmat
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	m.draw_pass_1 = quad
 	add_child(m)
 

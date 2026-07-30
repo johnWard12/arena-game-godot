@@ -82,6 +82,15 @@ func setup(t: Trap):
 		holder.add_child(tooth)
 		_teeth.append(tooth)
 
+	# Tiny FX geometry — skip the shadow pass entirely.
+	_no_shadows(self)
+
+static func _no_shadows(node: Node):
+	if node is GeometryInstance3D:
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for c in node.get_children():
+		_no_shadows(c)
+
 func _process(delta):
 	if trap == null or not is_instance_valid(trap):
 		_snap_anim(delta)

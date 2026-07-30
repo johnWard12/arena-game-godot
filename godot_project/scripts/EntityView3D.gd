@@ -165,6 +165,7 @@ func setup(e: Entity):
 	_build_motion_trail()
 	_build_cast_gather()
 	_build_parry_ring()
+	_strip_fx_shadows()
 
 	_anim = _find_anim_player(_model)
 	if _anim != null:
@@ -905,6 +906,21 @@ func _update_char_flash():
 			mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 			mat.albedo_color.a = 1.0
 
+# Only the character model itself should cast a shadow — every other child
+# (ground ring, status FX, particles, slash arc...) is emissive light FX
+# that would render wrong shadows AND waste shadow-pass draw calls. Called
+# at the end of setup; anything built lazily later sets its own flag.
+func _strip_fx_shadows():
+	for c in get_children():
+		if c != _model:
+			_no_shadows(c)
+
+static func _no_shadows(node: Node):
+	if node is GeometryInstance3D:
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for child in node.get_children():
+		_no_shadows(child)
+
 func _find_anim_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:
 		return node
@@ -1201,6 +1217,7 @@ func _animate_death(delta: float):
 		qmat.emission_energy_multiplier = 2.0
 		quad.material = qmat
 		burst.draw_pass_1 = quad
+		burst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(burst)
 	visible = true
 	position = CoordUtil.to_world(entity.global_position)
