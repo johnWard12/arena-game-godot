@@ -17,6 +17,15 @@ var _glow: MeshInstance3D
 var _glow_mat: StandardMaterial3D
 var _glint_a: MeshInstance3D
 var _glint_b: MeshInstance3D
+var _sparks: GPUParticles3D
+var _light: OmniLight3D
+
+# Impact pop: when the sim projectile frees (hit or expiry), this view
+# lingers ~0.2s to play a quick expanding flash instead of vanishing on the
+# same frame — sells the hit landing.
+var _dying := false
+var _die_t := 0.0
+const IMPACT_DUR := 0.22
 
 const TRAIL_SEGMENTS := 6
 var _trail_meshes: Array[MeshInstance3D] = []
@@ -47,6 +56,47 @@ func setup(p: Projectile):
 		"icicle": _build_icicle(col, r)
 		"arrow": _build_arrow(col, r)
 		_: _build_orb(col, r)
+
+	# comet spark trail — world-space particles shed behind the moving bolt
+	_sparks = GPUParticles3D.new()
+	_sparks.amount = 24
+	_sparks.lifetime = 0.35
+	_sparks.local_coords = false
+	var pm := ParticleProcessMaterial.new()
+	pm.spread = 180.0
+	pm.initial_velocity_min = 0.2
+	pm.initial_velocity_max = 0.9
+	pm.gravity = Vector3.ZERO
+	pm.scale_min = 0.5
+	pm.scale_max = 1.0
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(col.r, col.g, col.b, 0.9))
+	ramp.set_color(1, Color(col.r, col.g, col.b, 0.0))
+	var ramp_tex := GradientTexture1D.new()
+	ramp_tex.gradient = ramp
+	pm.color_ramp = ramp_tex
+	_sparks.process_material = pm
+	var spark_quad := QuadMesh.new()
+	spark_quad.size = Vector2(0.07, 0.07)
+	var spark_mat := StandardMaterial3D.new()
+	spark_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	spark_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	spark_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	spark_mat.vertex_color_use_as_albedo = true
+	spark_mat.emission_enabled = true
+	spark_mat.emission = col
+	spark_mat.emission_energy_multiplier = 1.6
+	spark_quad.material = spark_mat
+	_sparks.draw_pass_1 = spark_quad
+	add_child(_sparks)
+
+	# real dynamic light so spells illuminate the floor/fighters as they fly
+	_light = OmniLight3D.new()
+	_light.light_color = col
+	_light.light_energy = 1.3
+	_light.omni_range = 2.4
+	_light.shadow_enabled = false
+	add_child(_light)
 
 	# fading trail ghosts, one mesh per segment, reused every frame
 	for i in TRAIL_SEGMENTS:
@@ -197,9 +247,9 @@ func _build_arrow(col: Color, r: float):
 	fin_b.position = Vector3(0, 0, -length * 0.32)
 	add_child(fin_b)
 
-func _process(_delta):
+func _process(delta):
 	if projectile == null or not is_instance_valid(projectile):
-		queue_free()
+		_impact(delta)
 		return
 	position = CoordUtil.to_world(projectile.global_position, 0.9)
 
@@ -228,3 +278,26 @@ func _process(_delta):
 			continue
 		seg.visible = true
 		seg.global_position = CoordUtil.to_world(trail[src_idx], 0.9)
+
+# Quick expanding flash + light pop at the projectile's last position, then
+# free. First frame hides the projectile body and keeps only the glow halo.
+func _impact(delta: float):
+	if not _dying:
+		_dying = true
+		_die_t = 0.0
+		for c in get_children():
+			if c is MeshInstance3D and c != _glow:
+				c.visible = false
+		if _sparks != null:
+			_sparks.emitting = false
+	_die_t += delta
+	var t = _die_t / IMPACT_DUR
+	if t >= 1.0:
+		queue_free()
+		return
+	_glow.visible = true
+	_glow.scale = Vector3.ONE * (1.0 + t * 2.6)
+	_glow_mat.albedo_color.a = 0.5 * (1.0 - t)
+	_glow_mat.emission_energy_multiplier = 2.0 * (1.0 - t)
+	if _light != null:
+		_light.light_energy = 2.2 * (1.0 - t)

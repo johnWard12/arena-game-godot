@@ -473,6 +473,10 @@ func _build_lighting():
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	sun.directional_shadow_max_distance = 45.0
+	# A real angular size for the sun gives contact-hardening penumbras with
+	# the soft shadow filter — crisp where objects touch the ground, softer
+	# as the shadow stretches away.
+	sun.light_angular_distance = 1.5
 	sun.shadow_blur = 1.2
 	sun.shadow_bias = 0.1
 	sun.shadow_normal_bias = 1.8

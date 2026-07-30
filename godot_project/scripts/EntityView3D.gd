@@ -70,6 +70,10 @@ const MODEL_CONFIG := {
 var entity: Entity = null
 var _cfg: Dictionary
 var _model: Node3D
+# Per-instance duplicates of every material on this character's meshes —
+# lets this view flash/fade ITS model without affecting other fighters
+# instanced from the same GLTF (imported materials are shared resources).
+var _char_mats: Array[BaseMaterial3D] = []
 var _anim: AnimationPlayer
 var _current_anim := ""
 var _swing_was_active := false
@@ -78,6 +82,13 @@ var _was_alive := true
 
 var _ring: MeshInstance3D
 var _ring_mat: StandardMaterial3D
+
+# Melee slash arc — an ImmediateMesh fan rebuilt each frame while a swing is
+# active, sweeping across the swing's real arc (start angle/span/progress all
+# come from the sim's swing state, so the visual matches the hit exactly).
+var _slash: MeshInstance3D
+var _slash_mesh: ImmediateMesh
+var _slash_mat: StandardMaterial3D
 
 var _freeze_pivot: Node3D
 var _freeze_shards: Array[MeshInstance3D] = []
@@ -133,6 +144,8 @@ func setup(e: Entity):
 	# has no facing concept, so this correction is local to the character
 	# model only).
 	_model.rotation.y = PI
+	_collect_char_materials(_model)
+	_build_slash_arc()
 
 	_anim = _find_anim_player(_model)
 	if _anim != null:
@@ -660,6 +673,77 @@ func _build_bond_fx():
 	_bond_beam.visible = false
 	get_parent().add_child(_bond_beam)
 
+# Duplicate every character material into a per-instance copy (see
+# _char_mats) and even out the imported surface response — full roughness,
+# zero metallic — so the toon-textured models read as soft matte cloth/armor
+# under ACES instead of slightly plasticky.
+func _collect_char_materials(node: Node):
+	if node is MeshInstance3D and node.mesh != null:
+		for i in node.mesh.get_surface_count():
+			var src: Material = node.get_active_material(i)
+			if src is BaseMaterial3D:
+				var dup: BaseMaterial3D = src.duplicate()
+				dup.roughness = 1.0
+				dup.metallic = 0.0
+				node.set_surface_override_material(i, dup)
+				_char_mats.append(dup)
+	for child in node.get_children():
+		_collect_char_materials(child)
+
+func _build_slash_arc():
+	_slash_mesh = ImmediateMesh.new()
+	_slash = MeshInstance3D.new()
+	_slash.mesh = _slash_mesh
+	# top_level: the arc's vertices are built in absolute world space from
+	# sim angles, so it must NOT inherit this node's look_at rotation.
+	_slash.top_level = true
+	_slash_mat = StandardMaterial3D.new()
+	_slash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_slash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_slash_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_slash_mat.emission_enabled = true
+	_slash.material_override = _slash_mat
+	add_child(_slash)
+
+func _update_slash_arc():
+	var swinging = entity.swing_time_left > 0 and entity.swing_total > 0
+	if not swinging:
+		_slash.visible = false
+		return
+	_slash.visible = true
+	var progress = 1.0 - (entity.swing_time_left / entity.swing_total)
+	var col = entity.base_color
+	var alpha = 0.5 * (1.0 - progress * 0.6)
+	_slash_mat.albedo_color = Color(col.r, col.g, col.b, alpha)
+	_slash_mat.emission = col
+	_slash_mat.emission_energy_multiplier = 1.4
+
+	var start_a = entity.swing_start_angle
+	var swept = entity.swing_arc_span * progress
+	var inner = 40.0   # sim units
+	var outer = 145.0
+	var steps = 12
+	_slash_mesh.clear_surfaces()
+	_slash_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+	for s in steps + 1:
+		var a = start_a + swept * (float(s) / steps)
+		var dir2 = Vector2(cos(a), sin(a))
+		_slash_mesh.surface_add_vertex(CoordUtil.to_world(entity.global_position + dir2 * inner, 0.85))
+		_slash_mesh.surface_add_vertex(CoordUtil.to_world(entity.global_position + dir2 * outer, 0.85))
+	_slash_mesh.surface_end()
+
+# White-hot flash on the actual model when hit — far more readable than a
+# 2D overlay circle, and localized to this instance via _char_mats.
+func _update_char_flash():
+	var flash = clamp(entity.hit_flash_left / 0.25, 0.0, 1.0)
+	for mat in _char_mats:
+		if flash > 0.0:
+			mat.emission_enabled = true
+			mat.emission = Color(1.0, 0.97, 0.92)
+			mat.emission_energy_multiplier = flash * 1.6
+		else:
+			mat.emission_enabled = false
+
 func _find_anim_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:
 		return node
@@ -706,6 +790,8 @@ func _process(delta):
 	_ring_mat.emission_energy_multiplier = 1.8 if entity.hit_flash_left > 0 else 0.9
 
 	_update_status_fx(delta)
+	_update_char_flash()
+	_update_slash_arc()
 	_update_animation()
 
 func _update_status_fx(delta: float):
@@ -870,8 +956,19 @@ func _animate_death(delta: float):
 		# with the rest of this view.
 		_bond_ring.visible = false
 		_bond_beam.visible = false
+		# _update_char_flash()/_update_slash_arc() also stop running once
+		# dead — clear any residual hit-flash emission and mid-swing arc.
+		for mat in _char_mats:
+			mat.emission_enabled = false
+		_slash.visible = false
 	visible = true
 	position = CoordUtil.to_world(entity.global_position)
 	_death_timer += delta
+	# Dissolve the body out over the final stretch instead of blinking off.
+	var fade = clamp((_death_timer - 1.1) / 0.9, 0.0, 1.0)
+	if fade > 0.0:
+		for mat in _char_mats:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.albedo_color.a = 1.0 - fade
 	if _death_timer >= 2.0:
 		visible = false
