@@ -90,6 +90,16 @@ var _slash: MeshInstance3D
 var _slash_mesh: ImmediateMesh
 var _slash_mat: StandardMaterial3D
 
+# Cross-cutting character FX, each shared by several abilities:
+# - motion trail: team-color streaks shed during any dash/lunge (Duelist
+#   Lunge, Bruiser Seismic, Ranger Disengage recoil, the universal dash)
+# - cast gather: particles converging on the chest during any wind-up
+# - parry ring: a bright guard ring during the parry window
+var _motion_trail: GPUParticles3D
+var _cast_gather: GPUParticles3D
+var _parry_ring: MeshInstance3D
+var _parry_ring_mat: StandardMaterial3D
+
 var _freeze_pivot: Node3D
 var _freeze_shards: Array[MeshInstance3D] = []
 
@@ -152,6 +162,9 @@ func setup(e: Entity):
 	_model.rotation.y = PI
 	_collect_char_materials(_model)
 	_build_slash_arc()
+	_build_motion_trail()
+	_build_cast_gather()
+	_build_parry_ring()
 
 	_anim = _find_anim_player(_model)
 	if _anim != null:
@@ -696,6 +709,102 @@ func _collect_char_materials(node: Node):
 	for child in node.get_children():
 		_collect_char_materials(child)
 
+# Team-color streaks shed in world space while dashing/lunging — sells the
+# burst of speed on every gap-closer and dodge in the game.
+func _build_motion_trail():
+	_motion_trail = GPUParticles3D.new()
+	_motion_trail.amount = 30
+	_motion_trail.lifetime = 0.3
+	_motion_trail.local_coords = false
+	_motion_trail.emitting = false
+	_motion_trail.position = Vector3(0, 0.55, 0)
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.25
+	pm.gravity = Vector3.ZERO
+	pm.initial_velocity_min = 0.0
+	pm.initial_velocity_max = 0.15
+	pm.scale_min = 0.6
+	pm.scale_max = 1.2
+	var col = entity.base_color
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(col.r, col.g, col.b, 0.8))
+	ramp.set_color(1, Color(col.r, col.g, col.b, 0.0))
+	var ramp_tex := GradientTexture1D.new()
+	ramp_tex.gradient = ramp
+	pm.color_ramp = ramp_tex
+	_motion_trail.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.16, 0.16)
+	var qmat := StandardMaterial3D.new()
+	qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	qmat.vertex_color_use_as_albedo = true
+	qmat.emission_enabled = true
+	qmat.emission = col
+	qmat.emission_energy_multiplier = 1.5
+	quad.material = qmat
+	_motion_trail.draw_pass_1 = quad
+	add_child(_motion_trail)
+
+# Warm motes converging on the chest during any cast wind-up — every
+# wind-up ability across every class now telegraphs "charging something".
+func _build_cast_gather():
+	_cast_gather = GPUParticles3D.new()
+	_cast_gather.amount = 16
+	_cast_gather.lifetime = 0.35
+	_cast_gather.emitting = false
+	_cast_gather.position = Vector3(0, 1.0, 0)
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE_SURFACE
+	pm.emission_sphere_radius = 0.7
+	pm.gravity = Vector3.ZERO
+	pm.initial_velocity_min = 0.0
+	pm.initial_velocity_max = 0.1
+	pm.radial_accel = Vector2(-16.0, -12.0)
+	var gcol = Color(1.0, 0.9, 0.6)
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(gcol.r, gcol.g, gcol.b, 0.0))
+	ramp.set_color(1, Color(gcol.r, gcol.g, gcol.b, 0.9))
+	var ramp_tex := GradientTexture1D.new()
+	ramp_tex.gradient = ramp
+	pm.color_ramp = ramp_tex
+	_cast_gather.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.07, 0.07)
+	var qmat := StandardMaterial3D.new()
+	qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	qmat.vertex_color_use_as_albedo = true
+	qmat.emission_enabled = true
+	qmat.emission = gcol
+	qmat.emission_energy_multiplier = 2.0
+	quad.material = qmat
+	_cast_gather.draw_pass_1 = quad
+	add_child(_cast_gather)
+
+# Bright blue guard ring at chest height during the parry window — the 3D
+# read of the old 2D-only parry circle.
+func _build_parry_ring():
+	_parry_ring = MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.5
+	torus.outer_radius = 0.56
+	_parry_ring.mesh = torus
+	_parry_ring.position = Vector3(0, 0.9, 0)
+	_parry_ring_mat = StandardMaterial3D.new()
+	_parry_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_parry_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_parry_ring_mat.albedo_color = Color(0.3, 0.7, 1.0, 0.7)
+	_parry_ring_mat.emission_enabled = true
+	_parry_ring_mat.emission = Color(0.3, 0.7, 1.0)
+	_parry_ring_mat.emission_energy_multiplier = 2.0
+	_parry_ring.material_override = _parry_ring_mat
+	_parry_ring.visible = false
+	add_child(_parry_ring)
+
 func _build_slash_arc():
 	_slash_mesh = ImmediateMesh.new()
 	_slash = MeshInstance3D.new()
@@ -739,9 +848,12 @@ func _update_slash_arc():
 	_slash_mesh.surface_end()
 
 # White-hot flash on the actual model when hit — far more readable than a
-# 2D overlay circle, and localized to this instance via _char_mats.
+# 2D overlay circle, and localized to this instance via _char_mats. Also
+# owns Camouflage's ghosting: the model itself goes translucent while
+# invisible_time_left runs, instead of only showing a shimmer ring.
 func _update_char_flash():
 	var flash = clamp(entity.hit_flash_left / 0.25, 0.0, 1.0)
+	var invis = entity.invisible_time_left > 0
 	for mat in _char_mats:
 		if flash > 0.0:
 			mat.emission_enabled = true
@@ -749,6 +861,12 @@ func _update_char_flash():
 			mat.emission_energy_multiplier = flash * 1.6
 		else:
 			mat.emission_enabled = false
+		if invis:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.albedo_color.a = 0.35
+		elif mat.albedo_color.a < 1.0:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+			mat.albedo_color.a = 1.0
 
 func _find_anim_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:
@@ -786,6 +904,11 @@ func _process(delta):
 	rotation = Vector3.ZERO
 
 	position = CoordUtil.to_world(entity.global_position)
+	# Knocked-up fighters actually leave the ground now — an arc that peaks
+	# mid-knockup — instead of being "airborne" only in the sim's numbers.
+	if entity.knockup_time_left > 0:
+		var kpct = clamp(entity.knockup_time_left / Entity.KNOCKUP_DUR, 0.0, 1.0)
+		position.y += sin(kpct * PI) * 0.85
 	var look_dir = Vector3(entity.facing.x, 0.0, entity.facing.y)
 	if look_dir.length() > 0.001:
 		look_at(position + look_dir, Vector3.UP)
@@ -809,6 +932,13 @@ func _update_status_fx(delta: float):
 			shard.scale = Vector3.ONE * (0.85 + chill * 0.25)
 
 	_bloodlust_particles.emitting = entity.bloodlust_time_left > 0
+
+	_motion_trail.emitting = entity.dashing or entity.lunging
+	_cast_gather.emitting = entity.casting != null
+	_parry_ring.visible = entity.parrying
+	if entity.parrying:
+		_parry_ring_mat.emission_energy_multiplier = 2.0 + sin(Time.get_ticks_msec() * 0.03)
+		_parry_ring.rotation.y += delta * 4.0
 
 	if _bladestorm_particles != null:
 		var storming = entity.bladestorm_time_left > 0
