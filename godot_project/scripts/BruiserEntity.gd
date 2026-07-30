@@ -133,6 +133,9 @@ func try_a2(_opp: Entity):
 		return
 	tremor_fx_left = 0.4
 	FX.impact_burst(get_parent(), global_position, Color(0.85, 0.6, 0.3), 22, 220.0)
+	# Tremor was the only AoE with no ground telegraph at all — an expanding
+	# quake ring with rock debris shows its true hit area.
+	_spawn_zone_fx(global_position, TREMOR_RADIUS, 0.5, Color(0.9, 0.55, 0.2), "expand", "rise", "quake")
 	# True AoE: hits every enemy in range, not just the primary target —
 	# matters in 2v2/3v3 where more than one foe can be caught in the stomp.
 	for target in get_enemies_in_range(TREMOR_RADIUS):
@@ -178,6 +181,7 @@ func _do_seismic_slam(opp: Entity):
 	start_swing(360.0, 0.45)
 	seismic_slam_fx_left = 0.70
 	FX.impact_burst(get_parent(), global_position, Color(1.0, 0.7, 0.2), 30, 420.0)
+	_spawn_zone_fx(global_position, SEISMIC_RANGE, 0.6, Color(1.0, 0.6, 0.15), "expand", "rise", "quake")
 	if opp != null and opp.alive and global_position.distance_to(opp.global_position) <= SEISMIC_RANGE:
 		if deal_damage(opp, SEISMIC_DMG):
 			add_combo_stack()

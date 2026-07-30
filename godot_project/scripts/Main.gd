@@ -26,7 +26,15 @@ var match_time_elapsed := 0.0
 
 var hp_bars: Array[ProgressBar] = []  # parallel to `fighters`
 var win_label: Label
+var win_dim: ColorRect  # full-screen dim behind the end-of-match banner
 var cd_hud: Node2D   # custom-drawn cooldown panel
+# Scratch stylebox reused for every rounded element the HUD draws per frame —
+# mutated right before each draw_style_box() call, which is safe because
+# canvas draws are immediate.
+var _hud_style := StyleBoxFlat.new()
+# Emboldened variation of the fallback font — the plain weight reads thin
+# and slightly mushy over a bright 3D scene.
+var _hud_font: FontVariation
 
 var world_3d: Node3D
 var camera3d: Camera3D
@@ -307,8 +315,51 @@ func build_map():
 		health_packs.append({"pos": _scale_point(p), "active": true, "respawn_left": 0.0})
 
 func build_ui():
+	# Subtle vignette between the 3D world and the HUD. Layer -1 composites
+	# above the 3D render but below Main's own _draw pass (layer 0) and the
+	# HUD CanvasLayer (layer 1), so it darkens the scene's corners without
+	# ever dimming a HUD element.
+	var vignette_layer = CanvasLayer.new()
+	vignette_layer.layer = -1
+	add_child(vignette_layer)
+	var vignette = ColorRect.new()
+	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var vig_shader = Shader.new()
+	vig_shader.code = """
+shader_type canvas_item;
+void fragment() {
+	vec2 uv = UV - vec2(0.5);
+	float d = length(uv * vec2(1.18, 1.0));
+	float v = smoothstep(0.52, 1.08, d);
+	COLOR = vec4(0.01, 0.01, 0.03, v * 0.38);
+}
+"""
+	var vig_mat = ShaderMaterial.new()
+	vig_mat.shader = vig_shader
+	vignette.material = vig_mat
+	vignette_layer.add_child(vignette)
+
+	_hud_font = FontVariation.new()
+	_hud_font.base_font = ThemeDB.fallback_font
+	_hud_font.variation_embolden = 0.5
+
 	var canvas = CanvasLayer.new()
 	add_child(canvas)
+
+	# Rounded translucent backing panel per team so each side's bars read as
+	# one cohesive block instead of floating loose over the arena.
+	for side in [0, 1]:
+		var panel := Panel.new()
+		var pstyle := StyleBoxFlat.new()
+		pstyle.bg_color = Color(0.05, 0.06, 0.09, 0.6)
+		pstyle.set_corner_radius_all(8)
+		pstyle.border_color = Color(TEAM_COLORS[side].r, TEAM_COLORS[side].g, TEAM_COLORS[side].b, 0.35)
+		pstyle.set_border_width_all(1)
+		panel.add_theme_stylebox_override("panel", pstyle)
+		panel.position = Vector2(12.0 if side == 0 else 1668.0, 12.0)
+		panel.size = Vector2(240, 8.0 + team_size * 56.0)
+		canvas.add_child(panel)
 
 	# HP bars + class labels, one per fighter, stacked by team side
 	hp_bars.clear()
@@ -316,7 +367,7 @@ func build_ui():
 		var f = fighters[i]
 		var side = f.team_id
 		var slot = i if side == 0 else i - team_size
-		var x = 20.0 if side == 0 else 1680.0
+		var x = 22.0 if side == 0 else 1678.0
 		var y = 20.0 + slot * 56.0
 
 		var bar = ProgressBar.new()
@@ -324,13 +375,20 @@ func build_ui():
 		bar.max_value = f.max_hp
 		bar.value = f.hp
 		bar.position = Vector2(x, y)
-		bar.size = Vector2(220, 22)
+		bar.size = Vector2(220, 20)
 		bar.show_percentage = false
+		var bg_style := StyleBoxFlat.new()
+		bg_style.bg_color = Color(0.09, 0.10, 0.14, 0.95)
+		bg_style.set_corner_radius_all(5)
+		bg_style.border_color = Color(0, 0, 0, 0.6)
+		bg_style.set_border_width_all(1)
+		bar.add_theme_stylebox_override("background", bg_style)
 		# Tint just the fill (not the whole bar via modulate, which would also
 		# wash out the dark background track) so team color reads clearly
 		# against a normal-looking HP bar.
 		var fill_style := StyleBoxFlat.new()
 		fill_style.bg_color = TEAM_COLORS[f.team_id]
+		fill_style.set_corner_radius_all(4)
 		bar.add_theme_stylebox_override("fill", fill_style)
 		canvas.add_child(bar)
 		hp_bars.append(bar)
@@ -339,22 +397,45 @@ func build_ui():
 		var cls_name = "BRUISER" if f is BruiserEntity else ("MAGE" if f is RangedEntity else ("RANGER" if f is RangerEntity else ("CLERIC" if f is ClericEntity else "DUELIST")))
 		var prefix = "" if f == player else ("ALLY " if side == 0 else "BOT ")
 		label.text = prefix + cls_name
-		label.position = Vector2(x, y + 26)
+		label.position = Vector2(x + 2, y + 24)
+		label.add_theme_font_override("font", _hud_font)
 		label.add_theme_font_size_override("font_size", 13)
+		label.add_theme_color_override("font_color", Color(0.92, 0.94, 0.99))
+		label.add_theme_color_override("font_outline_color", Color(0.02, 0.03, 0.05, 0.9))
+		label.add_theme_constant_override("outline_size", 4)
 		canvas.add_child(label)
 
-	# win label
+	# full-screen dim shown behind the end-of-match banner
+	win_dim = ColorRect.new()
+	win_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	win_dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	win_dim.color = Color(0.01, 0.01, 0.03, 0.45)
+	win_dim.visible = false
+	canvas.add_child(win_dim)
+
+	# win label — full-width and center-aligned so any text length is truly
+	# centered, with a heavy outline to carry it over the dimmed scene.
 	win_label = Label.new()
-	win_label.position = Vector2(860, 465)
-	win_label.add_theme_font_size_override("font_size", 36)
+	win_label.position = Vector2(0, 430)
+	win_label.size = Vector2(1920, 140)
+	win_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	win_label.add_theme_font_override("font", _hud_font)
+	win_label.add_theme_font_size_override("font_size", 68)
+	win_label.add_theme_color_override("font_outline_color", Color(0.02, 0.02, 0.05, 0.95))
+	win_label.add_theme_constant_override("outline_size", 12)
+	win_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
+	win_label.add_theme_constant_override("shadow_offset_y", 4)
 	win_label.visible = false
 	canvas.add_child(win_label)
 
 	# hint
 	var hint = Label.new()
 	hint.text = "WASD move  |  Space dash  |  LMB auto (hold)  |  E  Q  F  Shift  R abilities  |  RMB/G parry  |  Backspace = char select"
-	hint.position = Vector2(20, 1050)
+	hint.position = Vector2(20, 1052)
 	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_color_override("font_color", Color(0.72, 0.75, 0.84, 0.8))
+	hint.add_theme_color_override("font_outline_color", Color(0.02, 0.03, 0.05, 0.8))
+	hint.add_theme_constant_override("outline_size", 3)
 	canvas.add_child(hint)
 
 	# cooldown HUD — custom drawn node
@@ -462,6 +543,13 @@ func try_pickup_health_pack(pack: Dictionary, entity: Entity) -> bool:
 	entity.heal(entity, HEALTH_PACK_HEAL)
 	entity.hit_flash_left = 0.18
 	FX.heal_sparkle(self, entity.global_position)
+	# 3D green burst at the pedestal so the pickup moment reads in-world,
+	# not just as a 2D sparkle overlay
+	var av = AreaFxView3D.new()
+	world_3d.add_child(av)
+	av.setup({"shape": "circle", "pos": pack["pos"], "facing": Vector2.RIGHT,
+		"size": Vector2(70.0, 0.0), "duration": 0.4, "color": Color(0.25, 1.0, 0.5),
+		"anim": "expand", "particles": "rise"})
 	pack["active"] = false
 	pack["respawn_left"] = HEALTH_PACK_RESPAWN
 	return true
@@ -479,6 +567,7 @@ func _on_fighter_died():
 	if team0_alive and team1_alive:
 		return  # match continues
 
+	win_dim.visible = true
 	win_label.visible = true
 	if team0_alive and not team1_alive:
 		win_label.text = "YOU WIN" if team_size == 1 else "YOUR TEAM WINS"
@@ -511,7 +600,7 @@ func _draw_heal_dampen_indicator():
 	if dampen_pct <= 0.0:
 		return
 
-	var font = ThemeDB.fallback_font
+	var font = _hud_font if _hud_font != null else ThemeDB.fallback_font
 	var cx = 1860.0
 	var cy = 210.0
 	var r  = 18.0
@@ -543,16 +632,16 @@ func _draw_heal_dampen_indicator():
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col)
 
 func _draw_cooldown_hud():
-	var font    = ThemeDB.fallback_font
+	var font    = _hud_font if _hud_font != null else ThemeDB.fallback_font
 	var defs    = _get_ability_defs()
 	var n       = defs.size()
-	var slot_w  = 110.0
-	var slot_h  = 62.0
-	var bar_h   = 8.0
+	var slot_w  = 112.0
+	var slot_h  = 64.0
 	var pad     = 10.0
 	var total_w = n * slot_w + (n - 1) * pad
 	var start_x = (1920.0 - total_w) * 0.5
-	var base_y  = 975.0
+	var base_y  = 972.0
+	var now     = Time.get_ticks_msec()
 
 	for i in n:
 		var d   = defs[i]
@@ -563,37 +652,61 @@ func _draw_cooldown_hud():
 		var ready     = (d["cd"] <= 0.0 and not is_charge) or (is_charge and d["pct"] >= 1.0)
 		var pct       = 1.0 - (d["cd"] / d["max"]) if not is_charge else d["pct"]
 		pct           = clamp(pct, 0.0, 1.0)
+		var rect      = Rect2(sx, base_y, slot_w, slot_h)
 
-		# slot background
-		var bg_alpha = 0.18 if ready else 0.10
-		draw_rect(Rect2(sx, base_y, slot_w, slot_h), Color(col.r, col.g, col.b, bg_alpha))
-		draw_rect(Rect2(sx, base_y, slot_w, slot_h), Color(col.r, col.g, col.b, 0.35 if ready else 0.18), false, 1.5)
+		# slot body — rounded, bordered in the ability color (bright = ready)
+		_hud_style.bg_color = Color(0.055, 0.065, 0.10, 0.86)
+		_hud_style.set_corner_radius_all(9)
+		_hud_style.border_color = Color(col.r, col.g, col.b, 0.9 if ready else 0.22)
+		_hud_style.set_border_width_all(2 if ready else 1)
+		draw_style_box(_hud_style, rect)
 
-		# key label
-		var key_str = d["key"]
-		var ksz     = font.get_string_size(key_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-		draw_string(font, Vector2(sx + (slot_w - ksz) * 0.5, base_y + 18),
-			key_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 14,
-			Color(col.r, col.g, col.b, 0.9))
+		if ready:
+			# soft interior pulse so "ready" reads at a glance
+			var pulse = 0.5 + 0.5 * sin(now * 0.005 + i)
+			draw_rect(rect.grow(-3), Color(col.r, col.g, col.b, 0.05 + pulse * 0.05))
+		else:
+			# recharge fill rising from the bottom of the slot
+			var fill_h = (slot_h - 6.0) * pct
+			draw_rect(Rect2(sx + 3, base_y + slot_h - 3 - fill_h, slot_w - 6, fill_h),
+				Color(col.r, col.g, col.b, 0.10))
+
+		# keycap chip straddling the slot's top edge
+		var key_str: String = d["key"]
+		var ksz = font.get_string_size(key_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		var chip = Rect2(sx + (slot_w - (ksz + 12.0)) * 0.5, base_y - 9.0, ksz + 12.0, 18.0)
+		_hud_style.bg_color = Color(0.10, 0.11, 0.16, 0.97)
+		_hud_style.set_corner_radius_all(5)
+		_hud_style.border_color = Color(col.r, col.g, col.b, 0.65 if ready else 0.3)
+		_hud_style.set_border_width_all(1)
+		draw_style_box(_hud_style, chip)
+		draw_string(font, Vector2(chip.position.x + 6, chip.position.y + 13.5), key_str,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+			Color(0.95, 0.96, 1.0, 0.95) if ready else Color(0.66, 0.68, 0.76, 0.85))
 
 		# ability name
 		var name_str = d["name"]
 		var nsz      = font.get_string_size(name_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
-		draw_string(font, Vector2(sx + (slot_w - nsz) * 0.5, base_y + 35),
-			name_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.75, 0.75, 0.82, 0.85))
+		draw_string(font, Vector2(sx + (slot_w - nsz) * 0.5, base_y + 33),
+			name_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
+			Color(0.93, 0.95, 1.0, 0.95) if ready else Color(0.60, 0.62, 0.70, 0.85))
 
-		# cooldown bar
-		var bar_x = sx + 8
-		var bar_w = slot_w - 16
-		var bar_y = base_y + slot_h - bar_h - 6
-		draw_rect(Rect2(bar_x, bar_y, bar_w, bar_h), Color(0.1, 0.1, 0.14))
-		var fill_col = col if ready else Color(col.r * 0.6, col.g * 0.6, col.b * 0.6)
-		draw_rect(Rect2(bar_x, bar_y, bar_w * pct, bar_h), fill_col)
+		# cooldown / charge bar — rounded track + fill
+		var bar_h = 7.0
+		var bar_x = sx + 9
+		var bar_w = slot_w - 18
+		var bar_y = base_y + slot_h - bar_h - 8
+		_hud_style.bg_color = Color(0.025, 0.03, 0.05, 0.95)
+		_hud_style.set_corner_radius_all(3)
+		_hud_style.set_border_width_all(0)
+		draw_style_box(_hud_style, Rect2(bar_x, bar_y, bar_w, bar_h))
+		if pct > 0.03:
+			_hud_style.bg_color = col if ready else Color(col.r * 0.8, col.g * 0.8, col.b * 0.8, 0.95)
+			draw_style_box(_hud_style, Rect2(bar_x, bar_y, bar_w * pct, bar_h))
 
-		# cooldown time text (only when on cooldown)
+		# cooldown time / charge percent (only while unavailable)
 		if not ready:
-			var cd_val  = d["cd"] if not is_charge else 0.0
-			var cd_str  = "%.1fs" % cd_val if not is_charge else "%d%%" % int(d["pct"] * 100)
-			var cd_sz   = font.get_string_size(cd_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+			var cd_str = ("%.1fs" % d["cd"]) if not is_charge else ("%d%%" % int(d["pct"] * 100))
+			var cd_sz  = font.get_string_size(cd_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 			draw_string(font, Vector2(sx + (slot_w - cd_sz) * 0.5, base_y + 48),
-				cd_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.9, 0.9, 0.95, 0.7))
+				cd_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.92, 0.93, 0.98, 0.8))

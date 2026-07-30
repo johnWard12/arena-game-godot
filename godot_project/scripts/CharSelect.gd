@@ -96,9 +96,9 @@ const CLASSES = [
 		"ability_descs": [
 			"7.5 dmg. 0.5s cooldown. Landing shots builds Momentum: +4% move speed per stack (up to 5), resets on a miss.",
 			"22.4 dmg, pierces through the first target and keeps going. Slows 20% for 1s. 4s cooldown, 0.18s wind-up.",
-			"Throws a large trap 110 out that arms in 0.5s, then roots the first enemy to cross it for 1.2s. 7s cooldown.",
+			"Throws a large trap 110 out that arms in 0.5s, then roots the first enemy to cross it for 1.2s. Invisible to the enemy team. 7s cooldown.",
 			"15 dmg shot that also recoils you sharply backward — damage and real distance in one button. 6s cooldown.",
-			"Vanish from AI targeting for 3s (a human player tracking you can still hit you). 10s cooldown.",
+			"Turn fully invisible to the enemy team for 3s (allies still see you as a ghost). Attacking breaks it. 10s cooldown.",
 			"Targets a zone that rains arrows for 2s, ticking 13.1 dmg every 0.4s to anyone standing in it. 130 radius, 0.3s wind-up.",
 		]
 	},
@@ -135,6 +135,28 @@ func _ready():
 var tooltip_text := ""
 var tooltip_pos  := Vector2.ZERO
 var tooltip_col  := Color.WHITE
+
+# Scratch stylebox for every rounded element on this screen — mutated right
+# before each draw, which is safe because canvas draws are immediate.
+var _sb := StyleBoxFlat.new()
+
+# Emboldened fallback font (see Main.gd's _hud_font) — lazily built since
+# ThemeDB may not be ready at member-init time.
+var _font: FontVariation
+
+func _ui_font() -> Font:
+	if _font == null:
+		_font = FontVariation.new()
+		_font.base_font = ThemeDB.fallback_font
+		_font.variation_embolden = 0.5
+	return _font
+
+func _round_rect(rect: Rect2, bg: Color, border: Color, border_w: int, radius: int):
+	_sb.bg_color = bg
+	_sb.set_corner_radius_all(radius)
+	_sb.border_color = border
+	_sb.set_border_width_all(border_w)
+	draw_style_box(_sb, rect)
 
 func _input(event):
 	if event is InputEventMouseMotion:
@@ -226,10 +248,18 @@ func _start():
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
 func _draw():
-	draw_rect(Rect2(0, 0, W, H), Color(0.07, 0.08, 0.11))
+	# Vertical gradient backdrop — deep blue falling to near-black — far less
+	# flat than the old single fill.
+	var top_col = Color(0.10, 0.11, 0.17)
+	var bot_col = Color(0.045, 0.05, 0.08)
+	var strips = 36
+	for i in strips:
+		var t0 = float(i) / strips
+		draw_rect(Rect2(0, H * t0, W, H / strips + 1), top_col.lerp(bot_col, t0))
 
-	_draw_text("ARENA PROTOTYPE", Vector2(W * 0.5, 48), 22, Color(1, 1, 1, 0.5), true)
-	_draw_text("CHOOSE YOUR FIGHTERS", Vector2(W * 0.5, 82), 34, Color(1, 1, 1, 0.92), true)
+	_draw_text("ARENA PROTOTYPE", Vector2(W * 0.5, 46), 20, Color(0.85, 0.72, 0.45, 0.75), true)
+	_draw_text("CHOOSE YOUR FIGHTERS", Vector2(W * 0.5, 82), 36, Color(0.96, 0.97, 1.0), true)
+	draw_rect(Rect2(W * 0.5 - 130, 98, 260, 2), Color(0.85, 0.72, 0.45, 0.45))
 
 	# team size selector
 	for i in TEAM_SIZES.size():
@@ -237,9 +267,8 @@ func _draw():
 		var r = _team_size_btn_rect(i)
 		var is_sel = team_size == size_val
 		var is_hot = r.has_point(get_viewport().get_mouse_position())
-		var bg_a = 0.30 if is_sel else (0.16 if is_hot else 0.08)
-		draw_rect(r, Color(1, 1, 1, bg_a))
-		draw_rect(r, Color(1, 1, 1, 0.9 if is_sel else 0.3), false, 1.5)
+		var bg_a = 0.26 if is_sel else (0.14 if is_hot else 0.06)
+		_round_rect(r, Color(1, 1, 1, bg_a), Color(1, 1, 1, 0.9 if is_sel else 0.28), 2 if is_sel else 1, 7)
 		_draw_text("%dv%d" % [size_val, size_val], r.position + r.size * 0.5,
 			14, Color(1, 1, 1, 0.95 if is_sel else 0.6), true)
 
@@ -267,14 +296,16 @@ func _draw():
 	for i in CLASSES.size():
 		_draw_card(bot_cards_x[i], i, bot_slots[bot_active_slot] == i, hovered == Vector2i(1, i), mouse_pos)
 
-	# fight button
+	# fight button — rounded with a drop shadow, glow ring on hover
 	var btn = _fight_btn_rect()
 	var btn_hot = btn.has_point(get_viewport().get_mouse_position())
-	var btn_col = Color(0.37, 0.88, 0.75, 0.9) if btn_hot else Color(0.25, 0.6, 0.5, 0.8)
-	draw_rect(btn, btn_col)
-	draw_rect(btn, Color(1, 1, 1, 0.2), false, 1.5)
+	_round_rect(Rect2(btn.position + Vector2(0, 5), btn.size), Color(0, 0, 0, 0.3), Color(0, 0, 0, 0), 0, 12)
+	var btn_col = Color(0.37, 0.88, 0.75) if btn_hot else Color(0.24, 0.62, 0.52)
+	_round_rect(btn, btn_col, Color(1, 1, 1, 0.5 if btn_hot else 0.18), 1, 12)
+	if btn_hot:
+		_round_rect(btn.grow(4), Color(0, 0, 0, 0), Color(0.37, 0.88, 0.75, 0.35), 2, 14)
 	_draw_text("FIGHT", Vector2(btn.position.x + btn.size.x * 0.5, btn.position.y + btn.size.y * 0.5 + 2),
-		22, Color(0.05, 0.08, 0.1), true)
+		22, Color(0.03, 0.10, 0.09), true)
 
 	# matchup summary below button — lists each side's comp
 	var p_names := []
@@ -300,13 +331,13 @@ func _draw_slot_chips(side: int, slots: Array, active: int):
 		var cls = CLASSES[slots[s]]
 		var col: Color = cls["color"]
 		var is_active = s == active
-		draw_rect(r, Color(col.r, col.g, col.b, 0.30 if is_active else 0.16))
-		draw_rect(r, Color(col.r, col.g, col.b, 1.0 if is_active else 0.4), false, 2.0 if is_active else 1.0)
+		_round_rect(r, Color(col.r, col.g, col.b, 0.28 if is_active else 0.14),
+			Color(col.r, col.g, col.b, 1.0 if is_active else 0.4), 2 if is_active else 1, 6)
 		_draw_text(cls["label"].capitalize(), r.position + r.size * 0.5, 12,
 			Color(1, 1, 1, 0.95 if is_active else 0.7), true)
 
 func _draw_tooltip():
-	var font    = ThemeDB.fallback_font
+	var font    = _ui_font()
 	var size    = 13
 	var padding = 12.0
 	var max_w   = 340.0
@@ -341,8 +372,9 @@ func _draw_tooltip():
 	if pos.y + box_h > H - 10:
 		pos.y = H - 10 - box_h
 
-	draw_rect(Rect2(pos, Vector2(box_w, box_h)), Color(0.05, 0.06, 0.09, 0.97))
-	draw_rect(Rect2(pos, Vector2(box_w, box_h)), Color(tooltip_col.r, tooltip_col.g, tooltip_col.b, 0.6), false, 1.5)
+	_round_rect(Rect2(pos + Vector2(3, 4), Vector2(box_w, box_h)), Color(0, 0, 0, 0.35), Color(0, 0, 0, 0), 0, 10)
+	_round_rect(Rect2(pos, Vector2(box_w, box_h)), Color(0.05, 0.06, 0.10, 0.97),
+		Color(tooltip_col.r, tooltip_col.g, tooltip_col.b, 0.55), 1, 10)
 
 	var ty = pos.y + padding
 	for line in wrapped:
@@ -355,16 +387,20 @@ func _draw_card(cx: float, class_idx: int, selected: bool, hot: bool, mouse_pos:
 	var c = CLASSES[class_idx]
 	var col: Color = c["color"]
 
-	var bg_alpha = 0.22 if selected else (0.14 if hot else 0.07)
-	draw_rect(Rect2(cx, CARD_Y, CARD_W, CARD_H), Color(col.r, col.g, col.b, bg_alpha))
-
-	var border_alpha = 1.0 if selected else (0.55 if hot else 0.25)
-	var border_w = 2.5 if selected else 1.5
-	draw_rect(Rect2(cx, CARD_Y, CARD_W, CARD_H), Color(col.r, col.g, col.b, border_alpha), false, border_w)
+	var card = Rect2(cx, CARD_Y, CARD_W, CARD_H)
+	# drop shadow (deeper when hovered), then a solid dark base, then the
+	# class-color tint + border on top — reads as a real elevated card.
+	_round_rect(Rect2(card.position + Vector2(0, 6), card.size),
+		Color(0, 0, 0, 0.32 if hot else 0.18), Color(0, 0, 0, 0), 0, 12)
+	_round_rect(card, Color(0.07, 0.08, 0.12, 0.94), Color(0, 0, 0, 0), 0, 12)
+	var bg_alpha = 0.20 if selected else (0.13 if hot else 0.06)
+	_round_rect(card, Color(col.r, col.g, col.b, bg_alpha),
+		Color(col.r, col.g, col.b, 1.0 if selected else (0.55 if hot else 0.22)),
+		2 if selected else 1, 12)
 
 	if selected:
-		# top highlight bar
-		draw_rect(Rect2(cx, CARD_Y, CARD_W, 3), Color(col.r, col.g, col.b, 0.9))
+		# top accent bar, inset to follow the rounded corners
+		_round_rect(Rect2(cx + 10, CARD_Y, CARD_W - 20, 3), Color(col.r, col.g, col.b, 0.9), Color(0, 0, 0, 0), 0, 2)
 
 	# character preview — bigger now that the full ability list lives in
 	# the hover tooltip instead of being crammed onto the card itself.
@@ -422,7 +458,7 @@ func _build_kit_tooltip(c: Dictionary) -> String:
 	return "\n\n".join(parts)
 
 func _draw_text(text: String, pos: Vector2, size: int, col: Color, centered: bool):
-	var font = ThemeDB.fallback_font
+	var font = _ui_font()
 	if centered:
 		var sw = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 		draw_string(font, Vector2(pos.x - sw * 0.5, pos.y + size * 0.35), text,

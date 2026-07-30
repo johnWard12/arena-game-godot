@@ -196,6 +196,9 @@ func try_ult(opp: Entity):
 
 func resolve_ult(opp: Entity):
 	ult_charge = 0.0
+	# Attacking reveals a cloaked attacker — Rain doesn't route through
+	# _fire()/start_swing(), so it breaks Camouflage here itself.
+	invisible_time_left = 0.0
 	rain_pos = opp.global_position if opp != null and opp.alive else global_position + facing * 200.0
 	rain_time_left = RAIN_DUR
 	rain_tick_timer = 0.0

@@ -70,6 +70,10 @@ const MODEL_CONFIG := {
 var entity: Entity = null
 var _cfg: Dictionary
 var _model: Node3D
+# Per-instance duplicates of every material on this character's meshes —
+# lets this view flash/fade ITS model without affecting other fighters
+# instanced from the same GLTF (imported materials are shared resources).
+var _char_mats: Array[BaseMaterial3D] = []
 var _anim: AnimationPlayer
 var _current_anim := ""
 var _swing_was_active := false
@@ -79,12 +83,35 @@ var _was_alive := true
 var _ring: MeshInstance3D
 var _ring_mat: StandardMaterial3D
 
+# Melee slash arc — an ImmediateMesh fan rebuilt each frame while a swing is
+# active, sweeping across the swing's real arc (start angle/span/progress all
+# come from the sim's swing state, so the visual matches the hit exactly).
+var _slash: MeshInstance3D
+var _slash_mesh: ImmediateMesh
+var _slash_mat: StandardMaterial3D
+
+# Cross-cutting character FX, each shared by several abilities:
+# - motion trail: team-color streaks shed during any dash/lunge (Duelist
+#   Lunge, Bruiser Seismic, Ranger Disengage recoil, the universal dash)
+# - cast gather: particles converging on the chest during any wind-up
+# - parry ring: a bright guard ring during the parry window
+var _motion_trail: GPUParticles3D
+var _cast_gather: GPUParticles3D
+var _parry_ring: MeshInstance3D
+var _parry_ring_mat: StandardMaterial3D
+
 var _freeze_pivot: Node3D
 var _freeze_shards: Array[MeshInstance3D] = []
 
 var _bloodlust_particles: GPUParticles3D
 
 var _bladestorm_particles: GPUParticles3D
+var _bladestorm_light: OmniLight3D
+
+# Gesture fallback for instant abilities (see _update_animation): commit
+# tracking to detect an ability firing with no cast and no swing of its own.
+var _last_commit := 0.0
+var _gesture_left := 0.0
 
 var _shift_style := ""
 var _shift_dome: MeshInstance3D
@@ -133,6 +160,12 @@ func setup(e: Entity):
 	# has no facing concept, so this correction is local to the character
 	# model only).
 	_model.rotation.y = PI
+	_collect_char_materials(_model)
+	_build_slash_arc()
+	_build_motion_trail()
+	_build_cast_gather()
+	_build_parry_ring()
+	_strip_fx_shadows()
 
 	_anim = _find_anim_player(_model)
 	if _anim != null:
@@ -350,9 +383,14 @@ func _build_bloodlust_particles():
 func _build_bladestorm_fx():
 	_bladestorm_particles = GPUParticles3D.new()
 	_bladestorm_particles.position = Vector3(0, 0.9, 0)
-	_bladestorm_particles.amount = 26
-	_bladestorm_particles.lifetime = 0.4
+	_bladestorm_particles.amount = 14
+	_bladestorm_particles.lifetime = 0.5
 	_bladestorm_particles.emitting = false
+	# local_coords: blades simulate in the character's own space, so the ring
+	# stays perfectly centered on him even at full sprint. In world space,
+	# his movement speed added to backward-flying blades (and subtracted from
+	# forward ones) skewed the whole storm toward his front while moving.
+	_bladestorm_particles.local_coords = true
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
 	pm.emission_sphere_radius = 0.12
@@ -363,26 +401,58 @@ func _build_bladestorm_fx():
 	# narrower fan instead of a complete ring around the character.
 	pm.spread = 180.0
 	pm.flatness = 1.0
-	pm.initial_velocity_min = 5.5
-	pm.initial_velocity_max = 8.0
+	pm.initial_velocity_min = 4.5
+	pm.initial_velocity_max = 6.0
 	pm.gravity = Vector3.ZERO
 	pm.scale_min = 1.0
 	pm.scale_max = 1.0
-	pm.color = Color(1.0, 0.88, 0.2)
+	# Blood-red blades (was gold energy motes) — with align-to-velocity each
+	# elongated quad flies point-first, reading as swords hurled out of the
+	# spin in a full 360. Fewer, bigger blades read as swords instead of
+	# shrapnel.
+	pm.color = Color(1.0, 0.22, 0.22)
 	pm.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true)
 	_bladestorm_particles.process_material = pm
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.1, 0.42)
 	var pmat := StandardMaterial3D.new()
 	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	pmat.albedo_color = Color(1.0, 0.9, 0.3)
+	pmat.albedo_color = Color(1.0, 0.3, 0.3)
 	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	pmat.vertex_color_use_as_albedo = true
 	pmat.emission_enabled = true
-	pmat.emission = Color(1.0, 0.85, 0.25)
-	pmat.emission_energy_multiplier = 2.6
-	quad.material = pmat
-	_bladestorm_particles.draw_pass_1 = quad
+	pmat.emission = Color(1.0, 0.12, 0.18)
+	pmat.emission_energy_multiplier = 3.0
+	_bladestorm_particles.draw_pass_1 = _make_blade_mesh(pmat)
 	add_child(_bladestorm_particles)
+
+# A flat sword silhouette — blade, tapered tip, crossguard, grip — built as
+# one ArrayMesh for the storm's particle draw pass. +Y is the direction of
+# flight, so align-to-velocity sends every sword flying point-first.
+func _make_blade_mesh(mat: Material) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var quads = [
+		# blade body
+		[Vector2(-0.09, 0.18), Vector2(0.09, 0.18), Vector2(0.055, 0.92), Vector2(-0.055, 0.92)],
+		# crossguard
+		[Vector2(-0.22, 0.10), Vector2(0.22, 0.10), Vector2(0.22, 0.20), Vector2(-0.22, 0.20)],
+		# grip + pommel
+		[Vector2(-0.045, -0.16), Vector2(0.045, -0.16), Vector2(0.045, 0.10), Vector2(-0.045, 0.10)],
+	]
+	for q in quads:
+		st.add_vertex(Vector3(q[0].x, q[0].y, 0))
+		st.add_vertex(Vector3(q[1].x, q[1].y, 0))
+		st.add_vertex(Vector3(q[2].x, q[2].y, 0))
+		st.add_vertex(Vector3(q[0].x, q[0].y, 0))
+		st.add_vertex(Vector3(q[2].x, q[2].y, 0))
+		st.add_vertex(Vector3(q[3].x, q[3].y, 0))
+	# tapered point
+	st.add_vertex(Vector3(-0.055, 0.92, 0))
+	st.add_vertex(Vector3(0.055, 0.92, 0))
+	st.add_vertex(Vector3(0.0, 1.25, 0))
+	var mesh := st.commit()
+	mesh.surface_set_material(0, mat)
+	return mesh
 
 # Shift (Iron Resolve / Barrier / Unbreakable) — one shared "shield up"
 # Each class's Shift payoff is mechanically different (a defensive buff, an
@@ -660,6 +730,197 @@ func _build_bond_fx():
 	_bond_beam.visible = false
 	get_parent().add_child(_bond_beam)
 
+# Duplicate every character material into a per-instance copy (see
+# _char_mats) and even out the imported surface response — full roughness,
+# zero metallic — so the toon-textured models read as soft matte cloth/armor
+# under ACES instead of slightly plasticky.
+func _collect_char_materials(node: Node):
+	if node is MeshInstance3D and node.mesh != null:
+		for i in node.mesh.get_surface_count():
+			var src: Material = node.get_active_material(i)
+			if src is BaseMaterial3D:
+				var dup: BaseMaterial3D = src.duplicate()
+				dup.roughness = 1.0
+				dup.metallic = 0.0
+				node.set_surface_override_material(i, dup)
+				_char_mats.append(dup)
+	for child in node.get_children():
+		_collect_char_materials(child)
+
+# Team-color streaks shed in world space while dashing/lunging — sells the
+# burst of speed on every gap-closer and dodge in the game.
+func _build_motion_trail():
+	_motion_trail = GPUParticles3D.new()
+	_motion_trail.amount = 30
+	_motion_trail.lifetime = 0.3
+	_motion_trail.local_coords = false
+	_motion_trail.emitting = false
+	_motion_trail.position = Vector3(0, 0.55, 0)
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.25
+	pm.gravity = Vector3.ZERO
+	pm.initial_velocity_min = 0.0
+	pm.initial_velocity_max = 0.15
+	pm.scale_min = 0.6
+	pm.scale_max = 1.2
+	var col = entity.base_color
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(col.r, col.g, col.b, 0.8))
+	ramp.set_color(1, Color(col.r, col.g, col.b, 0.0))
+	var ramp_tex := GradientTexture1D.new()
+	ramp_tex.gradient = ramp
+	pm.color_ramp = ramp_tex
+	_motion_trail.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.16, 0.16)
+	var qmat := StandardMaterial3D.new()
+	qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	qmat.vertex_color_use_as_albedo = true
+	qmat.emission_enabled = true
+	qmat.emission = col
+	qmat.emission_energy_multiplier = 1.5
+	quad.material = qmat
+	_motion_trail.draw_pass_1 = quad
+	add_child(_motion_trail)
+
+# Warm motes converging on the chest during any cast wind-up — every
+# wind-up ability across every class now telegraphs "charging something".
+func _build_cast_gather():
+	_cast_gather = GPUParticles3D.new()
+	_cast_gather.amount = 16
+	_cast_gather.lifetime = 0.35
+	_cast_gather.emitting = false
+	_cast_gather.position = Vector3(0, 1.0, 0)
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE_SURFACE
+	pm.emission_sphere_radius = 0.7
+	pm.gravity = Vector3.ZERO
+	pm.initial_velocity_min = 0.0
+	pm.initial_velocity_max = 0.1
+	pm.radial_accel = Vector2(-16.0, -12.0)
+	var gcol = Color(1.0, 0.9, 0.6)
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(gcol.r, gcol.g, gcol.b, 0.0))
+	ramp.set_color(1, Color(gcol.r, gcol.g, gcol.b, 0.9))
+	var ramp_tex := GradientTexture1D.new()
+	ramp_tex.gradient = ramp
+	pm.color_ramp = ramp_tex
+	_cast_gather.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.07, 0.07)
+	var qmat := StandardMaterial3D.new()
+	qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	qmat.vertex_color_use_as_albedo = true
+	qmat.emission_enabled = true
+	qmat.emission = gcol
+	qmat.emission_energy_multiplier = 2.0
+	quad.material = qmat
+	_cast_gather.draw_pass_1 = quad
+	add_child(_cast_gather)
+
+# Bright blue guard ring at chest height during the parry window — the 3D
+# read of the old 2D-only parry circle.
+func _build_parry_ring():
+	_parry_ring = MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.5
+	torus.outer_radius = 0.56
+	_parry_ring.mesh = torus
+	_parry_ring.position = Vector3(0, 0.9, 0)
+	_parry_ring_mat = StandardMaterial3D.new()
+	_parry_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_parry_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_parry_ring_mat.albedo_color = Color(0.3, 0.7, 1.0, 0.7)
+	_parry_ring_mat.emission_enabled = true
+	_parry_ring_mat.emission = Color(0.3, 0.7, 1.0)
+	_parry_ring_mat.emission_energy_multiplier = 2.0
+	_parry_ring.material_override = _parry_ring_mat
+	_parry_ring.visible = false
+	add_child(_parry_ring)
+
+func _build_slash_arc():
+	_slash_mesh = ImmediateMesh.new()
+	_slash = MeshInstance3D.new()
+	_slash.mesh = _slash_mesh
+	# top_level: the arc's vertices are built in absolute world space from
+	# sim angles, so it must NOT inherit this node's look_at rotation.
+	_slash.top_level = true
+	_slash_mat = StandardMaterial3D.new()
+	_slash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_slash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_slash_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_slash_mat.emission_enabled = true
+	_slash.material_override = _slash_mat
+	add_child(_slash)
+
+func _update_slash_arc():
+	var swinging = entity.swing_time_left > 0 and entity.swing_total > 0
+	if not swinging:
+		_slash.visible = false
+		return
+	_slash.visible = true
+	var progress = 1.0 - (entity.swing_time_left / entity.swing_total)
+	var col = entity.base_color
+	var alpha = 0.5 * (1.0 - progress * 0.6)
+	_slash_mat.albedo_color = Color(col.r, col.g, col.b, alpha)
+	_slash_mat.emission = col
+	_slash_mat.emission_energy_multiplier = 1.4
+
+	var start_a = entity.swing_start_angle
+	var swept = entity.swing_arc_span * progress
+	var inner = 40.0   # sim units
+	var outer = 145.0
+	var steps = 12
+	_slash_mesh.clear_surfaces()
+	_slash_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+	for s in steps + 1:
+		var a = start_a + swept * (float(s) / steps)
+		var dir2 = Vector2(cos(a), sin(a))
+		_slash_mesh.surface_add_vertex(CoordUtil.to_world(entity.global_position + dir2 * inner, 0.85))
+		_slash_mesh.surface_add_vertex(CoordUtil.to_world(entity.global_position + dir2 * outer, 0.85))
+	_slash_mesh.surface_end()
+
+# White-hot flash on the actual model when hit — far more readable than a
+# 2D overlay circle, and localized to this instance via _char_mats. Also
+# owns Camouflage's ghosting: the model itself goes translucent while
+# invisible_time_left runs, instead of only showing a shimmer ring.
+func _update_char_flash():
+	var flash = clamp(entity.hit_flash_left / 0.25, 0.0, 1.0)
+	var invis = entity.invisible_time_left > 0
+	for mat in _char_mats:
+		if flash > 0.0:
+			mat.emission_enabled = true
+			mat.emission = Color(1.0, 0.97, 0.92)
+			mat.emission_energy_multiplier = flash * 1.6
+		else:
+			mat.emission_enabled = false
+		if invis:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.albedo_color.a = 0.35
+		elif mat.albedo_color.a < 1.0:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+			mat.albedo_color.a = 1.0
+
+# Only the character model itself should cast a shadow — every other child
+# (ground ring, status FX, particles, slash arc...) is emissive light FX
+# that would render wrong shadows AND waste shadow-pass draw calls. Called
+# at the end of setup; anything built lazily later sets its own flag.
+func _strip_fx_shadows():
+	for c in get_children():
+		if c != _model:
+			_no_shadows(c)
+
+static func _no_shadows(node: Node):
+	if node is GeometryInstance3D:
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for child in node.get_children():
+		_no_shadows(child)
+
 func _find_anim_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:
 		return node
@@ -691,11 +952,20 @@ func _process(delta):
 		return
 	_was_alive = true
 	_death_timer = 0.0
-	visible = true
+	# True stealth: a cloaked ENEMY (relative to the human player's team 0)
+	# disappears entirely — model, ring, trails, everything under this view.
+	# Your own team's cloaked Ranger stays visible as a translucent ghost
+	# (see _update_char_flash).
+	visible = not (entity.invisible_time_left > 0 and entity.team_id != 0)
 	scale = Vector3.ONE
 	rotation = Vector3.ZERO
 
 	position = CoordUtil.to_world(entity.global_position)
+	# Knocked-up fighters actually leave the ground now — an arc that peaks
+	# mid-knockup — instead of being "airborne" only in the sim's numbers.
+	if entity.knockup_time_left > 0:
+		var kpct = clamp(entity.knockup_time_left / Entity.KNOCKUP_DUR, 0.0, 1.0)
+		position.y += sin(kpct * PI) * 0.85
 	var look_dir = Vector3(entity.facing.x, 0.0, entity.facing.y)
 	if look_dir.length() > 0.001:
 		look_at(position + look_dir, Vector3.UP)
@@ -706,6 +976,8 @@ func _process(delta):
 	_ring_mat.emission_energy_multiplier = 1.8 if entity.hit_flash_left > 0 else 0.9
 
 	_update_status_fx(delta)
+	_update_char_flash()
+	_update_slash_arc()
 	_update_animation()
 
 func _update_status_fx(delta: float):
@@ -718,8 +990,28 @@ func _update_status_fx(delta: float):
 
 	_bloodlust_particles.emitting = entity.bloodlust_time_left > 0
 
+	_motion_trail.emitting = entity.dashing or entity.lunging
+	_cast_gather.emitting = entity.casting != null
+	_parry_ring.visible = entity.parrying
+	if entity.parrying:
+		_parry_ring_mat.emission_energy_multiplier = 2.0 + sin(Time.get_ticks_msec() * 0.03)
+		_parry_ring.rotation.y += delta * 4.0
+
 	if _bladestorm_particles != null:
-		_bladestorm_particles.emitting = entity.bladestorm_time_left > 0
+		var storming = entity.bladestorm_time_left > 0
+		_bladestorm_particles.emitting = storming
+		# Real light while the ult spins so the storm illuminates the arena
+		# around the Duelist (lazily created the first time it's needed).
+		if _bladestorm_light == null and storming:
+			_bladestorm_light = OmniLight3D.new()
+			_bladestorm_light.light_color = Color(1.0, 0.25, 0.25)
+			_bladestorm_light.light_energy = 2.2
+			_bladestorm_light.omni_range = 3.5
+			_bladestorm_light.shadow_enabled = false
+			_bladestorm_light.position = Vector3(0, 1.0, 0)
+			add_child(_bladestorm_light)
+		if _bladestorm_light != null:
+			_bladestorm_light.visible = storming
 
 	var shift_active = entity.get_shift_active()
 	if _shift_ring != null:
@@ -851,6 +1143,20 @@ func _update_animation():
 		_play("RecieveHit", 0.1)
 		return
 
+	# One-shot gesture for instant abilities that have no cast and no swing
+	# of their own (Warcry, Unbreakable, Ward, Consecrate, Barrier, Iron
+	# Resolve, Camouflage...) — without this they fired with zero body
+	# language. A rising ability_commit_time_left is the tell that one of
+	# them just went off (swing/cast abilities never reach here mid-action
+	# thanks to the earlier branches).
+	_gesture_left = max(0.0, _gesture_left - get_process_delta_time())
+	if entity.ability_commit_time_left > _last_commit + 0.001 and entity.casting == null:
+		_gesture_left = 0.35
+		_force_play(_cfg["cast_anim"], 0.06)
+	_last_commit = entity.ability_commit_time_left
+	if _gesture_left > 0:
+		return
+
 	var max_speed = entity.speed_override if entity.speed_override > 0.0 else Entity.MAX_SPEED
 	var speed_pct = entity.velocity.length() / max_speed
 	if speed_pct > 0.55:
@@ -870,8 +1176,57 @@ func _animate_death(delta: float):
 		# with the rest of this view.
 		_bond_ring.visible = false
 		_bond_beam.visible = false
+		# _update_char_flash()/_update_slash_arc() also stop running once
+		# dead — clear any residual hit-flash emission and mid-swing arc.
+		for mat in _char_mats:
+			mat.emission_enabled = false
+		_slash.visible = false
+		# one-shot team-color shatter burst at the moment of death, so a
+		# kill lands with a 3D punch (the dissolve alone reads too gentle)
+		var burst := GPUParticles3D.new()
+		burst.amount = 24
+		burst.lifetime = 0.6
+		burst.one_shot = true
+		burst.explosiveness = 1.0
+		burst.emitting = true
+		burst.position = Vector3(0, 0.8, 0)
+		var pm := ParticleProcessMaterial.new()
+		pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE_SURFACE
+		pm.emission_sphere_radius = 0.3
+		pm.initial_velocity_min = 0.1
+		pm.initial_velocity_max = 0.3
+		pm.radial_accel = Vector2(6.0, 9.0)
+		pm.gravity = Vector3(0, -3.0, 0)
+		var col = entity.base_color
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(col.r, col.g, col.b, 0.9))
+		ramp.set_color(1, Color(col.r, col.g, col.b, 0.0))
+		var ramp_tex := GradientTexture1D.new()
+		ramp_tex.gradient = ramp
+		pm.color_ramp = ramp_tex
+		burst.process_material = pm
+		var quad := QuadMesh.new()
+		quad.size = Vector2(0.09, 0.09)
+		var qmat := StandardMaterial3D.new()
+		qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		qmat.vertex_color_use_as_albedo = true
+		qmat.emission_enabled = true
+		qmat.emission = col
+		qmat.emission_energy_multiplier = 2.0
+		quad.material = qmat
+		burst.draw_pass_1 = quad
+		burst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(burst)
 	visible = true
 	position = CoordUtil.to_world(entity.global_position)
 	_death_timer += delta
+	# Dissolve the body out over the final stretch instead of blinking off.
+	var fade = clamp((_death_timer - 1.1) / 0.9, 0.0, 1.0)
+	if fade > 0.0:
+		for mat in _char_mats:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.albedo_color.a = 1.0 - fade
 	if _death_timer >= 2.0:
 		visible = false

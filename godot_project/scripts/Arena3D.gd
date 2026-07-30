@@ -55,6 +55,7 @@ var _pack_glows: Array[MeshInstance3D] = []
 var _pack_pivots: Array[Node3D] = []
 var _pack_base_y: Array[float] = []
 var _torch_lights: Array[OmniLight3D] = []
+var _banners: Array[MeshInstance3D] = []
 var _time := 0.0
 
 func setup(rect: Rect2, obstacles: Array[Rect2], packs: Array):
@@ -69,17 +70,22 @@ func setup(rect: Rect2, obstacles: Array[Rect2], packs: Array):
 	_build_torches()
 	_build_center_emblem()
 	_build_floor_rocks()
+	_build_banners()
+	_build_floor_wear()
+	_build_ambient_motes()
 	_build_lighting()
 
 func _make_stone_material(base_color: Color, seed_val: int, uv_scale: float, roughness: float = 0.92) -> StandardMaterial3D:
 	var noise := FastNoiseLite.new()
 	noise.seed = seed_val
 	noise.frequency = 0.045
-	noise.fractal_octaves = 3
+	noise.fractal_octaves = 4
 
+	# 512px maps (up from 256) — at the floor's uv scale the old textures
+	# went visibly soft; this is the biggest sharpness win on large surfaces.
 	var albedo_tex := NoiseTexture2D.new()
-	albedo_tex.width = 256
-	albedo_tex.height = 256
+	albedo_tex.width = 512
+	albedo_tex.height = 512
 	albedo_tex.noise = noise
 	albedo_tex.seamless = true
 
@@ -88,8 +94,8 @@ func _make_stone_material(base_color: Color, seed_val: int, uv_scale: float, rou
 	# had any bump at all. Sharing the noise source means the bumps align
 	# with the color variation instead of reading as two unrelated patterns.
 	var normal_tex := NoiseTexture2D.new()
-	normal_tex.width = 256
-	normal_tex.height = 256
+	normal_tex.width = 512
+	normal_tex.height = 512
 	normal_tex.noise = noise
 	normal_tex.seamless = true
 	normal_tex.as_normal_map = true
@@ -300,6 +306,7 @@ func _build_health_packs():
 		glow_mat.emission = HEALTH_COLOR
 		glow_mat.emission_energy_multiplier = 1.0
 		glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		glow.material_override = glow_mat
 		pivot.add_child(glow)
 		_pack_glows.append(glow)
@@ -312,6 +319,10 @@ func _build_torches():
 		arena_rect.position + Vector2(margin, arena_rect.size.y - margin),
 		arena_rect.position + Vector2(arena_rect.size.x - margin, arena_rect.size.y - margin),
 	]
+	# plus two braziers flanking the back-wall gate
+	var cx = arena_rect.position.x + arena_rect.size.x * 0.5
+	corners_2d.append(Vector2(cx - 200.0, arena_rect.position.y + 70.0))
+	corners_2d.append(Vector2(cx + 200.0, arena_rect.position.y + 70.0))
 	for c in corners_2d:
 		_build_torch(c)
 
@@ -345,8 +356,8 @@ func _build_torch(pos2d: Vector2):
 	var light := OmniLight3D.new()
 	light.position = base_pos + Vector3(0, 1.45, 0)
 	light.light_color = TORCH_COLOR
-	light.light_energy = 1.8
-	light.omni_range = 4.5
+	light.light_energy = 2.0
+	light.omni_range = 5.2
 	add_child(light)
 	_torch_lights.append(light)
 
@@ -375,6 +386,7 @@ func _build_torch(pos2d: Vector2):
 	fire_mat.emission_energy_multiplier = 2.0
 	fire_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	quad.material = fire_mat
+	fire.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	fire.draw_pass_1 = quad
 	add_child(fire)
 
@@ -455,74 +467,209 @@ func _process(delta):
 				var gem_mat: StandardMaterial3D = _pack_meshes[i].material_override
 				gem_mat.emission_energy_multiplier = 1.8 + pulse * 1.0
 	for i in _torch_lights.size():
-		var flicker = 1.6 + sin(_time * 9.0 + i * 2.1) * 0.15 + sin(_time * 23.0 + i) * 0.08
+		var flicker = 2.0 + sin(_time * 9.0 + i * 2.1) * 0.2 + sin(_time * 23.0 + i) * 0.1
 		_torch_lights[i].light_energy = flicker
+	for i in _banners.size():
+		_banners[i].rotation.x = sin(_time * 1.1 + i * 1.4) * 0.06
+
+# Heraldic cloth banners hung along the back wall — procedural tapered
+# shapes (rect body + V-notch tail) so colors and scale are fully
+# controlled, alternating deep red/blue, each with a dark crossbar and a
+# gentle wind sway driven from _process().
+func _build_banners():
+	var half = arena_rect.size * 0.5 / CoordUtil.SIM_SCALE
+	var base = CoordUtil.to_world(arena_rect.position + arena_rect.size * 0.5)
+	var z = -half.y - WALL_THICKNESS * 0.7 + 0.18
+	var cols = [Color(0.55, 0.12, 0.14), Color(0.16, 0.25, 0.55)]
+	var count = 6
+	for i in count:
+		var t = (i + 0.5) / count
+		var x = lerpf(-half.x * 0.9, half.x * 0.9, t)
+		if abs(x) < 1.7:
+			continue  # keep the center gate clear
+		var banner := MeshInstance3D.new()
+		banner.mesh = _make_banner_mesh(0.52, 1.5)
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = cols[i % 2]
+		mat.roughness = 1.0
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		banner.material_override = mat
+		banner.position = base + Vector3(x, 2.5, z)
+		add_child(banner)
+		_banners.append(banner)
+
+		var bar := MeshInstance3D.new()
+		var bar_mesh := BoxMesh.new()
+		bar_mesh.size = Vector3(0.66, 0.05, 0.05)
+		bar.mesh = bar_mesh
+		var bar_mat := StandardMaterial3D.new()
+		bar_mat.albedo_color = Color(0.2, 0.14, 0.1)
+		bar.material_override = bar_mat
+		bar.position = base + Vector3(x, 2.52, z)
+		add_child(bar)
+
+func _make_banner_mesh(w: float, h: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hw = w * 0.5
+	var body_bottom = -h * 0.72
+	# body
+	st.add_vertex(Vector3(-hw, 0, 0))
+	st.add_vertex(Vector3(hw, 0, 0))
+	st.add_vertex(Vector3(hw, body_bottom, 0))
+	st.add_vertex(Vector3(-hw, 0, 0))
+	st.add_vertex(Vector3(hw, body_bottom, 0))
+	st.add_vertex(Vector3(-hw, body_bottom, 0))
+	# two tail points leaving a V-notch
+	st.add_vertex(Vector3(-hw, body_bottom, 0))
+	st.add_vertex(Vector3(0, body_bottom, 0))
+	st.add_vertex(Vector3(-hw * 0.6, -h, 0))
+	st.add_vertex(Vector3(0, body_bottom, 0))
+	st.add_vertex(Vector3(hw, body_bottom, 0))
+	st.add_vertex(Vector3(hw * 0.6, -h, 0))
+	return st.commit()
+
+# Large, very faint dark discs scattered on the floor — wear stains that
+# break up the stone plane's uniformity without adding geometry detail.
+func _build_floor_wear():
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 5:
+		var pos2d = arena_rect.position + Vector2(
+			rng.randf_range(160, arena_rect.size.x - 160),
+			rng.randf_range(160, arena_rect.size.y - 160))
+		var disc := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		var radius = rng.randf_range(1.2, 2.6)
+		cyl.top_radius = radius
+		cyl.bottom_radius = radius
+		cyl.height = 0.004
+		disc.mesh = cyl
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.albedo_color = Color(0, 0, 0, rng.randf_range(0.08, 0.16))
+		disc.material_override = mat
+		disc.position = CoordUtil.to_world(pos2d, 0.012)
+		add_child(disc)
+
+# Slow golden dust motes drifting through the air over the whole arena —
+# cheap volumetric feel that makes the lighting read as physical.
+func _build_ambient_motes():
+	var half = arena_rect.size * 0.5 / CoordUtil.SIM_SCALE
+	var m := GPUParticles3D.new()
+	m.position = CoordUtil.to_world(arena_rect.position + arena_rect.size * 0.5) + Vector3(0, 1.6, 0)
+	m.amount = 36
+	m.lifetime = 7.0
+	m.preprocess = 7.0
+	m.emitting = true
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(half.x * 0.9, 1.3, half.y * 0.9)
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 180.0
+	pm.initial_velocity_min = 0.03
+	pm.initial_velocity_max = 0.12
+	pm.gravity = Vector3(0.015, 0.01, 0)
+	pm.scale_min = 0.6
+	pm.scale_max = 1.2
+	m.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.045, 0.045)
+	var qmat := StandardMaterial3D.new()
+	qmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	qmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	qmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	qmat.albedo_color = Color(1.0, 0.9, 0.65, 0.16)
+	qmat.emission_enabled = true
+	qmat.emission = Color(1.0, 0.9, 0.65)
+	qmat.emission_energy_multiplier = 0.7
+	quad.material = qmat
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	m.draw_pass_1 = quad
+	add_child(m)
 
 func _build_lighting():
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-50, -35, 0)
-	sun.light_energy = 1.0
-	sun.light_color = Color(1.0, 0.95, 0.85)
-	# Re-enabled now that the front/side geometry is a short lip (0.4m).
-	# The crenellated back wall/towers are fine-detail repeating geometry
-	# that can alias into speckled shadow noise at default shadow settings,
-	# so blur+bias are pushed up to soften that rather than disabling
-	# shadows outright (which was the earlier fix for a different problem —
-	# a single huge flat quad's stretched shadow).
+	sun.light_energy = 1.25
+	sun.light_color = Color(1.0, 0.93, 0.80)
+	# The camera is a fixed orthographic frame over a ~21m arena, so a single
+	# ORTHOGONAL shadow split beats the default 4-way PSSM here on both
+	# quality and cost: all 4096 shadow texels (see project.godot) cover one
+	# tight range instead of being split across cascades tuned for a moving
+	# perspective camera. max_distance only needs to reach past the far wall.
 	sun.shadow_enabled = true
-	sun.shadow_blur = 1.5
-	sun.shadow_bias = 0.15
-	sun.shadow_normal_bias = 2.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_max_distance = 45.0
+	# A real angular size for the sun gives contact-hardening penumbras with
+	# the soft shadow filter — crisp where objects touch the ground, softer
+	# as the shadow stretches away.
+	sun.light_angular_distance = 1.5
+	sun.shadow_blur = 1.2
+	sun.shadow_bias = 0.1
+	sun.shadow_normal_bias = 1.8
 	add_child(sun)
+
+	# Cool rim/fill from behind (no shadows — it's a cheap accent, not a real
+	# light source): edges characters and props in faint blue so they separate
+	# from the warm floor. Classic warm-key/cool-rim stage lighting.
+	var rim := DirectionalLight3D.new()
+	rim.rotation_degrees = Vector3(-30, 158, 0)
+	rim.light_energy = 0.5
+	rim.light_color = Color(0.55, 0.7, 1.0)
+	rim.light_specular = 0.8
+	rim.shadow_enabled = false
+	add_child(rim)
 
 	var env_node := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.08, 0.08, 0.14)
-	sky_mat.sky_horizon_color = Color(0.30, 0.22, 0.16)
+	# Dusk gradient with a hot horizon band — only a strip of sky is visible
+	# above the back wall, so the horizon does all the visual work.
+	sky_mat.sky_top_color = Color(0.09, 0.11, 0.20)
+	sky_mat.sky_horizon_color = Color(0.66, 0.38, 0.20)
+	sky_mat.sky_curve = 0.12
 	sky_mat.ground_bottom_color = Color(0.06, 0.05, 0.04)
-	sky_mat.ground_horizon_color = Color(0.22, 0.17, 0.12)
+	sky_mat.ground_horizon_color = Color(0.55, 0.33, 0.18)
 	sky.sky_material = sky_mat
 	env.sky = sky
-	# Ambient from a fixed neutral color rather than the sky — deriving it
-	# from the sky's warm horizon color was tinting every material toward
-	# the same brown regardless of its actual albedo, crushing the contrast
-	# between floor/wall/obstacle.
+	# Ambient from a fixed color rather than the sky (a sky-derived warm
+	# ambient tinted everything brown) — but tipped slightly COOL, so shadowed
+	# faces contrast in color temperature against the warm sun instead of
+	# just being darker versions of the same tone.
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.55, 0.55, 0.58)
-	env.ambient_light_energy = 0.5
-	# Fog was the main culprit for the "everything looks the same" wash —
-	# at this arena's ~37m scale, 0.02 density was strong enough to tint
-	# every surface toward fog_light_color regardless of distance. Cut by
-	# 5x and desaturated toward neutral so it only adds faint depth cueing.
+	env.ambient_light_color = Color(0.50, 0.54, 0.64)
+	env.ambient_light_energy = 0.55
+	# Fog kept to a faint depth cue only (0.02 used to wash everything flat).
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.5, 0.48, 0.46)
 	env.fog_density = 0.004
+	# Slightly stronger, tighter glow — with ACES below, emissives (torches,
+	# health gems, projectiles, ability FX) roll off into a graded halo
+	# instead of clipping to flat white.
 	env.glow_enabled = true
-	env.glow_intensity = 0.4
-	env.glow_bloom = 0.06
-	env.glow_hdr_threshold = 1.1
+	env.glow_intensity = 0.6
+	env.glow_bloom = 0.03
+	env.glow_hdr_threshold = 1.0
 
-	# SSAO was cut — it's one of the more GPU-expensive post-process effects
-	# and, combined with 4x MSAA and a 4096 shadow map, made the game
-	# noticeably laggy/jittery. The normal maps + tonemap + color grading
-	# below do most of the visual work at a much lower cost; re-add SSAO
-	# later if performance allows.
+	# SSAO stays off — it was measurably laggy on this machine combined with
+	# MSAA + big shadow maps (see git history). The rim light + normal maps
+	# carry the depth cues at a fraction of the cost.
 	env.ssao_enabled = false
 
-	# Filmic tonemapping gives much better highlight rolloff than the
-	# default Linear mode, which matters here since several elements are
-	# emissive/bloom-lit (torches, health packs, the center ring) — Linear
-	# tends to blow those out to flat white instead of a graded glow.
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# ACES tonemap — noticeably better highlight rolloff and midtone punch
+	# than Filmic for a scene lit by one strong key plus emissive accents.
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_white = 6.0
 
 	# A small color-grading pass for a less flat, more "produced" look.
 	env.adjustment_enabled = true
-	env.adjustment_brightness = 1.0
-	env.adjustment_contrast = 1.08
-	env.adjustment_saturation = 1.12
+	env.adjustment_brightness = 1.02
+	env.adjustment_contrast = 1.05
+	env.adjustment_saturation = 1.15
 
 	env_node.environment = env
 	add_child(env_node)

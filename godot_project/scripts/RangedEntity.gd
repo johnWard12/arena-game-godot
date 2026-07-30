@@ -132,7 +132,7 @@ func resolve_a2(opp: Entity):
 		facing = get_aim_dir(opp)
 	nova_fx_left = 0.35
 	FX.impact_burst(get_parent(), global_position, Color(0.72, 0.4, 1.0), 18, 260.0)
-	_spawn_zone_fx(global_position, NOVA_RADIUS, 0.45, Color(0.72, 0.4, 1.0), "expand")
+	_spawn_zone_fx(global_position, NOVA_RADIUS, 0.45, Color(0.72, 0.4, 1.0), "expand", "rise", "arcane")
 	var landed := false
 	# True AoE: every enemy caught in the burst gets hit, not just the
 	# primary target — matters in 2v2/3v3 where more than one foe can be
@@ -159,12 +159,12 @@ func resolve_ult(opp: Entity):
 		rift_pos = opp.global_position
 		rift_pull_left = VOIDCOLLAPSE_PULL_DUR
 		rift_fx_left   = VOIDCOLLAPSE_PULL_DUR + 0.5
-		_spawn_zone_fx(rift_pos, 55.0, VOIDCOLLAPSE_PULL_DUR, Color(0.5, 0.1, 0.95))
+		_spawn_zone_fx(rift_pos, 55.0, VOIDCOLLAPSE_PULL_DUR, Color(0.5, 0.1, 0.95), "pulse", "rise", "void")
 
 func _resolve_void_explosion():
 	rift_fx_left = 0.50
 	FX.impact_burst(get_parent(), rift_pos, Color(0.75, 0.15, 1.0), 34, 380.0)
-	_spawn_zone_fx(rift_pos, 300.0, 0.5, Color(0.85, 0.3, 1.0), "expand")
+	_spawn_zone_fx(rift_pos, 300.0, 0.5, Color(0.85, 0.3, 1.0), "expand", "rise", "arcane")
 	if opponent != null and opponent.alive:
 		var dist = opponent.global_position.distance_to(rift_pos)
 		var closeness = 1.0 - clamp(dist / 320.0, 0.0, 1.0)
